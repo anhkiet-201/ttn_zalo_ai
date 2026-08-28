@@ -1275,7 +1275,7 @@ export function renderChatPage(initialThreadId: string = ""): string {
         <!-- Filter Pills -->
         <div class="sidebar-filter-tabs">
           <button class="filter-tab-btn active" data-filter="all">Tất cả</button>
-          <button class="filter-tab-btn" data-filter="candidate">Ứng viên</button>
+          <button class="filter-tab-btn" data-filter="personal">Cá nhân</button>
           <button class="filter-tab-btn" data-filter="group">Nhóm</button>
           <button class="filter-tab-btn" data-filter="manual">Thủ công (-M)</button>
         </div>
@@ -1651,7 +1651,7 @@ export function renderChatPage(initialThreadId: string = ""): string {
 
         // Lọc theo tabs
         const filtered = allThreads.filter(t => {
-          if (currentFilter === "candidate") return Boolean(t.candidateName || t.targetCompany);
+          if (currentFilter === "personal") return !t.isGroup;
           if (currentFilter === "group") return Boolean(t.isGroup);
           if (currentFilter === "manual") return Boolean(t.isManual);
           return true;
