@@ -3,7 +3,10 @@ import { config } from "../config/index.js";
 
 export interface QueuedMessage {
   text: string;
+  hasQuote?: boolean;
   quoteText?: string;
+  quoteSenderName?: string;
+  quoteSenderId?: string;
   timestamp: number;
   imageUrls?: string[];
   rawMessage?: ParsedMessage["raw"];
@@ -79,7 +82,10 @@ export class MessageBatcher {
     // Thêm tin nhắn vào batch
     batch.messages.push({
       text: parsedMessage.text,
+      hasQuote: parsedMessage.hasQuote,
       quoteText: parsedMessage.quoteText,
+      quoteSenderName: parsedMessage.quoteSenderName,
+      quoteSenderId: parsedMessage.quoteSenderId,
       timestamp: parsedMessage.timestamp,
       imageUrls: parsedMessage.imageUrls,
       rawMessage: parsedMessage.raw,

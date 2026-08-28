@@ -232,8 +232,36 @@ export class EventDispatcher {
     }
 
     // Kiểm tra thông tin tin nhắn được Reply/Quote
-    const hasQuote = Boolean(rawMessage.data.quote);
-    const quoteText = rawMessage.data.quote?.msg;
+    const rawQuote = rawMessage.data.quote as any;
+    const hasQuote = Boolean(rawQuote);
+    let quoteText: string | undefined = undefined;
+    let quoteSenderId: string | undefined = undefined;
+    let quoteSenderName: string | undefined = undefined;
+    let quoteMsgType: string | undefined = undefined;
+
+    if (hasQuote && rawQuote) {
+      quoteText = typeof rawQuote.msg === "string" ? rawQuote.msg.trim() : undefined;
+      quoteSenderId = rawQuote.ownerId ? String(rawQuote.ownerId) : undefined;
+      quoteMsgType = rawQuote.msgType ? String(rawQuote.msgType) : undefined;
+
+      // Nhận diện tên người gửi tin nhắn gốc được quote
+      if (quoteSenderId === this.ownId || quoteSenderId === "642903586588799919" || quoteSenderId === "admin") {
+        quoteSenderName = "Bot";
+      } else if (rawQuote.fromDName || rawQuote.dName) {
+        quoteSenderName = String(rawQuote.fromDName || rawQuote.dName);
+      } else if (quoteSenderId) {
+        quoteSenderName = isGroup ? `Thành viên (${quoteSenderId})` : "Ứng viên";
+      }
+
+      // Nếu tin nhắn gốc là ảnh/sticker mà msg rỗng
+      if (!quoteText) {
+        if (quoteMsgType === "chat.photo" || rawQuote.attach) {
+          quoteText = "[Hình ảnh]";
+        } else if (quoteMsgType === "chat.sticker") {
+          quoteText = "[Nhãn dán / Sticker]";
+        }
+      }
+    }
 
     return {
       raw: rawMessage,
@@ -246,6 +274,15 @@ export class EventDispatcher {
       timestamp: Number(rawMessage.data.ts) || Date.now(),
       hasQuote,
       quoteText,
+      quoteSenderName,
+      quoteSenderId,
+      quoteMsgType,
+      quoteData: hasQuote && quoteText ? {
+        msg: quoteText,
+        senderId: quoteSenderId,
+        senderName: quoteSenderName,
+        msgType: quoteMsgType,
+      } : undefined,
       command,
       args,
       hasImage,

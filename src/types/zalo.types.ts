@@ -57,6 +57,16 @@ export interface BotConfig {
 }
 
 /**
+ * Cấu trúc thông tin tin nhắn được Trích dẫn / Trả lời (Reply / Quote Message)
+ */
+export interface QuoteData {
+  msg: string;
+  senderId?: string;
+  senderName?: string;
+  msgType?: string;
+}
+
+/**
  * Dữ liệu tin nhắn đã được chuẩn hoá để các handler dễ xử lý
  */
 export interface ParsedMessage {
@@ -70,6 +80,10 @@ export interface ParsedMessage {
   timestamp: number;
   hasQuote: boolean;
   quoteText?: string;
+  quoteSenderName?: string;
+  quoteSenderId?: string;
+  quoteMsgType?: string;
+  quoteData?: QuoteData;
   command?: string;
   args: string[];
   hasImage?: boolean;

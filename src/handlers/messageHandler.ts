@@ -84,6 +84,10 @@ export class MessageHandler {
               : ""),
           hasImage: parsedMessage.hasImage,
           imageUrls: parsedMessage.imageUrls,
+          hasQuote: parsedMessage.hasQuote,
+          quoteText: parsedMessage.quoteText,
+          quoteSenderName: parsedMessage.quoteSenderName,
+          quoteSenderId: parsedMessage.quoteSenderId,
           timestamp: parsedMessage.timestamp || Date.now(),
         });
       } catch (err) {
@@ -600,14 +604,21 @@ export class MessageHandler {
     // 5. Gom nội dung text của các tin nhắn trong batch
     const textLines: string[] = [];
     let lastQuote: string | undefined = undefined;
+    let lastQuoteSender: string | undefined = undefined;
 
     for (const msg of batch.messages) {
       if (msg.text) {
         const timeStr = this.aiService.formatTimestamp(msg.timestamp);
-        textLines.push(`[Gửi lúc ${timeStr}]: ${msg.text}`);
+        if (msg.hasQuote && msg.quoteText) {
+          const qSender = msg.quoteSenderName || (msg.quoteSenderId === config.hrRecipientId ? "Admin" : "Tin nhắn trước");
+          textLines.push(`[Gửi lúc ${timeStr}]: (↪️ Trả lời [${qSender}]: "${msg.quoteText}") ${msg.text}`);
+        } else {
+          textLines.push(`[Gửi lúc ${timeStr}]: ${msg.text}`);
+        }
       }
       if (msg.quoteText) {
         lastQuote = msg.quoteText;
+        lastQuoteSender = msg.quoteSenderName;
       }
     }
 
@@ -653,6 +664,7 @@ export class MessageHandler {
           senderId: batch.senderId,
           isGroup: batch.threadType === ThreadType.Group,
           quoteContext: lastQuote,
+          quoteSenderName: lastQuoteSender,
           imageUrls: allImageUrls.length > 0 ? allImageUrls : undefined,
           userContextText,
           onToolCall: async (toolName, args) => {

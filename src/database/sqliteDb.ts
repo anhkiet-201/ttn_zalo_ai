@@ -61,6 +61,10 @@ export class SQLiteDatabase {
         content TEXT NOT NULL,
         has_image INTEGER DEFAULT 0,
         image_urls TEXT,
+        has_quote INTEGER DEFAULT 0,
+        quote_text TEXT,
+        quote_sender_name TEXT,
+        quote_sender_id TEXT,
         timestamp INTEGER NOT NULL,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       );
@@ -107,12 +111,31 @@ export class SQLiteDatabase {
         updated_at INTEGER NOT NULL
       );
 
+      -- Index tra cứu User Context
       CREATE INDEX IF NOT EXISTS idx_user_context_sender ON user_contexts(sender_id);
       CREATE INDEX IF NOT EXISTS idx_user_context_thread ON user_contexts(thread_id);
     `);
 
-    // Migration bổ sung các cột mới nếu bảng candidates đã tồn tại từ trước
+    // Migration bổ sung các cột mới nếu bảng chat_messages hoặc candidates đã tồn tại từ trước
     try {
+      const msgColumns = this.db
+        .prepare("PRAGMA table_info(chat_messages)")
+        .all() as Array<{ name: string }>;
+      const msgColNames = msgColumns.map((c) => c.name);
+
+      if (!msgColNames.includes("has_quote")) {
+        this.db.exec("ALTER TABLE chat_messages ADD COLUMN has_quote INTEGER DEFAULT 0");
+      }
+      if (!msgColNames.includes("quote_text")) {
+        this.db.exec("ALTER TABLE chat_messages ADD COLUMN quote_text TEXT");
+      }
+      if (!msgColNames.includes("quote_sender_name")) {
+        this.db.exec("ALTER TABLE chat_messages ADD COLUMN quote_sender_name TEXT");
+      }
+      if (!msgColNames.includes("quote_sender_id")) {
+        this.db.exec("ALTER TABLE chat_messages ADD COLUMN quote_sender_id TEXT");
+      }
+
       const columns = this.db
         .prepare("PRAGMA table_info(candidates)")
         .all() as Array<{ name: string }>;

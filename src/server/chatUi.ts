@@ -806,6 +806,38 @@ export function renderChatPage(initialThreadId: string = ""): string {
       border-top-right-radius: 2px;
     }
 
+    /* Quote / Reply Card */
+    .msg-quote-card {
+      background: rgba(0, 0, 0, 0.04);
+      border-left: 3px solid var(--zalo-blue);
+      border-radius: 4px;
+      padding: 4px 8px;
+      margin-bottom: 6px;
+      font-size: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .message-row.outgoing .msg-quote-card {
+      background: rgba(0, 104, 255, 0.08);
+      border-left-color: var(--zalo-blue);
+    }
+
+    .quote-sender {
+      font-weight: 700;
+      color: var(--zalo-blue);
+      font-size: 11.5px;
+    }
+
+    .quote-text {
+      color: var(--zalo-text-secondary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 280px;
+    }
+
     .msg-media-card {
       display: inline-block;
       border-radius: 10px;
@@ -1857,8 +1889,25 @@ export function renderChatPage(initialThreadId: string = ""): string {
           bodyWrapper.appendChild(senderNameEl);
         }
 
+        // Khung trích dẫn / Reply nếu có
+        let quoteCardEl = null;
+        if (msg.hasQuote && msg.quoteText) {
+          quoteCardEl = document.createElement("div");
+          quoteCardEl.className = "msg-quote-card";
+          const qSender = escapeHtml(msg.quoteSenderName || (msg.quoteSenderId === "642903586588799919" ? "Admin (Tôi)" : "Tin nhắn trước"));
+          const qText = escapeHtml(msg.quoteText);
+          quoteCardEl.innerHTML = \`
+            <span class="quote-sender">↪️ \${qSender}</span>
+            <span class="quote-text">\${qText}</span>
+          \`;
+        }
+
         // Ảnh
         if (hasValidImages && !cleanText) {
+          if (quoteCardEl) {
+            bodyWrapper.appendChild(quoteCardEl);
+          }
+
           const imagesContainer = document.createElement("div");
           imagesContainer.className = "msg-images";
 
@@ -1897,6 +1946,10 @@ export function renderChatPage(initialThreadId: string = ""): string {
         } else {
           const bubble = document.createElement("div");
           bubble.className = "msg-bubble";
+
+          if (quoteCardEl) {
+            bubble.appendChild(quoteCardEl);
+          }
 
           if (cleanText) {
             const textEl = document.createElement("div");

@@ -41,6 +41,7 @@ export interface GenerateReplyOptions {
   senderId?: string;
   isGroup?: boolean;
   quoteContext?: string;
+  quoteSenderName?: string;
   imageUrls?: string[];
   userContextText?: string;
   onToolCall?: ToolExecutionHandler;
@@ -604,6 +605,7 @@ LƯU Ý: Phải phân biệt rõ ràng nếu có NHIỀU NGƯỜI / NHIỀU TH�
       const isGroup = options?.isGroup ?? false;
       const senderId = options?.senderId || "";
       const quoteContext = options?.quoteContext;
+      const quoteSenderName = options?.quoteSenderName;
       const imageUrls = options?.imageUrls || [];
       const userContextText = options?.userContextText || "";
 
@@ -639,9 +641,16 @@ LƯU Ý: Phải phân biệt rõ ràng nếu có NHIỀU NGƯỜI / NHIỀU TH�
               ? `[${timeStr}] [Thành viên: ${resolvedName}]`
               : `[${timeStr}] [${resolvedName}]`
             : `[${timeStr}] [Bot]`;
+
+        let msgBody = rec.content;
+        if (rec.hasQuote && rec.quoteText) {
+          const qSender = rec.quoteSenderName || (rec.quoteSenderId === config.hrRecipientId ? "Admin" : "Tin nhắn trước");
+          msgBody = `(↪️ Trả lời [${qSender}]: "${rec.quoteText}") ${msgBody}`;
+        }
+
         return {
           role: rec.role,
-          parts: [{ text: `${prefix}: ${rec.content}` }],
+          parts: [{ text: `${prefix}: ${msgBody}` }],
         };
       });
 
@@ -653,8 +662,9 @@ LƯU Ý: Phải phân biệt rõ ràng nếu có NHIỀU NGƯỜI / NHIỀU TH�
         : `[Người dùng: ${senderName}]`;
 
       let promptText = `[${currentTimeStr}] ${senderHeader}:\n${userText}`;
-      if (quoteContext) {
-        promptText = `[Đang trả lời tin nhắn trước: "${quoteContext}"]\n${promptText}`;
+      if (quoteContext && !userText.includes("↪️ Trả lời")) {
+        const qSender = quoteSenderName || "Tin nhắn trước";
+        promptText = `[↪️ Đang trả lời tin nhắn của [${qSender}]: "${quoteContext}"]\n${promptText}`;
       }
 
       const userParts: ChatMessagePart[] = [{ text: promptText }];

@@ -12,6 +12,10 @@ export interface ChatMessageRecord {
   content: string;
   hasImage?: boolean;
   imageUrls?: string[];
+  hasQuote?: boolean;
+  quoteText?: string;
+  quoteSenderName?: string;
+  quoteSenderId?: string;
   timestamp: number;
 }
 
@@ -74,9 +78,11 @@ export class ChatHistoryRepository {
     const id = record.id || crypto.randomUUID();
     const stmt = this.db.connection.prepare(`
       INSERT INTO chat_messages (
-        id, thread_id, sender_id, sender_name, role, content, has_image, image_urls, timestamp
+        id, thread_id, sender_id, sender_name, role, content, has_image, image_urls,
+        has_quote, quote_text, quote_sender_name, quote_sender_id, timestamp
       ) VALUES (
-        @id, @thread_id, @sender_id, @sender_name, @role, @content, @has_image, @image_urls, @timestamp
+        @id, @thread_id, @sender_id, @sender_name, @role, @content, @has_image, @image_urls,
+        @has_quote, @quote_text, @quote_sender_name, @quote_sender_id, @timestamp
       )
     `);
 
@@ -89,6 +95,10 @@ export class ChatHistoryRepository {
       content: record.content,
       has_image: record.hasImage ? 1 : 0,
       image_urls: record.imageUrls ? JSON.stringify(record.imageUrls) : null,
+      has_quote: record.hasQuote ? 1 : 0,
+      quote_text: record.quoteText || null,
+      quote_sender_name: record.quoteSenderName || null,
+      quote_sender_id: record.quoteSenderId || null,
       timestamp: record.timestamp,
     });
 
@@ -113,7 +123,10 @@ export class ChatHistoryRepository {
     const stmt = this.db.connection.prepare(`
       SELECT 
         id, thread_id as threadId, sender_id as senderId, sender_name as senderName,
-        role, content, has_image as hasImage, image_urls as imageUrls, timestamp
+        role, content, has_image as hasImage, image_urls as imageUrls,
+        has_quote as hasQuote, quote_text as quoteText,
+        quote_sender_name as quoteSenderName, quote_sender_id as quoteSenderId,
+        timestamp
       FROM chat_messages
       WHERE thread_id = ?
       ORDER BY timestamp DESC
@@ -129,6 +142,10 @@ export class ChatHistoryRepository {
       content: string;
       hasImage: number;
       imageUrls: string | null;
+      hasQuote: number;
+      quoteText: string | null;
+      quoteSenderName: string | null;
+      quoteSenderId: string | null;
       timestamp: number;
     }>;
 
@@ -146,7 +163,10 @@ export class ChatHistoryRepository {
     const stmt = this.db.connection.prepare(`
       SELECT 
         id, thread_id as threadId, sender_id as senderId, sender_name as senderName,
-        role, content, has_image as hasImage, image_urls as imageUrls, timestamp
+        role, content, has_image as hasImage, image_urls as imageUrls,
+        has_quote as hasQuote, quote_text as quoteText,
+        quote_sender_name as quoteSenderName, quote_sender_id as quoteSenderId,
+        timestamp
       FROM chat_messages
       WHERE thread_id = ? AND timestamp < ?
       ORDER BY timestamp DESC
@@ -162,6 +182,10 @@ export class ChatHistoryRepository {
       content: string;
       hasImage: number;
       imageUrls: string | null;
+      hasQuote: number;
+      quoteText: string | null;
+      quoteSenderName: string | null;
+      quoteSenderId: string | null;
       timestamp: number;
     }>;
 
@@ -290,6 +314,10 @@ export class ChatHistoryRepository {
     content: string;
     hasImage: number;
     imageUrls: string | null;
+    hasQuote?: number;
+    quoteText?: string | null;
+    quoteSenderName?: string | null;
+    quoteSenderId?: string | null;
     timestamp: number;
   }): ChatMessageRecord {
     let parsedUrls: string[] | undefined = undefined;
@@ -313,6 +341,10 @@ export class ChatHistoryRepository {
       content: row.content || "",
       hasImage: Boolean(row.hasImage),
       imageUrls: parsedUrls,
+      hasQuote: Boolean(row.hasQuote),
+      quoteText: row.quoteText || undefined,
+      quoteSenderName: row.quoteSenderName || undefined,
+      quoteSenderId: row.quoteSenderId || undefined,
       timestamp: row.timestamp,
     };
   }
