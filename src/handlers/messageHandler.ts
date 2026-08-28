@@ -326,6 +326,18 @@ export class MessageHandler {
       console.log(`   ↪️ Đang Reply tin nhắn trước: "${parsedMessage.quoteText}"`);
     }
 
+    // Bỏ qua nếu senderName bắt đầu bằng -M hoặc -m (tài khoản nội bộ / quản trị)
+    const senderNameTrimmed = (parsedMessage.senderName || "").trim();
+    if (
+      senderNameTrimmed.startsWith("-M") ||
+      senderNameTrimmed.startsWith("-m")
+    ) {
+      console.log(
+        `🚫 [Cá Nhân-Skip] Bỏ qua tin nhắn từ tài khoản nội bộ [${senderInfo}] (tên bắt đầu bằng -M/-m)`
+      );
+      return;
+    }
+
     if (!parsedMessage.text && !parsedMessage.hasImage) {
       return;
     }
