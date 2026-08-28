@@ -86,8 +86,35 @@ export class ToolExecutor {
       ? String(args.candidateFullName).trim()
       : undefined;
 
-    // 1. Tìm tài liệu CCCD tương ứng trong User Context (hỗ trợ trường hợp 1 user gửi nhiều CCCD)
+    // 0. GUARD CLAUSE BẮT BUỘC: Kiểm tra ứng viên đã gửi CCCD/VNeID chưa
     const docs = context.userContext.documents || [];
+    const hasAnyCccd =
+      docs.some((d) => d.idNumber || (d.imageUrls && d.imageUrls.length > 0)) ||
+      Boolean(candidateIdNumber) ||
+      Boolean(context.candidateData?.idNumber) ||
+      Boolean(context.candidateData?.imageUrls && context.candidateData.imageUrls.length > 0);
+
+    if (!hasAnyCccd) {
+      console.warn(
+        `⛔ [ToolExecutor: Blocked] Từ chối thực thi register_candidate cho [${context.senderName}] vì UserContext chưa có CCCD/VNeID!`
+      );
+      return {
+        result: {
+          status: "rejected",
+          error:
+            "LỖI TỪ CHỐI: Ứng viên chưa cung cấp ảnh CCCD/VNeID. Hệ thống bắt buộc phải có ảnh CCCD trước khi đặt lịch hẹn. Hãy yêu cầu ứng viên chụp gửi ảnh 2 mặt CCCD kèm SĐT để đăng ký pv!",
+        },
+        updatedCandidate: context.candidateData || {
+          threadId: context.threadId,
+          senderId: context.senderId,
+          senderName: context.senderName,
+          imageUrls: [],
+          forwardedTo: config.hrRecipientId,
+        },
+      };
+    }
+
+    // 1. Tìm tài liệu CCCD tương ứng trong User Context (hỗ trợ trường hợp 1 user gửi nhiều CCCD)
     let selectedDoc = docs.find((d) => {
       if (candidateIdNumber && d.idNumber === candidateIdNumber) return true;
       if (
@@ -211,8 +238,34 @@ export class ToolExecutor {
     const interviewDate =
       context.candidateData?.interviewDate || "Theo lịch hẹn";
 
-    // Tìm tài liệu CCCD từ UserContext để đảm bảo có đầy đủ ảnh và thông tin định danh
+    // GUARD CLAUSE: Kiểm tra hồ sơ CCCD
     const docs = context.userContext.documents || [];
+    const hasAnyCccd =
+      docs.some((d) => d.idNumber || (d.imageUrls && d.imageUrls.length > 0)) ||
+      Boolean(context.candidateData?.idNumber) ||
+      Boolean(context.candidateData?.imageUrls && context.candidateData.imageUrls.length > 0);
+
+    if (!hasAnyCccd) {
+      console.warn(
+        `⛔ [ToolExecutor: Blocked] Từ chối thực thi switch_company cho [${context.senderName}] vì chưa có CCCD!`
+      );
+      return {
+        result: {
+          status: "rejected",
+          error:
+            "LỖI TỪ CHỐI: Ứng viên chưa có hồ sơ CCCD trong hệ thống. Hãy yêu cầu ứng viên chụp gửi ảnh CCCD kèm SĐT trước!",
+        },
+        updatedCandidate: context.candidateData || {
+          threadId: context.threadId,
+          senderId: context.senderId,
+          senderName: context.senderName,
+          imageUrls: [],
+          forwardedTo: config.hrRecipientId,
+        },
+      };
+    }
+
+    // Tìm tài liệu CCCD từ UserContext để đảm bảo có đầy đủ ảnh và thông tin định danh
     const selectedDoc = docs.find((d) => d.status === "registered") || docs[0];
     const docImages = docs.flatMap((d) => d.imageUrls || []).filter(Boolean);
     const existingImages = context.candidateData?.imageUrls || [];
@@ -275,8 +328,34 @@ export class ToolExecutor {
       context.userContext.targetCompany ||
       "công ty đã đăng ký";
 
-    // Tìm tài liệu CCCD từ UserContext để đảm bảo có đầy đủ ảnh và thông tin định danh
+    // GUARD CLAUSE: Kiểm tra hồ sơ CCCD
     const docs = context.userContext.documents || [];
+    const hasAnyCccd =
+      docs.some((d) => d.idNumber || (d.imageUrls && d.imageUrls.length > 0)) ||
+      Boolean(context.candidateData?.idNumber) ||
+      Boolean(context.candidateData?.imageUrls && context.candidateData.imageUrls.length > 0);
+
+    if (!hasAnyCccd) {
+      console.warn(
+        `⛔ [ToolExecutor: Blocked] Từ chối thực thi reschedule_interview cho [${context.senderName}] vì chưa có CCCD!`
+      );
+      return {
+        result: {
+          status: "rejected",
+          error:
+            "LỖI TỪ CHỐI: Ứng viên chưa có hồ sơ CCCD trong hệ thống. Hãy yêu cầu ứng viên chụp gửi ảnh CCCD kèm SĐT trước!",
+        },
+        updatedCandidate: context.candidateData || {
+          threadId: context.threadId,
+          senderId: context.senderId,
+          senderName: context.senderName,
+          imageUrls: [],
+          forwardedTo: config.hrRecipientId,
+        },
+      };
+    }
+
+    // Tìm tài liệu CCCD từ UserContext để đảm bảo có đầy đủ ảnh và thông tin định danh
     const selectedDoc = docs.find((d) => d.status === "registered") || docs[0];
     const docImages = docs.flatMap((d) => d.imageUrls || []).filter(Boolean);
     const existingImages = context.candidateData?.imageUrls || [];

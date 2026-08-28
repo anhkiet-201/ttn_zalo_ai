@@ -277,7 +277,9 @@ export class UserContextManager {
     ];
 
     if (context.documents.length === 0) {
-      lines.push(`• Giấy tờ định danh / CCCD: Chưa gửi ảnh CCCD nào.`);
+      lines.push(
+        `• Giấy tờ định danh / CCCD: [CHƯA CÓ CCCD - CẤM TỰ HẸN GIỜ, CẤM GỬI LINK MAP, CẤM GỌI TOOL register_candidate. BẮT BUỘC YÊU CẦU ỨNG VIÊN GỬI ẢNH CCCD + SĐT ĐỂ ĐĂNG KÝ PV].`
+      );
     } else {
       lines.push(
         `• Danh sách CCCD đã gửi (${context.documents.length} ứng viên):`

@@ -72,11 +72,10 @@ export const recruitmentTools: FunctionDeclaration[] = [
   {
     name: "register_candidate",
     description:
-      "CỰC KỲ QUAN TRỌNG — QUY TRÌNH XÁC NHẬN 2 BƯỚC BẮT BUỘC: " +
-      "Bước 1: Khi ứng viên đã có giấy tờ định danh (CCCD/VNeID) và chọn công ty, bot phải hỏi xác nhận lại với ứng viên (VD: 'Dạ vậy em đặt lịch hẹn cho anh vào sáng mai lúc 7h30 ở cty Chervon nha?') và TUYỆT ĐỐI CHƯA GỌI TOOL. " +
-      "Bước 2: CHỈ GỌI TOOL NÀY KHI VÀ CHỈ KHI ứng viên PHẢN HỒI ĐỒNG Ý / XÁC NHẬN (VD: 'Đúng rồi em', 'Ok em', 'Chốt đi', 'Xác nhận nha', 'Uhm em') với câu hỏi xác nhận trước đó của bot. " +
-      "Nếu người dùng gửi nhiều CCCD cho nhiều người khác nhau, hãy chỉ định candidateIdNumber hoặc candidateFullName của người cần đăng ký (hoặc gọi tool cho từng người). " +
-      "TUYỆT ĐỐI CẤM GỌI khi ứng viên chỉ đang hỏi thăm hoặc chưa qua bước xác nhận đồng ý.",
+      "CỰC KỲ QUAN TRỌNG — ĐIỀU KIỆN TIÊN QUYẾT BẮT BUỘC:\n" +
+      "1. BẮT BUỘC ĐÃ CÓ CCCD TRONG USER CONTEXT: Chỉ được kích hoạt quy trình chốt khi User Context đã ghi nhận ứng viên có tài liệu CCCD/VNeID. NẾU USER CONTEXT BÁO 'CHƯA CÓ CCCD', TUYỆT ĐỐI CẤM GỌI TOOL NÀY VÀ TUYỆT ĐỐI CẤM TỰ HẸN LỊCH!\n" +
+      "2. QUY TRÌNH XÁC NHẬN 2 BƯỚC: Khi đã có CCCD và công ty, bot phải hỏi xác nhận lại (Bước 1, chưa gọi tool). CHỈ GỌI TOOL NÀY (Bước 2) khi và chỉ khi ứng viên phản hồi ĐỒNG Ý/XÁC NHẬN (VD: 'Ok em', 'Đúng rồi em', 'Chốt đi').\n" +
+      "TUYỆT ĐỐI CẤM GỌI khi ứng viên chưa gửi ảnh CCCD/VNeID hoặc chỉ đang hỏi thăm.",
     parameters: {
       type: Type.OBJECT,
       properties: {
@@ -115,10 +114,10 @@ export const recruitmentTools: FunctionDeclaration[] = [
   {
     name: "switch_company",
     description:
-      "CỰC KỲ QUAN TRỌNG — QUY TRÌNH XÁC NHẬN 2 BƯỚC BẮT BUỘC: " +
-      "Bước 1: Khi ứng viên nói muốn đổi công ty, bot phải hỏi xác nhận lại (VD: 'Dạ vậy anh muốn đổi sang làm bên cty Chervon đúng ko ạ?') và TUYỆT ĐỐI CHƯA GỌI TOOL. " +
-      "Bước 2: CHỈ GỌI TOOL NÀY KHI VÀ CHỈ KHI ứng viên PHẢN HỒI ĐỒNG Ý / XÁC NHẬN (VD: 'Đúng rồi em', 'Ok em', 'Chốt đổi qua đó nha', 'Uhm em') với câu hỏi xác nhận trước đó của bot. " +
-      "TUYỆT ĐỐI CẤM GỌI TOOL NÀY KHI ứng viên chỉ đang HỎI THÔNG TIN / THẮC MẮC (VD: 'Cty jinxin thì sao', 'Cty Kaiser lương sao', 'Bên Chervon làm gì em', 'Còn công ty nào khác ko').",
+      "CỰC KỲ QUAN TRỌNG: Chỉ áp dụng khi ứng viên ĐÃ CÓ HỒ SƠ CCCD và đã được đăng ký trước đó.\n" +
+      "Bước 1: Khi ứng viên nói muốn đổi công ty, bot phải hỏi xác nhận lại (VD: 'Dạ vậy anh muốn đổi sang làm bên cty Chervon đúng ko ạ?') và TUYỆT ĐỐI CHƯA GỌI TOOL.\n" +
+      "Bước 2: CHỈ GỌI TOOL NÀY KHI VÀ CHỈ KHI ứng viên PHẢN HỒI ĐỒNG Ý / XÁC NHẬN (VD: 'Đúng rồi em', 'Ok em', 'Chốt đổi qua đó nha').\n" +
+      "TUYỆT ĐỐI CẤM GỌI khi chưa có CCCD hoặc ứng viên chỉ đang hỏi thăm so sánh các công ty.",
     parameters: {
       type: Type.OBJECT,
       properties: {
@@ -141,9 +140,10 @@ export const recruitmentTools: FunctionDeclaration[] = [
   {
     name: "reschedule_interview",
     description:
-      "CỰC KỲ QUAN TRỌNG — QUY TRÌNH XÁC NHẬN 2 BƯỚC BẮT BUỘC: " +
-      "Bước 1: Khi ứng viên muốn dời lịch, bot hỏi xác nhận mốc thời gian hẹn mới (VD: 'Dạ vậy em dời lịch hẹn cho anh sang 7h30 sáng Thứ Hai ngày 31/08 nha?') và TUYỆT ĐỐI CHƯA GỌI TOOL. " +
-      "Bước 2: CHỈ GỌI TOOL NÀY KHI VÀ CHỈ KHI ứng viên PHẢN HỒI ĐỒNG Ý / XÁC NHẬN (VD: 'Ok em', 'Đúng rồi em', 'Chốt ngày đó nha') với câu hỏi xác nhận trước đó của bot.",
+      "CỰC KỲ QUAN TRỌNG: Chỉ áp dụng khi ứng viên ĐÃ CÓ HỒ SƠ CCCD và đã có lịch hẹn trước đó.\n" +
+      "Bước 1: Khi ứng viên muốn dời lịch, bot hỏi xác nhận mốc thời gian hẹn mới (VD: 'Dạ vậy em dời lịch hẹn cho anh sang 7h30 sáng Thứ Hai ngày 31/08 nha?') và TUYỆT ĐỐI CHƯA GỌI TOOL.\n" +
+      "Bước 2: CHỈ GỌI TOOL NÀY KHI VÀ CHỈ KHI ứng viên PHẢN HỒI ĐỒNG Ý / XÁC NHẬN.\n" +
+      "TUYỆT ĐỐI CẤM GỌI khi ứng viên chưa có CCCD/chưa đăng ký mà chỉ đang hỏi lịch làm.",
     parameters: {
       type: Type.OBJECT,
       properties: {
