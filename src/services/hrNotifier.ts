@@ -48,6 +48,47 @@ export class HRNotifier {
   }
 
   /**
+   * Helper gửi tin nhắn kèm ảnh CCCD đính kèm (nếu có) tới HR
+   */
+  private async sendMessageWithAttachments(
+    msg: string,
+    imageUrls?: string[]
+  ): Promise<void> {
+    let tempFiles: string[] = [];
+    if (imageUrls && imageUrls.length > 0) {
+      const results = await Promise.all(
+        imageUrls.map((imgUrl) => this.downloadImageToTempFile(imgUrl))
+      );
+      tempFiles = results.filter((t): t is string => Boolean(t));
+    }
+
+    try {
+      if (tempFiles.length > 0) {
+        await this.zaloService.sendMessage(
+          this.hrRecipientId,
+          {
+            msg,
+            attachments: tempFiles,
+          },
+          config.hrThreadType
+        );
+      } else {
+        await this.zaloService.sendMessage(
+          this.hrRecipientId,
+          msg,
+          config.hrThreadType
+        );
+      }
+    } finally {
+      for (const tmp of tempFiles) {
+        try {
+          fs.unlinkSync(tmp);
+        } catch {}
+      }
+    }
+  }
+
+  /**
    * Chuyển tiếp toàn bộ hồ sơ ứng viên (kèm ảnh CCCD thực tế nếu có) sang tài khoản HR
    */
   public async notifyCandidateRegistration(candidate: CandidateRecord): Promise<void> {
@@ -65,56 +106,21 @@ export class HRNotifier {
 • Ngày sinh: ${candidate.dob || "Chưa rõ"}
 • Giới tính: ${candidate.gender || "Chưa rõ"}`;
 
-    // Tải bất đồng bộ song song tất cả các file ảnh CCCD thực tế về máy để chuyển tiếp đính kèm
-    let tempFiles: string[] = [];
-    if (candidate.imageUrls && candidate.imageUrls.length > 0) {
-      const results = await Promise.all(
-        candidate.imageUrls.map((imgUrl) => this.downloadImageToTempFile(imgUrl))
-      );
-      tempFiles = results.filter((t): t is string => Boolean(t));
-    }
-
     try {
-      if (tempFiles.length > 0) {
-        // Gửi cả ảnh CCCD đính kèm thực tế + nội dung trích xuất sang HR
-        await this.zaloService.sendMessage(
-          this.hrRecipientId,
-          {
-            msg: cccdReport,
-            attachments: tempFiles,
-          },
-          config.hrThreadType
-        );
-        console.log(
-          `📤 [Chuyển tiếp CCCD] Đã gửi ${tempFiles.length} ảnh CCCD đính kèm + thông tin công ty [${candidate.targetCompany}] của [${candidate.senderName}] tới HR (${this.hrRecipientId}) thành công!`
-        );
-      } else {
-        await this.zaloService.sendMessage(
-          this.hrRecipientId,
-          cccdReport,
-          config.hrThreadType
-        );
-        console.log(
-          `📤 [Chuyển tiếp Đăng ký] Đã gửi thông tin công ty [${candidate.targetCompany}] của [${candidate.senderName}] tới HR (${this.hrRecipientId}) thành công!`
-        );
-      }
+      await this.sendMessageWithAttachments(cccdReport, candidate.imageUrls);
+      console.log(
+        `📤 [Chuyển tiếp CCCD] Đã gửi ${candidate.imageUrls?.length || 0} ảnh CCCD đính kèm + thông tin công ty [${candidate.targetCompany}] của [${candidate.senderName}] tới HR (${this.hrRecipientId}) thành công!`
+      );
     } catch (forwardErr) {
       console.error(
         `❌ Lỗi khi gửi thông tin hồ sơ CCCD tới HR (${this.hrRecipientId}):`,
         forwardErr
       );
-    } finally {
-      // Dọn dẹp file tạm sau khi gửi
-      for (const tmp of tempFiles) {
-        try {
-          fs.unlinkSync(tmp);
-        } catch {}
-      }
     }
   }
 
   /**
-   * Gửi thông báo khi ứng viên đổi công ty sang HR
+   * Gửi thông báo khi ứng viên đổi công ty sang HR (kèm ảnh CCCD)
    */
   public async notifyCompanyChange(params: {
     candidate: CandidateRecord;
@@ -132,15 +138,17 @@ export class HRNotifier {
 📅 Thời gian đổi: ${new Date().toLocaleString("vi-VN")}`;
 
     try {
-      await this.zaloService.sendMessage(this.hrRecipientId, changeReport, config.hrThreadType);
-      console.log(`📤 [Tool: switch_company] Đã báo HR đổi sang [${newCompany}] thành công!`);
+      await this.sendMessageWithAttachments(changeReport, candidate.imageUrls);
+      console.log(
+        `📤 [Tool: switch_company] Đã báo HR đổi sang [${newCompany}] kèm ${candidate.imageUrls?.length || 0} ảnh CCCD thành công!`
+      );
     } catch (err) {
       console.error("❌ Lỗi gửi thông báo đổi công ty tới HR:", err);
     }
   }
 
   /**
-   * Gửi thông báo khi ứng viên dời lịch hẹn sang HR
+   * Gửi thông báo khi ứng viên dời lịch hẹn sang HR (kèm ảnh CCCD)
    */
   public async notifyReschedule(params: {
     candidate: CandidateRecord;
@@ -157,9 +165,9 @@ export class HRNotifier {
 📅 Thời gian báo: ${new Date().toLocaleString("vi-VN")}`;
 
     try {
-      await this.zaloService.sendMessage(this.hrRecipientId, rescheduleReport, config.hrThreadType);
+      await this.sendMessageWithAttachments(rescheduleReport, candidate.imageUrls);
       console.log(
-        `📤 [Tool: reschedule_interview] Đã báo HR dời lịch sang [${newDate}] thành công!`
+        `📤 [Tool: reschedule_interview] Đã báo HR dời lịch sang [${newDate}] kèm ${candidate.imageUrls?.length || 0} ảnh CCCD thành công!`
       );
     } catch (err) {
       console.error("❌ Lỗi gửi thông báo dời lịch tới HR:", err);

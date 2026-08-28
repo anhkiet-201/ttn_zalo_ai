@@ -196,6 +196,13 @@ export class ToolExecutor {
     const interviewDate =
       context.candidateData?.interviewDate || "Theo lịch hẹn";
 
+    // Tìm tài liệu CCCD từ UserContext để đảm bảo có đầy đủ ảnh và thông tin định danh
+    const docs = context.userContext.documents || [];
+    const selectedDoc = docs.find((d) => d.status === "registered") || docs[0];
+    const docImages = docs.flatMap((d) => d.imageUrls || []).filter(Boolean);
+    const existingImages = context.candidateData?.imageUrls || [];
+    const finalImages = existingImages.length > 0 ? existingImages : (selectedDoc?.imageUrls || docImages);
+
     const candidateData = this.candidateRepo.upsertCandidate({
       ...(context.candidateData || {
         threadId: context.threadId,
@@ -205,6 +212,11 @@ export class ToolExecutor {
         forwardedTo: config.hrRecipientId,
       }),
       targetCompany: newCompany,
+      imageUrls: finalImages,
+      fullName: context.candidateData?.fullName || selectedDoc?.fullName || context.senderName,
+      idNumber: context.candidateData?.idNumber || selectedDoc?.idNumber,
+      dob: context.candidateData?.dob || selectedDoc?.dob,
+      gender: context.candidateData?.gender || selectedDoc?.gender,
     });
 
     this.contextManager.updateTargetCompany(
@@ -248,6 +260,13 @@ export class ToolExecutor {
       context.userContext.targetCompany ||
       "công ty đã đăng ký";
 
+    // Tìm tài liệu CCCD từ UserContext để đảm bảo có đầy đủ ảnh và thông tin định danh
+    const docs = context.userContext.documents || [];
+    const selectedDoc = docs.find((d) => d.status === "registered") || docs[0];
+    const docImages = docs.flatMap((d) => d.imageUrls || []).filter(Boolean);
+    const existingImages = context.candidateData?.imageUrls || [];
+    const finalImages = existingImages.length > 0 ? existingImages : (selectedDoc?.imageUrls || docImages);
+
     const candidateData = this.candidateRepo.upsertCandidate({
       ...(context.candidateData || {
         threadId: context.threadId,
@@ -257,6 +276,11 @@ export class ToolExecutor {
         forwardedTo: config.hrRecipientId,
       }),
       interviewDate: newDate,
+      imageUrls: finalImages,
+      fullName: context.candidateData?.fullName || selectedDoc?.fullName || context.senderName,
+      idNumber: context.candidateData?.idNumber || selectedDoc?.idNumber,
+      dob: context.candidateData?.dob || selectedDoc?.dob,
+      gender: context.candidateData?.gender || selectedDoc?.gender,
     });
 
     await this.hrNotifier.notifyReschedule({
