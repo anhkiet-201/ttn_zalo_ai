@@ -104,15 +104,30 @@ export class ToolExecutor {
       selectedDoc = docs.find((d) => d.status !== "registered") || docs[0];
     }
 
+    const docIndex = selectedDoc ? docs.indexOf(selectedDoc) : 0;
     const finalPhone =
       phoneNumber ||
-      (context.userContext.phoneNumbers.length > 0
-        ? context.userContext.phoneNumbers[0]
-        : context.candidateData?.phoneNumber);
+      (context.userContext.phoneNumbers.length > docIndex
+        ? context.userContext.phoneNumbers[docIndex]
+        : context.userContext.phoneNumbers[0] || context.candidateData?.phoneNumber);
 
-    // 2. Gom toàn bộ thông tin + ảnh CCCD 2 mặt để thực hiện upsertCandidate chính thức vào SQLite
+    // Xác định ID bản ghi cũ (chỉ tái sử dụng nếu đúng cùng số CCCD / họ tên)
+    let candidateRecordId: string | undefined = undefined;
+    if (selectedDoc?.idNumber) {
+      candidateRecordId = this.candidateRepo.findByIdNumber(selectedDoc.idNumber)?.id;
+    } else if (candidateIdNumber) {
+      candidateRecordId = this.candidateRepo.findByIdNumber(candidateIdNumber)?.id;
+    } else if (context.candidateData?.id && !context.candidateData.idNumber) {
+      candidateRecordId = context.candidateData.id;
+    }
+
+    // 2. Gom toàn bộ thông tin + đúng ảnh CCCD của ứng viên này để thực hiện upsertCandidate vào SQLite
+    const candidateImages = selectedDoc?.imageUrls && selectedDoc.imageUrls.length > 0
+      ? selectedDoc.imageUrls
+      : [];
+
     const candidateData = this.candidateRepo.upsertCandidate({
-      id: context.candidateData?.id,
+      id: candidateRecordId,
       threadId: context.threadId,
       senderId: context.senderId,
       senderName: context.senderName,
@@ -133,7 +148,7 @@ export class ToolExecutor {
       homeTown: selectedDoc?.homeTown || context.candidateData?.homeTown,
       residence: selectedDoc?.residence || context.candidateData?.residence,
       expiryDate: selectedDoc?.expiryDate || context.candidateData?.expiryDate,
-      imageUrls: selectedDoc?.imageUrls || context.candidateData?.imageUrls || [],
+      imageUrls: candidateImages,
       forwardedTo: config.hrRecipientId,
     });
 

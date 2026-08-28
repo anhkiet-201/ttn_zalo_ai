@@ -109,8 +109,10 @@ export class HRNotifier {
     try {
       await this.sendMessageWithAttachments(cccdReport, candidate.imageUrls);
       console.log(
-        `📤 [Chuyển tiếp CCCD] Đã gửi ${candidate.imageUrls?.length || 0} ảnh CCCD đính kèm + thông tin công ty [${candidate.targetCompany}] của [${candidate.senderName}] tới HR (${this.hrRecipientId}) thành công!`
+        `📤 [Chuyển tiếp CCCD] Đã gửi ${candidate.imageUrls?.length || 0} ảnh CCCD đính kèm + thông tin công ty [${candidate.targetCompany}] của [${candidate.fullName || candidate.senderName}] tới HR (${this.hrRecipientId}) thành công!`
       );
+      // Nghỉ 500ms để đảm bảo các tin nhắn chuyển tiếp đa ứng viên được gửi tuần tự
+      await new Promise((r) => setTimeout(r, 500));
     } catch (forwardErr) {
       console.error(
         `❌ Lỗi khi gửi thông tin hồ sơ CCCD tới HR (${this.hrRecipientId}):`,

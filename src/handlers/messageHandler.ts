@@ -436,10 +436,10 @@ export class MessageHandler {
     const matchedKeyword = config.groupIgnoreKeywords.find((kw) =>
       lowerText.includes(kw)
     );
-    if (matchedKeyword || lowerText.length < 10) {
+    if (matchedKeyword || lowerText.length < 25) {
       const reason = matchedKeyword
         ? `từ khóa "${matchedKeyword}"`
-        : `độ dài ngắn (${lowerText.length} < 10 ký tự)`;
+        : `độ dài ngắn (${lowerText.length} < 25 ký tự)`;
       console.log(
         `🚫 [Nhóm-Skip] Bỏ qua ${reason} từ ${senderInfo} trong nhóm [${groupInfo}]`
       );
@@ -526,26 +526,43 @@ export class MessageHandler {
       }
     }
 
-    // 2. Kiểm tra và phân tích CCCD (mặt trước / mặt sau / cả 2 mặt) nếu có ảnh đính kèm
+    // 2. Kiểm tra và phân tích CCCD (mặt trước / mặt sau / cả 2 mặt / nhiều người) nếu có ảnh đính kèm
     let cccdResult: CCCDAnalysisResult | null = null;
     if (allImageUrls.length > 0) {
       console.log(`🔍 [AI Vision] Đang đọc và phân tích ${allImageUrls.length} hình ảnh gửi đến...`);
       cccdResult = await this.aiService.analyzeCCCD(allImageUrls);
 
       if (cccdResult && cccdResult.isCCCD) {
-        console.log(
-          `✅ [CCCD Hợp lệ] Trích xuất: ${cccdResult.fullName || "Chưa rõ"} - CCCD: ${
-            cccdResult.idNumber || "Chưa rõ"
-          }`
-        );
-        // Lưu và gộp ảnh CCCD 2 mặt vào User Context (RAM Cache & Write-Through SQLite)
-        this.userContextManager.addOrUpdateCCCD(
-          batch.threadId,
-          batch.senderId,
-          batch.senderName,
-          cccdResult,
-          allImageUrls
-        );
+        if (cccdResult.cards && cccdResult.cards.length > 0) {
+          for (const card of cccdResult.cards) {
+            console.log(
+              `✅ [CCCD Hợp lệ] Trích xuất: ${card.fullName || "Chưa rõ"} - CCCD: ${
+                card.idNumber || "Chưa rõ"
+              } (${card.imageUrls.length} ảnh)`
+            );
+            // Lưu từng thẻ CCCD với đúng tập ảnh của thẻ đó vào User Context
+            this.userContextManager.addOrUpdateCCCD(
+              batch.threadId,
+              batch.senderId,
+              batch.senderName,
+              card,
+              card.imageUrls
+            );
+          }
+        } else {
+          console.log(
+            `✅ [CCCD Hợp lệ] Trích xuất: ${cccdResult.fullName || "Chưa rõ"} - CCCD: ${
+              cccdResult.idNumber || "Chưa rõ"
+            }`
+          );
+          this.userContextManager.addOrUpdateCCCD(
+            batch.threadId,
+            batch.senderId,
+            batch.senderName,
+            cccdResult,
+            allImageUrls
+          );
+        }
       }
 
       // Thả tim vào các tin nhắn ảnh sau khi AI đã đọc xong ảnh
@@ -595,13 +612,25 @@ export class MessageHandler {
     }
 
     if (cccdResult && cccdResult.isCCCD) {
-      textLines.push(
-        `[Hệ thống OCR CCCD]: Ứng viên vừa gửi ảnh Căn cước công dân (hoặc mặt CCCD). Họ tên: ${
-          cccdResult.fullName || "Chưa rõ"
-        }, Số CCCD: ${cccdResult.idNumber || "Chưa rõ"}, Giới tính: ${
-          cccdResult.gender || "Chưa rõ"
-        }, Năm sinh: ${cccdResult.dob || "Chưa rõ"}.`
-      );
+      if (cccdResult.cards && cccdResult.cards.length > 0) {
+        const descList = cccdResult.cards.map(
+          (c, idx) =>
+            `  [Ứng viên ${idx + 1}]: Họ tên: ${c.fullName || "Chưa rõ"}, Số CCCD: ${
+              c.idNumber || "Chưa rõ"
+            }, Giới tính: ${c.gender || "Chưa rõ"}, Ngày sinh: ${c.dob || "Chưa rõ"}`
+        );
+        textLines.push(
+          `[Hệ thống OCR CCCD]: Ứng viên vừa gửi ảnh Căn cước công dân của ${cccdResult.cards.length} người:\n${descList.join("\n")}`
+        );
+      } else {
+        textLines.push(
+          `[Hệ thống OCR CCCD]: Ứng viên vừa gửi ảnh Căn cước công dân (hoặc mặt CCCD). Họ tên: ${
+            cccdResult.fullName || "Chưa rõ"
+          }, Số CCCD: ${cccdResult.idNumber || "Chưa rõ"}, Giới tính: ${
+            cccdResult.gender || "Chưa rõ"
+          }, Năm sinh: ${cccdResult.dob || "Chưa rõ"}.`
+        );
+      }
     }
 
     const formattedText = textLines.join("\n");

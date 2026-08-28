@@ -3,7 +3,7 @@ import {
   type UserContextData,
   type UserCCCDDocument,
 } from "../database/index.js";
-import { type CCCDAnalysisResult } from "./aiService.js";
+import { type CCCDAnalysisResult, type CCCDCardResult } from "./aiService.js";
 
 /**
  * UserContextManager: Quản lý bộ nhớ đệm (RAM Cache) kết hợp lưu trữ bền vững SQLite (Write-Through)
@@ -105,7 +105,7 @@ export class UserContextManager {
     threadId: string,
     senderId: string,
     senderName: string,
-    cccdResult: CCCDAnalysisResult,
+    cccdResult: CCCDAnalysisResult | CCCDCardResult,
     imageUrls: string[]
   ): UserCCCDDocument {
     const context = this.getContext(threadId, senderId, senderName);
@@ -135,10 +135,11 @@ export class UserContextManager {
     }
 
     if (targetDoc) {
-      // Cập nhật tài liệu CCCD đã có (gộp ảnh mặt trước + mặt sau)
-      targetDoc.imageUrls = Array.from(
+      // Cập nhật tài liệu CCCD đã có (gộp ảnh mặt trước + mặt sau, giữ tối đa 2 ảnh gần nhất)
+      const mergedUrls = Array.from(
         new Set([...targetDoc.imageUrls, ...imageUrls])
       );
+      targetDoc.imageUrls = mergedUrls.slice(-2);
       if (cccdResult.fullName) targetDoc.fullName = cccdResult.fullName;
       if (cccdResult.idNumber) targetDoc.idNumber = cccdResult.idNumber;
       if (cccdResult.dob) targetDoc.dob = cccdResult.dob;
@@ -150,12 +151,12 @@ export class UserContextManager {
       targetDoc.extractedAt = Date.now();
 
       console.log(
-        `🔄 [UserContext] Đã gộp ảnh CCCD 2 mặt (${targetDoc.imageUrls.length} ảnh) cho [${
+        `🔄 [UserContext] Đã cập nhật ảnh CCCD (${targetDoc.imageUrls.length} ảnh) cho [${
           targetDoc.fullName || targetDoc.idNumber || "Ứng viên"
         }] của user [${senderName}]`
       );
     } else {
-      // Thêm mới tài liệu CCCD của ứng viên
+      // Thêm mới tài liệu CCCD của ứng viên (tối đa 2 ảnh)
       targetDoc = {
         fullName: cccdResult.fullName,
         idNumber: cccdResult.idNumber,
@@ -165,7 +166,7 @@ export class UserContextManager {
         homeTown: cccdResult.homeTown,
         residence: cccdResult.residence,
         expiryDate: cccdResult.expiryDate,
-        imageUrls: Array.from(new Set(imageUrls)),
+        imageUrls: Array.from(new Set(imageUrls)).slice(-2),
         extractedAt: Date.now(),
         status: "pending",
       };

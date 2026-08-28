@@ -101,15 +101,72 @@ export class CandidateRepository {
   }
 
   /**
-   * Thêm mới hoặc cập nhật nối tiếp hồ sơ ứng viên
+   * Lấy hồ sơ theo ID
+   */
+  public getCandidateById(id: string): CandidateRecord | null {
+    const stmt = this.db.connection.prepare(`
+      SELECT 
+        id, thread_id as threadId, sender_id as senderId, sender_name as senderName,
+        target_company as targetCompany, phone_number as phoneNumber, interview_date as interviewDate,
+        full_name as fullName, id_number as idNumber, dob, gender,
+        home_town as homeTown, residence, expiry_date as expiryDate,
+        image_urls as imageUrls, status, forwarded_to as forwardedTo,
+        created_at as createdAt, forwarded_at as forwardedAt
+      FROM candidates
+      WHERE id = ?
+      LIMIT 1
+    `);
+    const row = stmt.get(id) as Record<string, unknown> | undefined;
+    if (!row) return null;
+    return this.mapRowToRecord(row);
+  }
+
+  /**
+   * Lấy hồ sơ theo họ tên trong một thread
+   */
+  public getCandidateByName(threadId: string, fullName: string): CandidateRecord | null {
+    const stmt = this.db.connection.prepare(`
+      SELECT 
+        id, thread_id as threadId, sender_id as senderId, sender_name as senderName,
+        target_company as targetCompany, phone_number as phoneNumber, interview_date as interviewDate,
+        full_name as fullName, id_number as idNumber, dob, gender,
+        home_town as homeTown, residence, expiry_date as expiryDate,
+        image_urls as imageUrls, status, forwarded_to as forwardedTo,
+        created_at as createdAt, forwarded_at as forwardedAt
+      FROM candidates
+      WHERE thread_id = ? AND LOWER(TRIM(full_name)) = LOWER(TRIM(?))
+      ORDER BY created_at DESC
+      LIMIT 1
+    `);
+    const row = stmt.get(threadId, fullName) as Record<string, unknown> | undefined;
+    if (!row) return null;
+    return this.mapRowToRecord(row);
+  }
+
+  /**
+   * Thêm mới hoặc cập nhật hồ sơ ứng viên (Cô lập tuyệt đối giữa các ứng viên khác nhau)
    */
   public upsertCandidate(data: CandidateRecord): CandidateRecord {
-    // 1. Tìm xem đã có hồ sơ nào của thread này chưa (ưu tiên pending, nếu không lấy latest)
-    const existing =
-      this.getPendingCandidate(data.threadId, data.senderId) ||
-      this.getLatestCandidate(data.threadId, data.senderId);
+    // 1. Tìm bản ghi tương ứng của ứng viên này:
+    // - Ưu tiên tìm theo ID nếu có
+    // - Sau đó tìm theo Số CCCD (idNumber) nếu có
+    // - Sau đó tìm theo Họ tên (fullName) trong thread này
+    // - Nếu không có thông tin định danh -> tìm pending candidate
+    let existing: CandidateRecord | null = null;
+    if (data.id) {
+      existing = this.getCandidateById(data.id);
+    }
+    if (!existing && data.idNumber) {
+      existing = this.findByIdNumber(data.idNumber);
+    }
+    if (!existing && data.fullName) {
+      existing = this.getCandidateByName(data.threadId, data.fullName);
+    }
+    if (!existing && !data.idNumber && !data.fullName) {
+      existing = this.getPendingCandidate(data.threadId, data.senderId);
+    }
 
-    const id = existing?.id || data.id || crypto.randomUUID();
+    const id = data.id || existing?.id || crypto.randomUUID();
     const createdAt = existing?.createdAt || data.createdAt || Date.now();
     const targetCompany = data.targetCompany || existing?.targetCompany || null;
     const phoneNumber = data.phoneNumber || existing?.phoneNumber || null;
@@ -122,10 +179,14 @@ export class CandidateRepository {
     const residence = data.residence || existing?.residence || null;
     const expiryDate = data.expiryDate || existing?.expiryDate || null;
 
-    // Gộp ảnh cũ và ảnh mới
-    const combinedImages = Array.from(
-      new Set([...(existing?.imageUrls || []), ...(data.imageUrls || [])])
-    );
+    // Ảnh: Chỉ lưu đúng ảnh của chính ứng viên này, tuyệt đối không trộn ảnh của người khác
+    let candidateImages: string[] = [];
+    if (data.imageUrls && data.imageUrls.length > 0) {
+      candidateImages = Array.from(new Set(data.imageUrls));
+    } else if (existing?.imageUrls && existing.imageUrls.length > 0) {
+      candidateImages = Array.from(new Set(existing.imageUrls));
+    }
+
     const status = data.status || existing?.status || "pending";
     const forwardedTo = data.forwardedTo || existing?.forwardedTo || config.hrRecipientId;
     const forwardedAt = data.forwardedAt || existing?.forwardedAt || null;
@@ -156,8 +217,8 @@ export class CandidateRepository {
       gender,
       home_town: homeTown,
       residence,
-      expiry_date: expiryDate,
-      image_urls: JSON.stringify(combinedImages),
+      expiryDate: expiryDate,
+      image_urls: JSON.stringify(candidateImages),
       status,
       forwarded_to: forwardedTo,
       created_at: createdAt,
@@ -179,7 +240,7 @@ export class CandidateRepository {
       homeTown: homeTown || undefined,
       residence: residence || undefined,
       expiryDate: expiryDate || undefined,
-      imageUrls: combinedImages,
+      imageUrls: candidateImages,
       status: status as "pending" | "forwarded",
       forwardedTo,
       createdAt,
