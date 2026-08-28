@@ -83,7 +83,7 @@ export class HRNotifier {
             msg: cccdReport,
             attachments: tempFiles,
           },
-          ThreadType.User
+          config.hrThreadType
         );
         console.log(
           `📤 [Chuyển tiếp CCCD] Đã gửi ${tempFiles.length} ảnh CCCD đính kèm + thông tin công ty [${candidate.targetCompany}] của [${candidate.senderName}] tới HR (${this.hrRecipientId}) thành công!`
@@ -92,7 +92,7 @@ export class HRNotifier {
         await this.zaloService.sendMessage(
           this.hrRecipientId,
           cccdReport,
-          ThreadType.User
+          config.hrThreadType
         );
         console.log(
           `📤 [Chuyển tiếp Đăng ký] Đã gửi thông tin công ty [${candidate.targetCompany}] của [${candidate.senderName}] tới HR (${this.hrRecipientId}) thành công!`
@@ -132,7 +132,7 @@ export class HRNotifier {
 📅 Thời gian đổi: ${new Date().toLocaleString("vi-VN")}`;
 
     try {
-      await this.zaloService.sendMessage(this.hrRecipientId, changeReport, ThreadType.User);
+      await this.zaloService.sendMessage(this.hrRecipientId, changeReport, config.hrThreadType);
       console.log(`📤 [Tool: switch_company] Đã báo HR đổi sang [${newCompany}] thành công!`);
     } catch (err) {
       console.error("❌ Lỗi gửi thông báo đổi công ty tới HR:", err);
@@ -157,7 +157,7 @@ export class HRNotifier {
 📅 Thời gian báo: ${new Date().toLocaleString("vi-VN")}`;
 
     try {
-      await this.zaloService.sendMessage(this.hrRecipientId, rescheduleReport, ThreadType.User);
+      await this.zaloService.sendMessage(this.hrRecipientId, rescheduleReport, config.hrThreadType);
       console.log(
         `📤 [Tool: reschedule_interview] Đã báo HR dời lịch sang [${newDate}] thành công!`
       );
@@ -185,7 +185,7 @@ export class HRNotifier {
       await this.zaloService.sendMessage(
         this.hrRecipientId,
         errorReport,
-        ThreadType.User
+        config.hrThreadType
       );
       console.log(
         `🚨 [HR Notifier] Đã gửi cảnh báo lỗi hệ thống AI tới HR (${this.hrRecipientId}) thành công!`

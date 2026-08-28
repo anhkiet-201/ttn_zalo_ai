@@ -667,8 +667,15 @@ export class MessageHandler {
   private splitMessages(text: string): string[] {
     if (!text || !text.trim()) return [];
 
+    // 0. Bóc tách pattern lịch sử chat mà AI đôi khi tự thêm vào phản hồi thay vì dùng |||
+    //    VD: "...câu 1[14:24:08 Thứ Sáu, 28/08/2026] [Bot]: câu 2..." → "...câu 1|||câu 2..."
+    const stripHistoryPrefixes = (s: string): string =>
+      s.replace(/\[\d{1,2}:\d{2}(?::\d{2})?\s[^\]]*\]\s*\[Bot\]:/g, "|||");
+
+    const stripped = stripHistoryPrefixes(text);
+
     // 1. Chuẩn hóa tất cả các biến thể [|||], (|||), {|||}, |||| thành |||
-    const normalized = text
+    const normalized = stripped
       .replace(/\[\s*\|{2,}\s*\]/g, "|||")
       .replace(/\(\s*\|{2,}\s*\)/g, "|||")
       .replace(/\{\s*\|{2,}\s*\}/g, "|||")

@@ -5,7 +5,6 @@ import {
 } from "../database/index.js";
 import { type HRNotifier } from "./hrNotifier.js";
 import { UserContextManager } from "./userContextManager.js";
-import { ERPService } from "./erpService.js";
 import { config } from "../config/index.js";
 
 export interface ToolExecutionContext {
@@ -26,16 +25,11 @@ export interface ToolExecutionResponse {
  * Đảm bảo chỉ khi AI quyết định đủ điều kiện qua Tool Call thì mới upsertCandidate vào SQLite DB.
  */
 export class ToolExecutor {
-  private readonly erpService: ERPService;
-
   constructor(
     private readonly candidateRepo: CandidateRepository,
     private readonly hrNotifier: HRNotifier,
-    private readonly userContextManager?: UserContextManager,
-    erpService?: ERPService
-  ) {
-    this.erpService = erpService || new ERPService();
-  }
+    private readonly userContextManager?: UserContextManager
+  ) {}
 
   private get contextManager(): UserContextManager {
     return this.userContextManager || UserContextManager.getInstance();
@@ -172,12 +166,6 @@ export class ToolExecutor {
     await this.hrNotifier.notifyCandidateRegistration(candidateData);
     this.candidateRepo.markAsForwarded(candidateData.id!);
 
-    // 5. Đồng bộ tự động sang hệ thống ERP Việc Làm HR (Fire-and-Run)
-    this.erpService.syncCandidateToErp(candidateData, context.threadId, {
-      congTyId: targetCompany,
-      ngayPhongVan: interviewDate,
-    });
-
     return {
       result: {
         status: "success",
@@ -233,12 +221,6 @@ export class ToolExecutor {
       interviewDate,
     });
 
-    // Đồng bộ thay đổi công ty sang ERP (Fire-and-Run)
-    this.erpService.syncCandidateToErp(candidateData, context.threadId, {
-      congTyId: newCompany,
-      ngayPhongVan: interviewDate,
-    });
-
     return {
       result: {
         status: "success",
@@ -281,12 +263,6 @@ export class ToolExecutor {
       candidate: candidateData,
       targetCompany: String(targetCompany),
       newDate,
-    });
-
-    // Đồng bộ dời lịch phỏng vấn sang ERP (Fire-and-Run)
-    this.erpService.syncCandidateToErp(candidateData, context.threadId, {
-      congTyId: String(targetCompany),
-      ngayPhongVan: newDate,
     });
 
     return {

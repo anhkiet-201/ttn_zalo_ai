@@ -1,7 +1,7 @@
 import dotenv from "dotenv";
 import path from "node:path";
 import fs from "node:fs";
-import { type BotConfig, type Credentials } from "../types/zalo.types.js";
+import { type BotConfig, type Credentials, ThreadType } from "../types/zalo.types.js";
 
 // Nạp các biến môi trường từ file .env
 dotenv.config();
@@ -86,7 +86,9 @@ export const config: BotConfig = {
     ? process.env.GROUP_IGNORE_KEYWORDS.split(",").map((k) => k.trim().toLowerCase())
     : ["mai pv", "mai nv"],
   hrRecipientId: process.env.HR_RECIPIENT_ID || "",
+  hrThreadType:
+    (process.env.HR_THREAD_TYPE || "group").toLowerCase() === "user"
+      ? ThreadType.User
+      : ThreadType.Group,
   chatHistoryLimit: Number(process.env.CHAT_HISTORY_LIMIT) || 20,
-  erpBaseUrl: process.env.ERP_BASE_URL || "https://erp.vieclamhr.com",
-  erpApiKey: process.env.ERP_API_KEY || "ttn_live_PLMxxxx",
 };

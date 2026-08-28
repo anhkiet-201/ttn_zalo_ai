@@ -52,9 +52,8 @@ export interface BotConfig {
   groupDebounceSeconds: number;
   groupIgnoreKeywords: string[];
   hrRecipientId: string;
+  hrThreadType: import("zca-js").ThreadType;
   chatHistoryLimit: number;
-  erpBaseUrl: string;
-  erpApiKey: string;
 }
 
 /**
