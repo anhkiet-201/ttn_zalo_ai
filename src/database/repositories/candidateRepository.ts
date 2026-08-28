@@ -217,7 +217,7 @@ export class CandidateRepository {
       gender,
       home_town: homeTown,
       residence,
-      expiryDate: expiryDate,
+      expiry_date: expiryDate,
       image_urls: JSON.stringify(candidateImages),
       status,
       forwarded_to: forwardedTo,
