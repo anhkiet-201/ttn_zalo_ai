@@ -18,17 +18,6 @@ export class GroupHandler {
         const members = "updateMembers" in event.data ? event.data.updateMembers : [];
         const memberNames = members?.map((m) => m.dName).join(", ") || "Thành viên mới";
         console.log(`\n🎉 [SỰ KIỆN NHÓM] Có thành viên mới tham gia nhóm [${threadId}]: ${memberNames}`);
-
-        // Gửi tin nhắn chào mừng thành viên mới
-        try {
-          await this.zaloService.sendMessage(
-            threadId,
-            `👋 Chào mừng ${memberNames} đã tham gia nhóm! Chúc bạn có những trải nghiệm vui vẻ! 🎉`,
-            ThreadType.Group
-          );
-        } catch (error) {
-          console.error("❌ Lỗi khi gửi tin nhắn chào mừng:", error);
-        }
         break;
       }
 
