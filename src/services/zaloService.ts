@@ -50,36 +50,61 @@ export class ZaloService {
 
   /**
    * Trả lời (Reply/Quote) một tin nhắn cụ thể
+   * - Đối với Nhóm (Group): Gửi kèm trích dẫn (quote), có fallback tự động nếu Zalo từ chối quote.
+   * - Đối với Cá nhân (User 1-1): Gửi trực tiếp tin nhắn thường (do Zalo Web API không hỗ trợ /api/message/quote).
    */
   public async replyMessage(
     message: Message,
     replyText: string
   ): Promise<SendMessageResponse> {
+    const isGroup = message.type === ThreadType.Group;
+
+    if (isGroup) {
+      try {
+        const quote: SendMessageQuote = {
+          content: message.data.content,
+          msgType: message.data.msgType,
+          propertyExt: message.data.propertyExt,
+          uidFrom: message.data.uidFrom,
+          msgId: message.data.msgId,
+          cliMsgId: message.data.cliMsgId,
+          ts: message.data.ts,
+          ttl: message.data.ttl,
+        };
+
+        const messageContent: MessageContent = {
+          msg: replyText,
+          quote,
+        };
+
+        return await this.api.sendMessage(
+          messageContent,
+          message.threadId,
+          ThreadType.Group
+        );
+      } catch (quoteError) {
+        console.warn(
+          `⚠️ Quote tin nhắn nhóm ${message.data.msgId} thất bại, fallback sang gửi tin nhắn thường:`,
+          quoteError
+        );
+        return await this.api.sendMessage(
+          replyText,
+          message.threadId,
+          ThreadType.Group
+        );
+      }
+    }
+
+    // Tin nhắn cá nhân 1-1 (ThreadType.User): gửi trực tiếp tin nhắn thường
     try {
-      const quote: SendMessageQuote = {
-        content: message.data.content,
-        msgType: message.data.msgType,
-        propertyExt: message.data.propertyExt,
-        uidFrom: message.data.uidFrom,
-        msgId: message.data.msgId,
-        cliMsgId: message.data.cliMsgId,
-        ts: message.data.ts,
-        ttl: message.data.ttl,
-      };
-
-      const messageContent: MessageContent = {
-        msg: replyText,
-        quote,
-      };
-
       return await this.api.sendMessage(
-        messageContent,
+        replyText,
         message.threadId,
-        message.type
+        ThreadType.User
       );
     } catch (error) {
       console.error(
-        `❌ Lỗi khi reply tin nhắn ${message.data.msgId} tại luồng ${message.threadId}:`,
+        `❌ Lỗi khi gửi tin nhắn phản hồi tới ${message.threadId}:`,
         error
       );
       throw error;
