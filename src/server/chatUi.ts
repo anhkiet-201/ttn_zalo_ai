@@ -1,20 +1,20 @@
 import type { ChatMessageRecord } from "../database/repositories/chatHistoryRepository.js";
 
 /**
- * renderChatPage: Render giao diện Web Chat chuẩn Zalo PC
- * Nếu không có threadId trong URL -> Hiện popup nhập Thread ID.
+ * renderChatPage: Render giao diện Web Chat chuẩn Zalo PC 2 cột (Sidebar Danh sách chat + Khung chat chi tiết)
+ * Tích hợp Lazy Loading / Infinite Scroll cho cả danh sách thread và lịch sử tin nhắn cũ.
  */
-export function renderChatPage(threadId: string): string {
+export function renderChatPage(initialThreadId: string = ""): string {
   return `
 <!DOCTYPE html>
 <html lang="vi">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Zalo AI - Trò Chuyện Trực Tiếp</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
     :root {
       --zalo-blue: #0068ff;
@@ -23,10 +23,13 @@ export function renderChatPage(threadId: string): string {
       --zalo-blue-border: #cce0ff;
       --zalo-bg: #eef0f3;
       --zalo-white: #ffffff;
+      --zalo-sidebar-bg: #ffffff;
+      --zalo-item-hover: #f1f5f9;
+      --zalo-item-active: #e5efff;
       --zalo-text-primary: #081c36;
-      --zalo-text-secondary: #768499;
-      --zalo-text-muted: #8896a6;
-      --zalo-border: #e5e7eb;
+      --zalo-text-secondary: #64748b;
+      --zalo-text-muted: #94a3b8;
+      --zalo-border: #e2e8f0;
       --font-main: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     }
 
@@ -42,14 +45,445 @@ export function renderChatPage(threadId: string): string {
       color: var(--zalo-text-primary);
       height: 100vh;
       display: flex;
-      flex-direction: column;
+      flex-direction: row;
       overflow: hidden;
       -webkit-font-smoothing: antialiased;
     }
 
     /* ==========================================================================
-       HEADER APP BAR
+       LAYOUT CHÍNH (2 CỘT ZALO PC)
        ========================================================================== */
+    .zalo-layout-wrapper {
+      display: flex;
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* ==========================================================================
+       CỘT TRÁI: SIDEBAR DANH SÁCH CHAT (THREADS LIST)
+       ========================================================================== */
+    .zalo-sidebar {
+      width: 360px;
+      min-width: 320px;
+      max-width: 420px;
+      height: 100%;
+      background: var(--zalo-sidebar-bg);
+      border-right: 1px solid var(--zalo-border);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+      z-index: 20;
+    }
+
+    /* Sidebar Header */
+    .sidebar-header {
+      padding: 16px 16px 12px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      border-bottom: 1px solid var(--zalo-border);
+      background: var(--zalo-white);
+    }
+
+    .sidebar-title-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .sidebar-brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 18px;
+      font-weight: 800;
+      color: var(--zalo-blue);
+      letter-spacing: -0.3px;
+    }
+
+    .sidebar-brand-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      background: linear-gradient(135deg, #0068ff 0%, #00a2ff 100%);
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+    }
+
+    .btn-new-thread {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      border: 1px solid var(--zalo-border);
+      background: #f8fafc;
+      color: var(--zalo-text-secondary);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .btn-new-thread:hover {
+      background: var(--zalo-blue-light);
+      color: var(--zalo-blue);
+      border-color: var(--zalo-blue-border);
+    }
+
+    /* Search Box */
+    .sidebar-search-box {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+
+    .sidebar-search-input {
+      width: 100%;
+      height: 38px;
+      background: #f1f5f9;
+      border: 1px solid transparent;
+      border-radius: 20px;
+      padding: 0 34px 0 36px;
+      font-size: 13.5px;
+      font-family: inherit;
+      color: var(--zalo-text-primary);
+      outline: none;
+      transition: all 0.2s ease;
+    }
+
+    .sidebar-search-input:focus {
+      background: #ffffff;
+      border-color: var(--zalo-blue);
+      box-shadow: 0 0 0 3px rgba(0, 104, 255, 0.12);
+    }
+
+    .search-icon-left {
+      position: absolute;
+      left: 12px;
+      color: var(--zalo-text-muted);
+      pointer-events: none;
+      display: flex;
+      align-items: center;
+    }
+
+    .search-clear-btn {
+      position: absolute;
+      right: 10px;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      border: none;
+      background: #cbd5e1;
+      color: white;
+      font-size: 10px;
+      cursor: pointer;
+      display: none;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* Filter Tabs */
+    .sidebar-filter-tabs {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      overflow-x: auto;
+      padding-bottom: 2px;
+      scrollbar-width: none;
+    }
+
+    .sidebar-filter-tabs::-webkit-scrollbar {
+      display: none;
+    }
+
+    .filter-tab-btn {
+      padding: 5px 12px;
+      border-radius: 16px;
+      border: 1px solid var(--zalo-border);
+      background: #f8fafc;
+      color: var(--zalo-text-secondary);
+      font-size: 12px;
+      font-weight: 600;
+      white-space: nowrap;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .filter-tab-btn.active {
+      background: var(--zalo-blue);
+      color: #ffffff;
+      border-color: var(--zalo-blue);
+    }
+
+    /* Threads Scroll List */
+    .sidebar-threads-container {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px 0;
+      position: relative;
+    }
+
+    /* Thread Item Card */
+    .thread-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 16px;
+      cursor: pointer;
+      transition: background 0.15s ease;
+      position: relative;
+      border-bottom: 1px solid rgba(0, 0, 0, 0.03);
+    }
+
+    .thread-item:hover {
+      background: var(--zalo-item-hover);
+    }
+
+    .thread-item.active {
+      background: var(--zalo-item-active);
+    }
+
+    .thread-item.active::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 4px;
+      background: var(--zalo-blue);
+      border-top-right-radius: 4px;
+      border-bottom-right-radius: 4px;
+    }
+
+    .thread-item-avatar {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #0068ff 0%, #00a2ff 100%);
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 17px;
+      flex-shrink: 0;
+      position: relative;
+      user-select: none;
+    }
+
+    .thread-item-avatar.is-group {
+      background: linear-gradient(135deg, #2b569a 0%, #0068ff 100%);
+    }
+
+    .thread-online-dot {
+      position: absolute;
+      bottom: 1px;
+      right: 1px;
+      width: 12px;
+      height: 12px;
+      background: #10b981;
+      border: 2px solid white;
+      border-radius: 50%;
+    }
+
+    .thread-item-body {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .thread-item-row1 {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .thread-item-name {
+      font-size: 14.5px;
+      font-weight: 700;
+      color: var(--zalo-text-primary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .thread-item-time {
+      font-size: 11.5px;
+      color: var(--zalo-text-muted);
+      white-space: nowrap;
+      font-weight: 500;
+    }
+
+    .thread-item-row2 {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .thread-item-preview {
+      font-size: 13px;
+      color: var(--zalo-text-secondary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      flex: 1;
+    }
+
+    .thread-item-preview.is-self {
+      color: var(--zalo-text-muted);
+    }
+
+    .thread-badge-group {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      flex-shrink: 0;
+    }
+
+    .thread-badge-candidate {
+      background: #ecfdf5;
+      color: #059669;
+      border: 1px solid #a7f3d0;
+      border-radius: 12px;
+      padding: 1px 6px;
+      font-size: 10px;
+      font-weight: 700;
+    }
+
+    .thread-badge-manual {
+      background: #fffbeb;
+      color: #b45309;
+      border: 1px solid #fde68a;
+      border-radius: 12px;
+      padding: 1px 6px;
+      font-size: 10px;
+      font-weight: 700;
+    }
+
+    /* Skeleton Loading & Infinite Scroll Loader */
+    .threads-loader-sentinel {
+      padding: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--zalo-text-muted);
+      font-size: 12.5px;
+      gap: 8px;
+    }
+
+    .threads-spinner-sm {
+      width: 18px;
+      height: 18px;
+      border: 2px solid #e2e8f0;
+      border-top-color: var(--zalo-blue);
+      border-radius: 50%;
+      animation: spin 0.75s linear infinite;
+    }
+
+    .empty-threads-state {
+      padding: 40px 20px;
+      text-align: center;
+      color: var(--zalo-text-secondary);
+      font-size: 13.5px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* ==========================================================================
+       CỘT PHẢI: KHUNG TRÒ CHUYỆN CHI TIẾT (MAIN CHAT AREA)
+       ========================================================================== */
+    .zalo-main-chat {
+      flex: 1;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      background: var(--zalo-bg);
+      position: relative;
+      overflow: hidden;
+      min-width: 0;
+    }
+
+    /* Welcome Empty View (khi chưa chọn thread) */
+    .zalo-welcome-view {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 40px;
+      text-align: center;
+      background: #ffffff;
+      color: var(--zalo-text-secondary);
+    }
+
+    .welcome-illustration {
+      width: 120px;
+      height: 120px;
+      border-radius: 30px;
+      background: linear-gradient(135deg, #e5efff 0%, #cce0ff 100%);
+      color: var(--zalo-blue);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 54px;
+      margin-bottom: 24px;
+      box-shadow: 0 10px 30px rgba(0, 104, 255, 0.1);
+    }
+
+    .welcome-title {
+      font-size: 22px;
+      font-weight: 800;
+      color: var(--zalo-text-primary);
+      margin-bottom: 8px;
+    }
+
+    .welcome-desc {
+      font-size: 14.5px;
+      max-width: 440px;
+      line-height: 1.6;
+      color: var(--zalo-text-secondary);
+      margin-bottom: 24px;
+    }
+
+    .welcome-quick-btn {
+      padding: 10px 20px;
+      border-radius: 12px;
+      background: var(--zalo-blue);
+      color: white;
+      border: none;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .welcome-quick-btn:hover {
+      background: var(--zalo-blue-hover);
+    }
+
+    /* Chat Detail Active View */
+    .zalo-chat-view {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    /* Header App Bar */
     .zalo-header {
       background: var(--zalo-white);
       height: 64px;
@@ -67,6 +501,18 @@ export function renderChatPage(threadId: string): string {
       display: flex;
       align-items: center;
       gap: 12px;
+      min-width: 0;
+    }
+
+    .btn-back-sidebar {
+      display: none;
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      font-size: 20px;
+      color: var(--zalo-text-secondary);
+      padding: 4px;
+      border-radius: 6px;
     }
 
     .header-avatar {
@@ -89,21 +535,11 @@ export function renderChatPage(threadId: string): string {
       background: linear-gradient(135deg, #2b569a 0%, #0068ff 100%);
     }
 
-    .online-dot {
-      position: absolute;
-      bottom: 1px;
-      right: 1px;
-      width: 11px;
-      height: 11px;
-      background: #10b981;
-      border: 2px solid white;
-      border-radius: 50%;
-    }
-
     .header-info {
       display: flex;
       flex-direction: column;
       gap: 2px;
+      min-width: 0;
     }
 
     .header-title-row {
@@ -122,6 +558,9 @@ export function renderChatPage(threadId: string): string {
       padding: 2px 4px;
       margin-left: -4px;
       transition: background 0.15s;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
 
     .header-name:hover {
@@ -161,6 +600,7 @@ export function renderChatPage(threadId: string): string {
       padding: 1px 8px;
       font-size: 11px;
       font-weight: 600;
+      flex-shrink: 0;
     }
 
     .header-sub {
@@ -169,11 +609,59 @@ export function renderChatPage(threadId: string): string {
       display: flex;
       align-items: center;
       gap: 8px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
 
-    /* ==========================================================================
-       CHAT MESSAGES TIMELINE
-       ========================================================================== */
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+
+    /* Switch Mode Button */
+    .mode-switch-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      border: 1px solid transparent;
+      user-select: none;
+    }
+
+    .mode-switch-btn.is-ai {
+      background: #eff6ff;
+      color: #0068ff;
+      border-color: #bfdbfe;
+    }
+
+    .mode-switch-btn.is-manual {
+      background: #fffbeb;
+      color: #d97706;
+      border-color: #fde68a;
+    }
+
+    .mode-pulse-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: currentColor;
+      animation: pulse 1.8s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.85); }
+    }
+
+    /* Chat Messages Timeline */
     .zalo-chat-container {
       flex: 1;
       overflow-y: auto;
@@ -181,7 +669,36 @@ export function renderChatPage(threadId: string): string {
       display: flex;
       flex-direction: column;
       gap: 14px;
-      scroll-behavior: smooth;
+      scroll-behavior: auto;
+    }
+
+    /* Older Messages Loader Banner */
+    .older-messages-loader {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 6px 12px;
+      margin-bottom: 8px;
+    }
+
+    .btn-load-older {
+      background: #ffffff;
+      border: 1px solid var(--zalo-border);
+      border-radius: 16px;
+      padding: 4px 14px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--zalo-blue);
+      cursor: pointer;
+      transition: all 0.15s ease;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+    }
+
+    .btn-load-older:hover {
+      background: var(--zalo-blue-light);
     }
 
     .timeline-date-sep {
@@ -202,7 +719,7 @@ export function renderChatPage(threadId: string): string {
       letter-spacing: 0.3px;
     }
 
-    /* Message Row */
+    /* Message Rows */
     .message-row {
       display: flex;
       align-items: flex-start;
@@ -263,9 +780,6 @@ export function renderChatPage(threadId: string): string {
       margin-bottom: 2px;
     }
 
-    /* ==========================================================================
-       BUBBLE & MEDIA STYLING (Chuẩn Zalo PC)
-       ========================================================================== */
     .msg-bubble {
       padding: 10px 14px;
       border-radius: 10px;
@@ -276,7 +790,6 @@ export function renderChatPage(threadId: string): string {
       white-space: pre-wrap;
     }
 
-    /* Bubble Incoming Text */
     .message-row.incoming .msg-bubble {
       background: var(--zalo-white);
       color: var(--zalo-text-primary);
@@ -285,7 +798,6 @@ export function renderChatPage(threadId: string): string {
       border-top-left-radius: 2px;
     }
 
-    /* Bubble Outgoing Text */
     .message-row.outgoing .msg-bubble {
       background: var(--zalo-blue-light);
       color: var(--zalo-text-primary);
@@ -294,7 +806,6 @@ export function renderChatPage(threadId: string): string {
       border-top-right-radius: 2px;
     }
 
-    /* Message chỉ có Ảnh */
     .msg-media-card {
       display: inline-block;
       border-radius: 10px;
@@ -305,7 +816,6 @@ export function renderChatPage(threadId: string): string {
       line-height: 0;
     }
 
-    /* Image Thumbnail */
     .msg-images {
       display: flex;
       flex-wrap: wrap;
@@ -321,20 +831,19 @@ export function renderChatPage(threadId: string): string {
     }
 
     .msg-image-thumb {
-      max-width: 340px;
-      max-height: 340px;
+      max-width: 320px;
+      max-height: 320px;
       display: block;
       border-radius: 8px;
       object-fit: cover;
       cursor: pointer;
-      transition: transform 0.15s ease, opacity 0.2s ease;
+      transition: transform 0.15s ease;
     }
 
     .msg-image-thumb:hover {
       transform: scale(1.01);
     }
 
-    /* Upload Progress Overlay */
     .upload-progress-overlay {
       position: absolute;
       inset: 0;
@@ -357,8 +866,8 @@ export function renderChatPage(threadId: string): string {
     }
 
     .progress-spinner {
-      width: 28px;
-      height: 28px;
+      width: 26px;
+      height: 26px;
       border: 3px solid rgba(255, 255, 255, 0.3);
       border-top-color: #0068ff;
       border-radius: 50%;
@@ -370,17 +879,15 @@ export function renderChatPage(threadId: string): string {
     }
 
     .progress-text {
-      font-size: 12px;
+      font-size: 11px;
       font-weight: 600;
       color: #ffffff;
-      text-shadow: 0 1px 3px rgba(0,0,0,0.6);
       text-align: center;
-      line-height: 1.2;
     }
 
     .progress-bar-track {
       width: 80%;
-      height: 5px;
+      height: 4px;
       background: rgba(255, 255, 255, 0.3);
       border-radius: 6px;
       overflow: hidden;
@@ -394,7 +901,6 @@ export function renderChatPage(threadId: string): string {
       transition: width 0.15s ease;
     }
 
-    /* Footer: Thời gian */
     .msg-meta-row {
       display: flex;
       align-items: center;
@@ -409,9 +915,68 @@ export function renderChatPage(threadId: string): string {
       user-select: none;
     }
 
-    /* ==========================================================================
-       TOOLBAR & INPUT AREA
-       ========================================================================== */
+    /* AI Active Banner */
+    .ai-active-banner {
+      background: #eff6ff;
+      border-top: 1px solid #bfdbfe;
+      padding: 12px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      z-index: 10;
+    }
+
+    .ai-banner-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .ai-banner-icon-box {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      background: #0068ff;
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      flex-shrink: 0;
+    }
+
+    .ai-banner-title {
+      font-size: 13.5px;
+      font-weight: 700;
+      color: #1e3a8a;
+    }
+
+    .ai-banner-sub {
+      font-size: 12px;
+      color: #3b82f6;
+    }
+
+    .btn-activate-manual {
+      background: #ffffff;
+      border: 1px solid #93c5fd;
+      color: #0068ff;
+      padding: 6px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      white-space: nowrap;
+    }
+
+    .btn-activate-manual:hover {
+      background: #0068ff;
+      color: #ffffff;
+      border-color: #0068ff;
+    }
+
+    /* Input Toolbar & Area */
     .zalo-input-wrapper {
       background: var(--zalo-white);
       border-top: 1px solid var(--zalo-border);
@@ -446,164 +1011,59 @@ export function renderChatPage(threadId: string): string {
       border-color: #bfdbfe;
     }
 
-    /* Main Textarea Row */
     .input-main-row {
       display: flex;
       align-items: flex-end;
-      padding: 6px 16px 12px 16px;
-      gap: 10px;
+      padding: 6px 16px 14px 16px;
+      gap: 12px;
     }
 
     .zalo-textarea {
       flex: 1;
       border: none;
       outline: none;
-      font-family: var(--font-main);
-      font-size: 14.5px;
-      color: var(--zalo-text-primary);
-      background: transparent;
       resize: none;
+      font-family: inherit;
+      font-size: 14.5px;
+      line-height: 1.45;
       max-height: 120px;
       min-height: 24px;
-      line-height: 1.45;
       padding: 4px 0;
-    }
-
-    .zalo-textarea::placeholder {
-      color: var(--zalo-text-muted);
+      color: var(--zalo-text-primary);
     }
 
     .send-action-btn {
-      padding: 7px 18px;
-      height: 36px;
       background: var(--zalo-blue);
       color: white;
       border: none;
-      border-radius: 6px;
-      font-family: var(--font-main);
+      border-radius: 8px;
+      padding: 8px 16px;
       font-size: 13.5px;
-      font-weight: 600;
+      font-weight: 700;
       cursor: pointer;
-      display: flex;
+      display: inline-flex;
       align-items: center;
       gap: 6px;
-      transition: background 0.15s ease, transform 0.1s ease;
-      flex-shrink: 0;
-    }
-
-    .send-action-btn svg {
-      width: 15px;
-      height: 15px;
+      transition: background 0.15s ease;
     }
 
     .send-action-btn:hover {
       background: var(--zalo-blue-hover);
     }
 
-    .send-action-btn:active {
-      transform: scale(0.97);
+    .send-action-btn svg {
+      width: 16px;
+      height: 16px;
     }
 
-    .send-action-btn:disabled {
-      background: #93c5fd;
-      cursor: not-allowed;
-    }
-
-    /* ==========================================================================
-       POPUP NHẬP THREAD ID (KHI URL THIẾU THREADID)
-       ========================================================================== */
-    .thread-modal-backdrop {
-      position: fixed;
-      inset: 0;
-      background: rgba(0, 0, 0, 0.6);
-      backdrop-filter: blur(6px);
-      z-index: 10000;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 20px;
-    }
-
-    .thread-modal-box {
-      background: white;
-      border-radius: 12px;
-      box-shadow: 0 20px 48px rgba(0, 0, 0, 0.25);
-      width: 100%;
-      max-width: 440px;
-      padding: 24px;
-      display: flex;
-      flex-direction: column;
-      gap: 16px;
-      animation: modalFadeIn 0.25s ease-out;
-    }
-
-    @keyframes modalFadeIn {
-      from { transform: scale(0.95); opacity: 0; }
-      to { transform: scale(1); opacity: 1; }
-    }
-
-    .thread-modal-title {
-      font-size: 18px;
-      font-weight: 700;
-      color: var(--zalo-text-primary);
-    }
-
-    .thread-modal-sub {
-      font-size: 13.5px;
-      color: var(--zalo-text-secondary);
-      line-height: 1.4;
-    }
-
-    .thread-modal-input {
-      width: 100%;
-      padding: 10px 14px;
-      font-size: 14.5px;
-      font-family: var(--font-main);
-      border: 1.5px solid #cbd5e1;
-      border-radius: 8px;
-      outline: none;
-      transition: border-color 0.2s;
-    }
-
-    .thread-modal-input:focus {
-      border-color: var(--zalo-blue);
-      box-shadow: 0 0 0 3px rgba(0, 104, 255, 0.15);
-    }
-
-    .thread-modal-actions {
-      display: flex;
-      justify-content: flex-end;
-      gap: 10px;
-      margin-top: 4px;
-    }
-
-    .thread-modal-submit-btn {
-      padding: 9px 20px;
-      background: var(--zalo-blue);
-      color: white;
-      border: none;
-      border-radius: 8px;
-      font-size: 14px;
-      font-weight: 600;
-      font-family: var(--font-main);
-      cursor: pointer;
-      transition: background 0.15s;
-    }
-
-    .thread-modal-submit-btn:hover {
-      background: var(--zalo-blue-hover);
-    }
-
-    /* ==========================================================================
-       LIGHTBOX ZOOM MODAL
-       ========================================================================== */
+    /* Modals, Lightbox, Toast */
     .lightbox-modal {
-      display: none;
       position: fixed;
       inset: 0;
       background: rgba(0, 0, 0, 0.88);
       backdrop-filter: blur(8px);
-      z-index: 9999;
+      z-index: 1000;
+      display: none;
       align-items: center;
       justify-content: center;
       flex-direction: column;
@@ -617,488 +1077,336 @@ export function renderChatPage(threadId: string): string {
       max-width: 90vw;
       max-height: 85vh;
       border-radius: 8px;
-      box-shadow: 0 12px 48px rgba(0, 0, 0, 0.6);
+      box-shadow: 0 20px 50px rgba(0,0,0,0.5);
       object-fit: contain;
-      animation: zoomIn 0.2s ease-out;
-    }
-
-    @keyframes zoomIn {
-      from { transform: scale(0.9); opacity: 0; }
-      to { transform: scale(1); opacity: 1; }
     }
 
     .lightbox-close-btn {
       position: absolute;
       top: 20px;
-      right: 24px;
+      right: 20px;
       background: rgba(255, 255, 255, 0.2);
-      color: white;
       border: none;
-      border-radius: 50%;
+      color: white;
       width: 40px;
       height: 40px;
+      border-radius: 50%;
       font-size: 20px;
       cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      transition: background 0.2s;
     }
 
-    .lightbox-close-btn:hover {
-      background: rgba(255, 255, 255, 0.35);
-    }
-
-    .lightbox-caption {
-      color: #cbd5e1;
-      font-size: 13px;
-      margin-top: 14px;
-      font-weight: 500;
-    }
-
-    /* ==========================================================================
-       QUICK RENAME MODAL & TOAST STYLING (Chuẩn Zalo PC)
-       ========================================================================== */
-    .rename-modal-backdrop {
+    /* Rename & Thread Modal */
+    .thread-modal-backdrop, .rename-modal-backdrop {
       position: fixed;
-      top: 0; left: 0; right: 0; bottom: 0;
-      background: rgba(8, 28, 54, 0.45);
+      inset: 0;
+      background: rgba(0, 0, 0, 0.45);
       backdrop-filter: blur(4px);
-      -webkit-backdrop-filter: blur(4px);
-      z-index: 1000;
+      z-index: 200;
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: 20px;
-      animation: fadeIn 0.2s ease;
+      padding: 16px;
     }
 
-    .rename-modal-box {
-      background: var(--zalo-white);
-      width: 100%;
-      max-width: 440px;
+    .thread-modal-box, .rename-modal-box {
+      background: white;
       border-radius: 16px;
-      box-shadow: 0 20px 40px rgba(8, 28, 54, 0.15), 0 0 0 1px rgba(0, 0, 0, 0.05);
-      overflow: hidden;
-      animation: scaleUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
-      display: flex;
-      flex-direction: column;
+      padding: 24px;
+      width: 100%;
+      max-width: 420px;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+      animation: modalPop 0.2s ease-out;
     }
 
-    .rename-modal-header {
-      padding: 18px 20px 10px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
+    @keyframes modalPop {
+      from { transform: scale(0.95); opacity: 0; }
+      to { transform: scale(1); opacity: 1; }
     }
 
-    .rename-modal-title {
+    .thread-modal-title, .rename-modal-title {
       font-size: 17px;
       font-weight: 700;
-      color: var(--zalo-text-primary);
+      margin-bottom: 8px;
     }
 
-    .rename-modal-close {
-      background: transparent;
-      border: none;
-      font-size: 18px;
-      color: var(--zalo-text-secondary);
-      cursor: pointer;
-      width: 32px;
-      height: 32px;
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      transition: background 0.15s;
-    }
-
-    .rename-modal-close:hover {
-      background: #f1f5f9;
-      color: #0f172a;
-    }
-
-    .rename-modal-sub {
-      padding: 0 20px 16px;
+    .thread-modal-sub, .rename-modal-sub {
       font-size: 13px;
       color: var(--zalo-text-secondary);
+      margin-bottom: 18px;
       line-height: 1.4;
     }
 
-    .rename-modal-body {
-      padding: 0 20px 20px;
-    }
-
-    .rename-input-wrap {
-      position: relative;
-      display: flex;
-      align-items: center;
-    }
-
-    .rename-input {
+    .thread-modal-input, .rename-input {
       width: 100%;
-      height: 44px;
-      padding: 0 40px 0 14px;
-      border: 1.5px solid #cbd5e1;
+      height: 42px;
+      border: 1px solid var(--zalo-border);
       border-radius: 10px;
+      padding: 0 14px;
       font-size: 14px;
       font-family: inherit;
-      color: var(--zalo-text-primary);
       outline: none;
-      transition: border-color 0.2s, box-shadow 0.2s;
+      margin-bottom: 16px;
     }
 
-    .rename-input:focus {
+    .thread-modal-input:focus, .rename-input:focus {
       border-color: var(--zalo-blue);
-      box-shadow: 0 0 0 3px rgba(0, 104, 255, 0.15);
+      box-shadow: 0 0 0 3px rgba(0, 104, 255, 0.12);
     }
 
-    .rename-clear-btn {
-      position: absolute;
-      right: 12px;
-      background: #e2e8f0;
-      border: none;
-      color: #64748b;
-      border-radius: 50%;
-      width: 20px;
-      height: 20px;
-      font-size: 11px;
-      cursor: pointer;
-      display: none;
-      align-items: center;
-      justify-content: center;
-      transition: all 0.15s;
-    }
-
-    .rename-clear-btn:hover {
-      background: #cbd5e1;
-      color: #1e293b;
-    }
-
-    .rename-meta-row {
+    .thread-modal-actions, .rename-modal-actions {
       display: flex;
-      justify-content: space-between;
-      margin-top: 6px;
-      font-size: 12px;
-      color: var(--zalo-text-muted);
-    }
-
-    .rename-modal-actions {
-      display: flex;
-      align-items: center;
       justify-content: flex-end;
       gap: 10px;
-      margin-top: 20px;
-      padding-top: 14px;
-      border-top: 1px solid var(--zalo-border);
     }
 
-    .btn-rename-cancel {
-      padding: 9px 18px;
-      background: #f1f5f9;
-      color: #334155;
-      border: 1px solid #e2e8f0;
+    .btn-modal-cancel, .btn-rename-cancel {
+      padding: 8px 16px;
       border-radius: 8px;
-      font-size: 14px;
+      border: 1px solid var(--zalo-border);
+      background: #f8fafc;
+      color: var(--zalo-text-secondary);
       font-weight: 600;
+      font-size: 13.5px;
       cursor: pointer;
-      transition: background 0.15s;
     }
 
-    .btn-rename-cancel:hover {
-      background: #e2e8f0;
-    }
-
-    .btn-rename-save {
-      padding: 9px 22px;
+    .thread-modal-submit-btn, .btn-rename-save {
+      padding: 8px 18px;
+      border-radius: 8px;
+      border: none;
       background: var(--zalo-blue);
       color: white;
-      border: none;
-      border-radius: 8px;
-      font-size: 14px;
-      font-weight: 600;
+      font-weight: 700;
+      font-size: 13.5px;
       cursor: pointer;
-      transition: background 0.15s;
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
     }
 
-    .btn-rename-save:hover {
-      background: var(--zalo-blue-hover);
-    }
-
-    .btn-rename-save:disabled {
-      opacity: 0.6;
-      cursor: not-allowed;
-    }
-
+    /* Toast */
     .zalo-toast {
       position: fixed;
-      top: 20px;
-      left: 50%;
-      transform: translateX(-50%) translateY(-30px);
+      bottom: 24px;
+      right: 24px;
       background: #1e293b;
       color: white;
-      padding: 10px 20px;
-      border-radius: 30px;
-      font-size: 13px;
+      padding: 10px 18px;
+      border-radius: 12px;
+      font-size: 13.5px;
       font-weight: 600;
-      box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+      box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+      z-index: 9999;
       opacity: 0;
-      visibility: hidden;
-      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-      z-index: 2000;
-      display: flex;
-      align-items: center;
-      gap: 8px;
+      transform: translateY(20px);
+      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
       pointer-events: none;
     }
 
     .zalo-toast.show {
       opacity: 1;
-      visibility: visible;
-      transform: translateX(-50%) translateY(0);
+      transform: translateY(0);
     }
 
-    .zalo-toast.success {
-      background: #059669;
-    }
+    .zalo-toast.success { background: #059669; }
+    .zalo-toast.error { background: #dc2626; }
 
-    .zalo-toast.error {
-      background: #dc2626;
-    }
+    /* Responsive Mobile */
+    @media (max-width: 768px) {
+      .zalo-sidebar {
+        width: 100vw;
+        max-width: 100vw;
+        position: absolute;
+        inset: 0;
+        z-index: 50;
+        display: flex;
+      }
 
-    /* ==========================================================================
-       AI / MANUAL MODE SWITCH & BANNER STYLING
-       ========================================================================== */
-    .header-right {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
+      .zalo-sidebar.hide-mobile {
+        display: none;
+      }
 
-    .mode-switch-btn {
-      display: inline-flex;
-      align-items: center;
-      gap: 7px;
-      padding: 6px 14px;
-      border-radius: 20px;
-      font-size: 13px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-      outline: none;
-      user-select: none;
-    }
+      .btn-back-sidebar {
+        display: inline-flex;
+      }
 
-    .mode-switch-btn.is-ai {
-      background: #ecfdf5;
-      color: #065f46;
-      border: 1.5px solid #a7f3d0;
-      box-shadow: 0 1px 3px rgba(16, 185, 129, 0.12);
-    }
-    .mode-switch-btn.is-ai:hover {
-      background: #d1fae5;
-      border-color: #6ee7b7;
-      transform: translateY(-1px);
-    }
-
-    .mode-switch-btn.is-manual {
-      background: #fffbeb;
-      color: #92400e;
-      border: 1.5px solid #fde68a;
-      box-shadow: 0 1px 3px rgba(245, 158, 11, 0.12);
-    }
-    .mode-switch-btn.is-manual:hover {
-      background: #fef3c7;
-      border-color: #fcd34d;
-      transform: translateY(-1px);
-    }
-
-    .mode-pulse-dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      flex-shrink: 0;
-      transition: background-color 0.2s;
-    }
-
-    .mode-switch-btn.is-ai .mode-pulse-dot {
-      background: #10b981;
-      box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.25);
-    }
-
-    .mode-switch-btn.is-manual .mode-pulse-dot {
-      background: #f59e0b;
-      box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.25);
-    }
-
-    /* AI Active Banner (Ẩn thanh input khi ở chế độ AI) */
-    .ai-active-banner {
-      background: var(--zalo-white);
-      border-top: 1px solid var(--zalo-border);
-      padding: 14px 20px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 16px;
-      z-index: 10;
-      box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.02);
-    }
-
-    .ai-banner-left {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
-
-    .ai-banner-icon-box {
-      width: 38px;
-      height: 38px;
-      border-radius: 50%;
-      background: #ecfdf5;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 18px;
-      color: #059669;
-      flex-shrink: 0;
-      border: 1px solid #a7f3d0;
-    }
-
-    .ai-banner-title {
-      font-size: 14px;
-      font-weight: 700;
-      color: var(--zalo-text-primary);
-    }
-
-    .ai-banner-sub {
-      font-size: 12px;
-      color: var(--zalo-text-secondary);
-      margin-top: 2px;
-    }
-
-    .btn-activate-manual {
-      background: #f8fafc;
-      border: 1.5px solid #cbd5e1;
-      color: #334155;
-      padding: 8px 16px;
-      border-radius: 8px;
-      font-size: 13px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.15s;
-      white-space: nowrap;
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-    }
-
-    .btn-activate-manual:hover {
-      background: #fffbeb;
-      border-color: #fde68a;
-      color: #92400e;
+      .message-row {
+        max-width: 88%;
+      }
     }
   </style>
 </head>
 <body>
 
-  <!-- 1. HEADER APP BAR -->
-  <header class="zalo-header">
-    <div class="header-left">
-      <div class="header-avatar" id="threadAvatar">
-        <span id="avatarLetter">Z</span>
-        <div class="online-dot"></div>
-      </div>
-      <div class="header-info">
-        <div class="header-title-row">
-          <span class="header-name" id="threadName" title="Nhấp đúp hoặc bấm bút chì để đổi tên">Đang tải...</span>
-          <button class="btn-quick-rename" id="btnRename" title="Đổi tên gợi nhớ / Đổi tên nhóm">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+  <div class="zalo-layout-wrapper">
+    <!-- =====================================================================
+         1. SIDEBAR DANH SÁCH CHAT (THREADS LIST)
+         ===================================================================== -->
+    <aside class="zalo-sidebar" id="zaloSidebar">
+      <div class="sidebar-header">
+        <div class="sidebar-title-row">
+          <div class="sidebar-brand">
+            <div class="sidebar-brand-icon">💬</div>
+            <span>Đoạn chat</span>
+          </div>
+          <button class="btn-new-thread" id="btnOpenNewThreadModal" title="Nhập Thread ID mới">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
             </svg>
           </button>
-          <span class="badge-candidate" id="candidateBadge" style="display:none;">Ứng viên</span>
         </div>
-        <div class="header-sub">
-          <span id="threadSubInfo">${threadId || "Chưa chọn thread"}</span>
-          <span id="candidateDetails" style="color: #059669; font-weight: 600;"></span>
+
+        <!-- Search Bar -->
+        <div class="sidebar-search-box">
+          <span class="search-icon-left">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+          </span>
+          <input 
+            type="text" 
+            class="sidebar-search-input" 
+            id="sidebarSearchInput" 
+            placeholder="Tìm kiếm theo tên, SĐT, Cty..." 
+            autocomplete="off"
+          />
+          <button class="search-clear-btn" id="searchClearBtn" title="Xóa">✕</button>
+        </div>
+
+        <!-- Filter Pills -->
+        <div class="sidebar-filter-tabs">
+          <button class="filter-tab-btn active" data-filter="all">Tất cả</button>
+          <button class="filter-tab-btn" data-filter="candidate">Ứng viên</button>
+          <button class="filter-tab-btn" data-filter="group">Nhóm</button>
+          <button class="filter-tab-btn" data-filter="manual">Thủ công (-M)</button>
         </div>
       </div>
-    </div>
 
-    <!-- Header Right: Switch Toggle giữa AI & Thủ công (Manual) -->
-    <div class="header-right">
-      <button class="mode-switch-btn is-ai" id="btnToggleMode" title="Bấm để chuyển đổi giữa Chế độ AI Tự động và Thủ công (Manual)">
-        <span class="mode-pulse-dot"></span>
-        <span id="modeIcon">🤖</span>
-        <span id="modeText">AI Tự động</span>
-      </button>
-    </div>
-  </header>
-
-  <!-- 2. CHAT TIMELINE -->
-  <main class="zalo-chat-container" id="chatContainer">
-    <div class="timeline-date-sep">
-      <span class="timeline-date-pill" id="todayPill">Hôm nay</span>
-    </div>
-  </main>
-
-  <!-- 2.5. AI ACTIVE BANNER (Hiển thị khi ở chế độ AI, ẩn thanh input) -->
-  <div class="ai-active-banner" id="aiActiveBanner" style="display: none;">
-    <div class="ai-banner-left">
-      <div class="ai-banner-icon-box">🤖</div>
-      <div class="ai-banner-info">
-        <div class="ai-banner-title">Chế độ AI Tự động đang phản hồi</div>
-        <div class="ai-banner-sub">Hệ thống đang tự động tư vấn ứng viên. Chuyển sang Thủ công để trực tiếp nhắn tin.</div>
+      <!-- Threads Container with Infinite Scroll -->
+      <div class="sidebar-threads-container" id="sidebarThreadsContainer">
+        <!-- Thread items will be rendered here dynamically -->
       </div>
-    </div>
-    <button class="btn-activate-manual" id="btnActivateManual" type="button">
-      <span>👤 Chuyển sang Thủ công</span>
-    </button>
+    </aside>
+
+    <!-- =====================================================================
+         2. KHUNG TRÒ CHUYỆN CHI TIẾT (MAIN CHAT AREA)
+         ===================================================================== -->
+    <main class="zalo-main-chat" id="zaloMainChat">
+      <!-- 2.1. Welcome Empty View (khi chưa chọn thread) -->
+      <div class="zalo-welcome-view" id="welcomeView" style="${initialThreadId ? 'display: none;' : 'display: flex;'}">
+        <div class="welcome-illustration">💬</div>
+        <h2 class="welcome-title">Chào mừng đến với Zalo AI</h2>
+        <p class="welcome-desc">
+          Hệ thống Trợ lý Tuyển dụng & Quản trị Tin nhắn Trực tiếp. Hãy chọn một cuộc trò chuyện từ danh sách bên trái để bắt đầu nhắn tin.
+        </p>
+        <button class="welcome-quick-btn" id="btnWelcomeNew">
+          <span>➕ Nhập Thread ID thủ công</span>
+        </button>
+      </div>
+
+      <!-- 2.2. Active Chat Detail View -->
+      <div class="zalo-chat-view" id="activeChatView" style="${initialThreadId ? 'display: flex;' : 'display: none;'}">
+        <!-- Header App Bar -->
+        <header class="zalo-header">
+          <div class="header-left">
+            <button class="btn-back-sidebar" id="btnBackSidebar" title="Quay lại danh sách">
+              ←
+            </button>
+            <div class="header-avatar" id="threadAvatar">
+              <span id="avatarLetter">Z</span>
+              <div class="thread-online-dot"></div>
+            </div>
+            <div class="header-info">
+              <div class="header-title-row">
+                <span class="header-name" id="threadName" title="Bấm để đổi tên">Đang tải...</span>
+                <button class="btn-quick-rename" id="btnRename" title="Đổi tên gợi nhớ / Đổi tên nhóm">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                  </svg>
+                </button>
+                <span class="badge-candidate" id="candidateBadge" style="display:none;">Ứng viên</span>
+              </div>
+              <div class="header-sub">
+                <span id="threadSubInfo">${initialThreadId || "---"}</span>
+                <span id="candidateDetails" style="color: #059669; font-weight: 600;"></span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Header Right: Switch Toggle giữa AI & Thủ công (Manual) -->
+          <div class="header-right">
+            <button class="mode-switch-btn is-ai" id="btnToggleMode" title="Bấm để chuyển đổi giữa Chế độ AI Tự động và Thủ công (Manual)">
+              <span class="mode-pulse-dot"></span>
+              <span id="modeIcon">🤖</span>
+              <span id="modeText">AI Tự động</span>
+            </button>
+          </div>
+        </header>
+
+        <!-- Chat Timeline Container (với Scroll-to-Top Lazy Load) -->
+        <div class="zalo-chat-container" id="chatContainer">
+          <div class="older-messages-loader" id="olderMessagesLoader" style="display: none;">
+            <button class="btn-load-older" id="btnLoadOlder">
+              <span>⬆️ Tải thêm tin nhắn cũ</span>
+            </button>
+          </div>
+          <div class="timeline-date-sep">
+            <span class="timeline-date-pill" id="todayPill">Hôm nay</span>
+          </div>
+        </div>
+
+        <!-- AI Active Banner (khi ở chế độ AI) -->
+        <div class="ai-active-banner" id="aiActiveBanner" style="display: none;">
+          <div class="ai-banner-left">
+            <div class="ai-banner-icon-box">🤖</div>
+            <div>
+              <div class="ai-banner-title">Chế độ AI Tự động đang phản hồi</div>
+              <div class="ai-banner-sub">Hệ thống đang tự động tư vấn ứng viên. Chuyển sang Thủ công để trực tiếp nhắn tin.</div>
+            </div>
+          </div>
+          <button class="btn-activate-manual" id="btnActivateManual" type="button">
+            <span>👤 Chuyển sang Thủ công</span>
+          </button>
+        </div>
+
+        <!-- Toolbar & Input Area -->
+        <footer class="zalo-input-wrapper" id="inputWrapper">
+          <div class="zalo-toolbar">
+            <button class="tool-btn-photo" id="btnPhoto" title="Chọn ảnh để gửi ngay lập tức">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                <circle cx="8.5" cy="8.5" r="1.5"/>
+                <polyline points="21 15 16 10 5 21"/>
+              </svg>
+            </button>
+          </div>
+
+          <input type="file" id="imageFileInput" accept="image/*" multiple style="display: none;">
+
+          <div class="input-main-row">
+            <textarea 
+              class="zalo-textarea" 
+              id="messageInput" 
+              rows="1" 
+              placeholder="Nhập tin nhắn..."
+            ></textarea>
+            
+            <button class="send-action-btn" id="btnSend">
+              <span>Gửi</span>
+              <svg viewBox="0 0 24 24" fill="currentColor">
+                <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+              </svg>
+            </button>
+          </div>
+        </footer>
+      </div>
+    </main>
   </div>
 
-  <!-- 3. INPUT AREA -->
-  <footer class="zalo-input-wrapper">
-    <!-- Toolbar: Nút Gửi Ảnh -->
-    <div class="zalo-toolbar">
-      <button class="tool-btn-photo" id="btnPhoto" title="Chọn ảnh để gửi ngay lập tức">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-          <circle cx="8.5" cy="8.5" r="1.5"/>
-          <polyline points="21 15 16 10 5 21"/>
-        </svg>
-      </button>
-    </div>
-
-    <!-- Hidden File Input for Image Upload -->
-    <input type="file" id="imageFileInput" accept="image/*" multiple style="display: none;">
-
-    <!-- Input text row -->
-    <div class="input-main-row">
-      <textarea 
-        class="zalo-textarea" 
-        id="messageInput" 
-        rows="1" 
-        placeholder="Nhập @, tin nhắn tới ${threadId || '...'}"
-        autofocus
-      ></textarea>
-      
-      <button class="send-action-btn" id="btnSend">
-        <span>Gửi</span>
-        <svg viewBox="0 0 24 24" fill="currentColor">
-          <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
-        </svg>
-      </button>
-    </div>
-  </footer>
-
-  <!-- 4. MODAL POPUP NHẬP THREAD ID (KHI THIẾU THREADID) -->
-  <div class="thread-modal-backdrop" id="threadModal" style="${threadId ? 'display:none;' : 'display:flex;'}">
+  <!-- MODAL NHẬP THREAD ID THỦ CÔNG -->
+  <div class="thread-modal-backdrop" id="threadModal" style="display: none;">
     <div class="thread-modal-box">
-      <div class="thread-modal-title">💬 Nhập Thread ID để bắt đầu</div>
+      <div class="thread-modal-title">💬 Mở cuộc trò chuyện mới</div>
       <div class="thread-modal-sub">Vui lòng nhập User ID hoặc Group ID Zalo để vào khung chat.</div>
       <form id="threadModalForm">
         <input 
@@ -1106,50 +1414,39 @@ export function renderChatPage(threadId: string): string {
           class="thread-modal-input" 
           id="threadModalInput" 
           placeholder="Ví dụ: 8289935740050353992 hoặc 7022361798516490807" 
-          autofocus 
           required 
         />
         <div class="thread-modal-actions">
+          <button type="button" class="btn-modal-cancel" id="btnCancelThreadModal">Hủy</button>
           <button type="submit" class="thread-modal-submit-btn">Vào trò chuyện</button>
         </div>
       </form>
     </div>
   </div>
 
-  <!-- 5. LIGHTBOX ZOOM MODAL -->
+  <!-- LIGHTBOX ZOOM MODAL -->
   <div class="lightbox-modal" id="lightboxModal">
     <button class="lightbox-close-btn" id="lightboxClose">✕</button>
     <img class="lightbox-img" id="lightboxImg" src="" alt="Full view">
-    <div class="lightbox-caption" id="lightboxCaption"></div>
   </div>
 
-  <!-- 6. MODAL ĐỔI TÊN NHANH (CHUẨN ZALO) -->
+  <!-- MODAL ĐỔI TÊN NHANH (CHUẨN ZALO) -->
   <div class="rename-modal-backdrop" id="renameModal" style="display: none;">
     <div class="rename-modal-box">
-      <div class="rename-modal-header">
-        <span class="rename-modal-title" id="renameModalTitle">Đổi tên gợi nhớ</span>
-        <button class="rename-modal-close" id="renameModalClose" type="button" title="Đóng">✕</button>
-      </div>
+      <div class="rename-modal-title" id="renameModalTitle">Đổi tên gợi nhớ</div>
       <div class="rename-modal-sub" id="renameModalSub">
         Đặt tên gợi nhớ giúp bạn dễ dàng nhận diện và phân loại liên hệ này.
       </div>
-      <form id="renameForm" class="rename-modal-body">
-        <div class="rename-input-wrap">
-          <input 
-            type="text" 
-            class="rename-input" 
-            id="renameInput" 
-            placeholder="Nhập tên mới..." 
-            maxlength="50" 
-            autocomplete="off"
-            required
-          />
-          <button class="rename-clear-btn" id="renameClearBtn" type="button" title="Xóa">✕</button>
-        </div>
-        <div class="rename-meta-row">
-          <span id="renameHint">Tối đa 50 ký tự</span>
-          <span id="renameCharCount">0/50</span>
-        </div>
+      <form id="renameForm">
+        <input 
+          type="text" 
+          class="rename-input" 
+          id="renameInput" 
+          placeholder="Nhập tên mới..." 
+          maxlength="50" 
+          autocomplete="off"
+          required
+        />
         <div class="rename-modal-actions">
           <button type="button" class="btn-rename-cancel" id="btnRenameCancel">Hủy</button>
           <button type="submit" class="btn-rename-save" id="btnRenameSave">Lưu</button>
@@ -1158,177 +1455,122 @@ export function renderChatPage(threadId: string): string {
     </div>
   </div>
 
-  <!-- 7. TOAST NOTIFICATION -->
+  <!-- TOAST NOTIFICATION -->
   <div class="zalo-toast" id="zaloToast"></div>
 
+  <!-- =========================================================================
+       CLIENT-SIDE SCRIPT: LAZY LOAD THREADS + LAZY LOAD MESSAGES + REALTIME SSE
+       ========================================================================= -->
   <script>
     (function() {
-      const threadId = "${threadId}";
+      let currentThreadId = "${initialThreadId}";
+      let currentFilter = "all";
+      let currentSearch = "";
+
+      // Threads pagination state
+      let threadsOffset = 0;
+      const threadsLimit = 20;
+      let threadsHasMore = true;
+      let isFetchingThreads = false;
+      let threadsCache = new Map(); // threadId -> threadObject
+
+      // Messages pagination state
+      let oldestMessageTimestamp = 0;
+      let hasMoreOlderMessages = false;
+      let isFetchingOlderMessages = false;
+      const renderedMessageIds = new Set();
+
+      let isCurrentGroup = false;
+      let isManualMode = false;
+      let sseEventSource = null;
+
+      // DOM Elements
+      const zaloSidebar = document.getElementById("zaloSidebar");
+      const sidebarThreadsContainer = document.getElementById("sidebarThreadsContainer");
+      const sidebarSearchInput = document.getElementById("sidebarSearchInput");
+      const searchClearBtn = document.getElementById("searchClearBtn");
+      const filterTabBtns = document.querySelectorAll(".filter-tab-btn");
+      const btnOpenNewThreadModal = document.getElementById("btnOpenNewThreadModal");
+      const btnWelcomeNew = document.getElementById("btnWelcomeNew");
+
+      const welcomeView = document.getElementById("welcomeView");
+      const activeChatView = document.getElementById("activeChatView");
+      const btnBackSidebar = document.getElementById("btnBackSidebar");
+
       const chatContainer = document.getElementById("chatContainer");
-      const messageInput = document.getElementById("messageInput");
-      const btnSend = document.getElementById("btnSend");
-      const btnPhoto = document.getElementById("btnPhoto");
-      const imageFileInput = document.getElementById("imageFileInput");
+      const olderMessagesLoader = document.getElementById("olderMessagesLoader");
+      const btnLoadOlder = document.getElementById("btnLoadOlder");
+
       const threadNameEl = document.getElementById("threadName");
       const threadSubInfoEl = document.getElementById("threadSubInfo");
       const avatarLetterEl = document.getElementById("avatarLetter");
+      const threadAvatarEl = document.getElementById("threadAvatar");
       const candidateBadge = document.getElementById("candidateBadge");
       const candidateDetails = document.getElementById("candidateDetails");
-
-      const btnRename = document.getElementById("btnRename");
-      const renameModal = document.getElementById("renameModal");
-      const renameForm = document.getElementById("renameForm");
-      const renameInput = document.getElementById("renameInput");
-      const renameModalTitle = document.getElementById("renameModalTitle");
-      const renameModalSub = document.getElementById("renameModalSub");
-      const renameModalClose = document.getElementById("renameModalClose");
-      const btnRenameCancel = document.getElementById("btnRenameCancel");
-      const btnRenameSave = document.getElementById("btnRenameSave");
-      const renameClearBtn = document.getElementById("renameClearBtn");
-      const renameCharCount = document.getElementById("renameCharCount");
-      const zaloToast = document.getElementById("zaloToast");
 
       const btnToggleMode = document.getElementById("btnToggleMode");
       const modeIcon = document.getElementById("modeIcon");
       const modeText = document.getElementById("modeText");
       const aiActiveBanner = document.getElementById("aiActiveBanner");
       const btnActivateManual = document.getElementById("btnActivateManual");
-      const inputWrapper = document.querySelector(".zalo-input-wrapper");
+      const inputWrapper = document.getElementById("inputWrapper");
 
-      let isCurrentGroup = false;
-      let isManualMode = false;
+      const messageInput = document.getElementById("messageInput");
+      const btnSend = document.getElementById("btnSend");
+      const btnPhoto = document.getElementById("btnPhoto");
+      const imageFileInput = document.getElementById("imageFileInput");
 
-      const renderedMessageIds = new Set();
+      const threadModal = document.getElementById("threadModal");
       const threadModalForm = document.getElementById("threadModalForm");
       const threadModalInput = document.getElementById("threadModalInput");
+      const btnCancelThreadModal = document.getElementById("btnCancelThreadModal");
+
+      const renameModal = document.getElementById("renameModal");
+      const renameForm = document.getElementById("renameForm");
+      const renameInput = document.getElementById("renameInput");
+      const btnRename = document.getElementById("btnRename");
+      const btnRenameCancel = document.getElementById("btnRenameCancel");
+      const btnRenameSave = document.getElementById("btnRenameSave");
+      const zaloToast = document.getElementById("zaloToast");
 
       const lightboxModal = document.getElementById("lightboxModal");
       const lightboxImg = document.getElementById("lightboxImg");
-      const lightboxCaption = document.getElementById("lightboxCaption");
       const lightboxClose = document.getElementById("lightboxClose");
 
-      // ==========================================================================
-      // QUẢN LÝ CHẾ ĐỘ AI / THỦ CÔNG (MANUAL MODE -M)
-      // ==========================================================================
-      function setMode(isManual, showNotice = false) {
-        isManualMode = isManual;
-
-        if (isManual) {
-          if (btnToggleMode) btnToggleMode.className = "mode-switch-btn is-manual";
-          if (modeIcon) modeIcon.textContent = "👤";
-          if (modeText) modeText.textContent = "Thủ công (-M)";
-          if (inputWrapper) inputWrapper.style.display = "flex";
-          if (aiActiveBanner) aiActiveBanner.style.display = "none";
-          if (showNotice) showToast("👤 Đã chuyển sang Thủ công (-M). Hiện thanh nhập tin nhắn & nút gửi ảnh.", "success");
-        } else {
-          if (btnToggleMode) btnToggleMode.className = "mode-switch-btn is-ai";
-          if (modeIcon) modeIcon.textContent = "🤖";
-          if (modeText) modeText.textContent = "AI Tự động";
-          if (inputWrapper) inputWrapper.style.display = "none";
-          if (aiActiveBanner) aiActiveBanner.style.display = "flex";
-          if (showNotice) showToast("🤖 Đã bật AI Tự động. Tự động ẩn thanh nhập tin nhắn.", "success");
-        }
+      // =========================================================================
+      // 1. HELPERS & FORMATTERS
+      // =========================================================================
+      function showToast(text, type = "success") {
+        if (!zaloToast) return;
+        zaloToast.className = "zalo-toast " + type;
+        zaloToast.textContent = text;
+        zaloToast.classList.add("show");
+        setTimeout(() => {
+          zaloToast.classList.remove("show");
+        }, 3000);
       }
 
-      async function toggleAIMode(targetMode) {
-        if (!threadId) return;
-        if (btnToggleMode) btnToggleMode.disabled = true;
-        if (btnActivateManual) btnActivateManual.disabled = true;
-
-        try {
-          const res = await fetch("/api/chat/toggle-mode", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              threadId: threadId,
-              targetMode: targetMode || (isManualMode ? "ai" : "manual"),
-              isGroup: isCurrentGroup,
-            }),
-          });
-          const data = await res.json();
-          if (data.success) {
-            const isManual = data.mode === "manual";
-            setMode(isManual, true);
-            if (data.newName) {
-              threadNameEl.textContent = data.newName;
-              messageInput.placeholder = "Nhập @, tin nhắn tới " + data.newName + "...";
-              avatarLetterEl.textContent = data.newName.trim().charAt(0).toUpperCase();
-              document.title = data.newName + " - Trò Chuyện Trực Tiếp";
-
-              if (!isCurrentGroup) {
-                const incomingNames = chatContainer.querySelectorAll(".message-row.incoming .msg-sender-name");
-                incomingNames.forEach((el) => {
-                  el.textContent = data.newName;
-                });
-              }
-            }
-          } else {
-            showToast("⚠️ " + (data.error || "Không thể chuyển chế độ"), "error");
-          }
-        } catch (err) {
-          console.error("Lỗi toggle mode:", err);
-          showToast("⚠️ Lỗi kết nối khi chuyển chế độ", "error");
-        } finally {
-          if (btnToggleMode) btnToggleMode.disabled = false;
-          if (btnActivateManual) btnActivateManual.disabled = false;
-        }
-      }
-
-      if (btnToggleMode) {
-        btnToggleMode.addEventListener("click", () => toggleAIMode());
-      }
-      if (btnActivateManual) {
-        btnActivateManual.addEventListener("click", () => toggleAIMode("manual"));
-      }
-
-      // Xử lý submit Popup nhập Thread ID
-      if (threadModalForm) {
-        threadModalForm.addEventListener("submit", function(e) {
-          e.preventDefault();
-          const val = threadModalInput.value.trim();
-          if (val) {
-            window.location.href = "/chat?thread=" + encodeURIComponent(val);
-          }
-        });
-      }
-
-      if (!threadId) {
-        if (threadModalInput) threadModalInput.focus();
-        return;
-      }
-
-      // Auto-resize textarea
-      messageInput.addEventListener("input", function() {
-        this.style.height = "auto";
-        this.style.height = Math.min(this.scrollHeight, 120) + "px";
-      });
-
-      // Format time helper
       function formatTime(timestamp) {
         if (!timestamp) return "";
         const d = new Date(timestamp);
-        return d.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" });
+        const now = new Date();
+        const isToday = d.toDateString() === now.toDateString();
+        if (isToday) {
+          return d.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" });
+        }
+        return d.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit" });
       }
 
-      // Loại bỏ các chuỗi text rác/placeholder khi có ảnh
       function sanitizeContent(text) {
         if (!text) return "";
         const trimmed = text.trim();
-        const dummyStrings = [
-          "[Hình ảnh]",
-          "[Người dùng gửi một hình ảnh]",
-          "[Hình ảnh đính kèm]",
-          "[Ảnh]",
-          "[Image]"
-        ];
+        const dummyStrings = ["[Hình ảnh]", "[Người dùng gửi một hình ảnh]", "[Hình ảnh đính kèm]", "[Ảnh]", "[Image]"];
         if (dummyStrings.includes(trimmed)) return "";
         return trimmed;
       }
 
-      // Open Lightbox
-      function openLightbox(src, caption) {
+      function openLightbox(src) {
         lightboxImg.src = src;
-        lightboxCaption.textContent = caption || "";
         lightboxModal.classList.add("active");
       }
 
@@ -1337,86 +1579,266 @@ export function renderChatPage(threadId: string): string {
         if (e.target === lightboxModal) lightboxModal.classList.remove("active");
       });
 
-      // Nén và giảm kích thước ảnh thông minh phía client để upload siêu tốc
-      function compressImageClient(dataUrl, maxWidth = 1920, maxHeight = 1920, quality = 0.86) {
-        return new Promise((resolve) => {
-          const img = new Image();
-          img.onload = () => {
-            let width = img.width;
-            let height = img.height;
+      // =========================================================================
+      // 2. SIDEBAR THREADS LIST (LAZY LOAD / INFINITE SCROLL)
+      // =========================================================================
+      async function fetchThreads(isReset = false) {
+        if (isFetchingThreads) return;
+        if (!isReset && !threadsHasMore) return;
 
-            if (width > maxWidth || height > maxHeight) {
-              if (width / height > maxWidth / maxHeight) {
-                height = Math.round((height * maxWidth) / width);
-                width = maxWidth;
-              } else {
-                width = Math.round((width * maxHeight) / height);
-                height = maxHeight;
-              }
-            }
+        isFetchingThreads = true;
+        if (isReset) {
+          threadsOffset = 0;
+          threadsHasMore = true;
+          threadsCache.clear();
+          sidebarThreadsContainer.innerHTML = '<div class="threads-loader-sentinel"><div class="threads-spinner-sm"></div> Đang tải danh sách...</div>';
+        }
 
-            const canvas = document.createElement("canvas");
-            canvas.width = width;
-            canvas.height = height;
-            const ctx = canvas.getContext("2d");
-            ctx.drawImage(img, 0, 0, width, height);
+        try {
+          const params = new URLSearchParams({
+            limit: String(threadsLimit),
+            offset: String(threadsOffset),
+          });
+          if (currentSearch) params.set("search", currentSearch);
 
-            const isPng = dataUrl.startsWith("data:image/png");
-            const mime = isPng ? "image/png" : "image/jpeg";
-            const compressed = canvas.toDataURL(mime, quality);
-            resolve(compressed);
-          };
-          img.onerror = () => resolve(dataUrl);
-          img.src = dataUrl;
-        });
+          const res = await fetch("/api/chat/threads?" + params.toString());
+          const data = await res.json();
+
+          if (isReset) {
+            sidebarThreadsContainer.innerHTML = "";
+          }
+
+          if (data.success && Array.isArray(data.threads)) {
+            data.threads.forEach(t => {
+              threadsCache.set(t.threadId, t);
+            });
+
+            threadsHasMore = data.hasMore;
+            threadsOffset = data.nextOffset || (threadsOffset + data.threads.length);
+            renderSidebarThreads();
+          }
+        } catch (err) {
+          console.error("Lỗi khi nạp danh sách cuộc trò chuyện:", err);
+          if (isReset) {
+            sidebarThreadsContainer.innerHTML = '<div class="empty-threads-state">⚠️ Lỗi khi tải danh sách. Nhấn để thử lại.</div>';
+          }
+        } finally {
+          isFetchingThreads = false;
+        }
       }
 
-      // Tạo một dòng tin nhắn chuẩn Zalo PC
+      function renderSidebarThreads() {
+        const existingSentinel = sidebarThreadsContainer.querySelector(".threads-loader-sentinel");
+        if (existingSentinel) existingSentinel.remove();
+
+        const allThreads = Array.from(threadsCache.values());
+
+        // Lọc theo tabs
+        const filtered = allThreads.filter(t => {
+          if (currentFilter === "candidate") return Boolean(t.candidateName || t.targetCompany);
+          if (currentFilter === "group") return Boolean(t.isGroup);
+          if (currentFilter === "manual") return Boolean(t.isManual);
+          return true;
+        });
+
+        if (filtered.length === 0 && !threadsHasMore) {
+          sidebarThreadsContainer.innerHTML = '<div class="empty-threads-state"><span>🔍 Không có cuộc trò chuyện nào phù hợp.</span></div>';
+          return;
+        }
+
+        // Xây dựng DOM
+        filtered.forEach(t => {
+          let itemEl = sidebarThreadsContainer.querySelector(\`[data-thread-id="\${t.threadId}"]\`);
+          if (!itemEl) {
+            itemEl = createThreadItemElement(t);
+            sidebarThreadsContainer.appendChild(itemEl);
+          } else {
+            updateThreadItemElement(itemEl, t);
+          }
+        });
+
+        // Thêm Sentinel Loader ở đáy nếu còn dữ liệu để cuộn tiếp
+        if (threadsHasMore) {
+          const sentinel = document.createElement("div");
+          sentinel.className = "threads-loader-sentinel";
+          sentinel.id = "threadsSentinel";
+          sentinel.innerHTML = '<div class="threads-spinner-sm"></div> Đang cuộn tải thêm...';
+          sidebarThreadsContainer.appendChild(sentinel);
+        }
+      }
+
+      function createThreadItemElement(t) {
+        const div = document.createElement("div");
+        div.className = "thread-item" + (t.threadId === currentThreadId ? " active" : "");
+        div.dataset.threadId = t.threadId;
+
+        const avatarClass = t.isGroup ? "thread-item-avatar is-group" : "thread-item-avatar";
+        const isSelfLast = t.lastRole === "model";
+        const previewPrefix = isSelfLast ? "Bạn: " : "";
+        let previewText = t.lastHasImage ? "🖼️ [Hình ảnh]" : (t.lastContent || "Bắt đầu cuộc trò chuyện");
+
+        div.innerHTML = \`
+          <div class="\${avatarClass}">
+            <span>\${t.avatarLetter || "Z"}</span>
+            <div class="thread-online-dot"></div>
+          </div>
+          <div class="thread-item-body">
+            <div class="thread-item-row1">
+              <span class="thread-item-name">\${t.threadName || t.threadId}</span>
+              <span class="thread-item-time">\${formatTime(t.lastTimestamp)}</span>
+            </div>
+            <div class="thread-item-row2">
+              <span class="thread-item-preview \${isSelfLast ? 'is-self' : ''}">\${previewPrefix}\${previewText}</span>
+              <div class="thread-badge-group">
+                \${t.targetCompany ? \`<span class="thread-badge-candidate">\${t.targetCompany}</span>\` : ''}
+                \${t.isManual ? \`<span class="thread-badge-manual">-M</span>\` : ''}
+              </div>
+            </div>
+          </div>
+        \`;
+
+        div.addEventListener("click", () => {
+          switchThread(t.threadId);
+        });
+
+        return div;
+      }
+
+      function updateThreadItemElement(el, t) {
+        if (t.threadId === currentThreadId) {
+          el.classList.add("active");
+        } else {
+          el.classList.remove("active");
+        }
+
+        const nameEl = el.querySelector(".thread-item-name");
+        if (nameEl) nameEl.textContent = t.threadName || t.threadId;
+
+        const timeEl = el.querySelector(".thread-item-time");
+        if (timeEl) timeEl.textContent = formatTime(t.lastTimestamp);
+
+        const previewEl = el.querySelector(".thread-item-preview");
+        if (previewEl) {
+          const isSelfLast = t.lastRole === "model";
+          const previewPrefix = isSelfLast ? "Bạn: " : "";
+          const previewText = t.lastHasImage ? "🖼️ [Hình ảnh]" : (t.lastContent || "Đoạn chat");
+          previewEl.textContent = previewPrefix + previewText;
+          if (isSelfLast) previewEl.classList.add("is-self");
+          else previewEl.classList.remove("is-self");
+        }
+      }
+
+      // Infinite scroll listener trên Sidebar
+      sidebarThreadsContainer.addEventListener("scroll", function() {
+        if (!threadsHasMore || isFetchingThreads) return;
+        const scrollBottom = sidebarThreadsContainer.scrollHeight - sidebarThreadsContainer.scrollTop - sidebarThreadsContainer.clientHeight;
+        if (scrollBottom < 80) {
+          fetchThreads(false);
+        }
+      });
+
+      // Search debounce
+      let searchTimeout = null;
+      sidebarSearchInput.addEventListener("input", function() {
+        const val = this.value.trim();
+        searchClearBtn.style.display = val ? "flex" : "none";
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(() => {
+          currentSearch = val;
+          fetchThreads(true);
+        }, 280);
+      });
+
+      searchClearBtn.addEventListener("click", function() {
+        sidebarSearchInput.value = "";
+        searchClearBtn.style.display = "none";
+        currentSearch = "";
+        fetchThreads(true);
+        sidebarSearchInput.focus();
+      });
+
+      // Filter tabs
+      filterTabBtns.forEach(btn => {
+        btn.addEventListener("click", function() {
+          filterTabBtns.forEach(b => b.classList.remove("active"));
+          this.classList.add("active");
+          currentFilter = this.dataset.filter || "all";
+          renderSidebarThreads();
+        });
+      });
+
+      // =========================================================================
+      // 3. CHUYỂN ĐỔI THREAD & NẠP TIN NHẮN (LAZY LOAD SCROLL TO TOP)
+      // =========================================================================
+      function switchThread(newThreadId) {
+        if (!newThreadId) return;
+        currentThreadId = newThreadId;
+
+        // Cập nhật active sidebar
+        document.querySelectorAll(".thread-item").forEach(item => {
+          if (item.dataset.threadId === currentThreadId) item.classList.add("active");
+          else item.classList.remove("active");
+        });
+
+        // Đổi view
+        welcomeView.style.display = "none";
+        activeChatView.style.display = "flex";
+
+        // Cập nhật URL trình duyệt mà không reload
+        window.history.pushState({}, "", "/chat?thread=" + encodeURIComponent(currentThreadId));
+
+        // Ẩn sidebar trên mobile khi đã chọn chat
+        zaloSidebar.classList.add("hide-mobile");
+
+        // Tải lịch sử tin nhắn của thread mới
+        renderedMessageIds.clear();
+        chatContainer.querySelectorAll(".message-row").forEach(el => el.remove());
+        oldestMessageTimestamp = 0;
+        hasMoreOlderMessages = false;
+        olderMessagesLoader.style.display = "none";
+
+        loadHistoryInitial();
+        setupRealtimeSSE();
+      }
+
+      btnBackSidebar.addEventListener("click", () => {
+        zaloSidebar.classList.remove("hide-mobile");
+      });
+
+      // Tạo một bubble tin nhắn
       function createMessageElement(msg, isOptimistic = false) {
         const cleanText = sanitizeContent(msg.content);
         const hasValidImages = Boolean(msg.hasImage && msg.imageUrls && Array.isArray(msg.imageUrls) && msg.imageUrls.length > 0);
 
-        // Guard: Không bao giờ render tin nhắn rỗng (không có chữ và không có ảnh)
-        if (!cleanText && !hasValidImages) {
-          return null;
-        }
+        if (!cleanText && !hasValidImages) return null;
 
         const isSelf = msg.role === "model" || msg.senderId === "642903586588799919" || msg.senderId === "admin";
         const row = document.createElement("div");
         row.className = "message-row " + (isSelf ? "outgoing" : "incoming");
-        if (isOptimistic) {
-          row.classList.add("temp-pending");
-        }
-        if (msg.id) {
-          row.dataset.id = msg.id;
-        }
-
+        if (isOptimistic) row.classList.add("temp-pending");
+        if (msg.id) row.dataset.id = msg.id;
         row.dataset.content = cleanText;
-        const isImageOnly = hasValidImages && !cleanText;
 
-        // Avatar (Incoming)
+        // Avatar cho incoming
         if (!isSelf) {
           const avatar = document.createElement("div");
           avatar.className = "msg-avatar";
-          const firstChar = (msg.senderName || "U").trim().charAt(0).toUpperCase();
-          avatar.textContent = firstChar;
+          avatar.textContent = (msg.senderName || "U").trim().charAt(0).toUpperCase();
           row.appendChild(avatar);
         }
 
-        // Body Wrapper
         const bodyWrapper = document.createElement("div");
         bodyWrapper.className = "msg-body-wrapper";
 
-        // Tên người gửi (nếu là nhóm và incoming)
-        if (!isSelf && msg.senderName) {
+        if (!isSelf && msg.senderName && isCurrentGroup) {
           const senderNameEl = document.createElement("span");
           senderNameEl.className = "msg-sender-name";
           senderNameEl.textContent = msg.senderName;
           bodyWrapper.appendChild(senderNameEl);
         }
 
-        // 1. TRƯỜNG HỢP ẢNH THUẦN TÚY (Image-only)
-        if (isImageOnly) {
+        // Ảnh
+        if (hasValidImages && !cleanText) {
           const imagesContainer = document.createElement("div");
           imagesContainer.className = "msg-images";
 
@@ -1430,24 +1852,20 @@ export function renderChatPage(threadId: string): string {
             img.setAttribute("referrerpolicy", "no-referrer");
             img.src = url;
             img.alt = "Hình ảnh Zalo";
-            img.addEventListener("click", () => openLightbox(url, msg.senderName || ""));
-            
+            img.addEventListener("click", () => openLightbox(url));
+
             img.onerror = function() {
               container.style.display = "none";
             };
 
             container.appendChild(img);
 
-            // Nếu đang tải lên -> Thêm progress bar
             if (isOptimistic) {
               const progressOverlay = document.createElement("div");
               progressOverlay.className = "upload-progress-overlay";
               progressOverlay.innerHTML = \`
                 <div class="progress-spinner"></div>
-                <div class="progress-text">Đang gửi 15%...</div>
-                <div class="progress-bar-track">
-                  <div class="progress-bar-fill" style="width: 15%;"></div>
-                </div>
+                <div class="progress-text">Đang gửi...</div>
               \`;
               container.appendChild(progressOverlay);
             }
@@ -1456,9 +1874,7 @@ export function renderChatPage(threadId: string): string {
           });
 
           bodyWrapper.appendChild(imagesContainer);
-        } 
-        // 2. TRƯỜNG HỢP CÓ CHỮ (HOẶC CHỮ KÈM ẢNH)
-        else {
+        } else {
           const bubble = document.createElement("div");
           bubble.className = "msg-bubble";
 
@@ -1487,27 +1903,8 @@ export function renderChatPage(threadId: string): string {
               img.setAttribute("referrerpolicy", "no-referrer");
               img.src = url;
               img.alt = "Hình ảnh Zalo";
-              img.addEventListener("click", () => openLightbox(url, msg.senderName || ""));
-
-              img.onerror = function() {
-                container.style.display = "none";
-              };
-
+              img.addEventListener("click", () => openLightbox(url));
               container.appendChild(img);
-
-              if (isOptimistic) {
-                const progressOverlay = document.createElement("div");
-                progressOverlay.className = "upload-progress-overlay";
-                progressOverlay.innerHTML = \`
-                  <div class="progress-spinner"></div>
-                  <div class="progress-text">Đang gửi 15%...</div>
-                  <div class="progress-bar-track">
-                    <div class="progress-bar-fill" style="width: 15%;"></div>
-                  </div>
-                \`;
-                container.appendChild(progressOverlay);
-              }
-
               imagesContainer.appendChild(container);
             });
 
@@ -1517,10 +1914,8 @@ export function renderChatPage(threadId: string): string {
           bodyWrapper.appendChild(bubble);
         }
 
-        // Meta (Time - Chỉ duy nhất 1 dòng thời gian bên dưới)
         const metaRow = document.createElement("div");
         metaRow.className = "msg-meta-row";
-
         const timeEl = document.createElement("span");
         timeEl.className = "msg-time";
         timeEl.textContent = formatTime(msg.timestamp) + (isSelf ? " ✓" : "");
@@ -1536,15 +1931,17 @@ export function renderChatPage(threadId: string): string {
         chatContainer.scrollTop = chatContainer.scrollHeight;
       }
 
-      // Tải lịch sử chat
-      async function loadHistory() {
+      // Nạp tin nhắn ban đầu (30 tin gần nhất)
+      async function loadHistoryInitial() {
+        if (!currentThreadId) return;
+
         try {
-          const res = await fetch("/api/chat/history?thread=" + encodeURIComponent(threadId));
+          const res = await fetch("/api/chat/history?thread=" + encodeURIComponent(currentThreadId) + "&limit=30");
           const data = await res.json();
 
           if (data.threadName) {
             threadNameEl.textContent = data.threadName;
-            messageInput.placeholder = "Nhập @, tin nhắn tới " + data.threadName + "...";
+            messageInput.placeholder = "Nhập tin nhắn tới " + data.threadName + "...";
             avatarLetterEl.textContent = data.threadName.trim().charAt(0).toUpperCase();
             document.title = data.threadName + " - Trò Chuyện Trực Tiếp";
 
@@ -1552,23 +1949,27 @@ export function renderChatPage(threadId: string): string {
             setMode(isManual, false);
           }
 
-          if (data.isGroup) {
-            isCurrentGroup = true;
-            document.getElementById("threadAvatar").classList.add("is-group");
-          } else {
-            isCurrentGroup = false;
-          }
+          isCurrentGroup = Boolean(data.isGroup);
+          if (isCurrentGroup) threadAvatarEl.classList.add("is-group");
+          else threadAvatarEl.classList.remove("is-group");
 
-          threadSubInfoEl.textContent = threadId;
+          threadSubInfoEl.textContent = currentThreadId;
 
           if (data.candidate) {
             candidateBadge.style.display = "inline-flex";
             const c = data.candidate;
             candidateDetails.textContent = "• Ứng viên: " + (c.fullName || c.senderName) + " (SĐT: " + (c.phoneNumber || "Chưa có") + " | " + (c.targetCompany || "Chưa có cty") + ")";
+          } else {
+            candidateBadge.style.display = "none";
+            candidateDetails.textContent = "";
           }
 
-          const list = data.messages || data.history || [];
-          if (Array.isArray(list)) {
+          hasMoreOlderMessages = Boolean(data.hasMoreOlder);
+          olderMessagesLoader.style.display = hasMoreOlderMessages ? "flex" : "none";
+
+          const list = data.messages || [];
+          if (Array.isArray(list) && list.length > 0) {
+            oldestMessageTimestamp = list[0].timestamp || 0;
             list.forEach(msg => {
               if (msg.id) renderedMessageIds.add(msg.id);
               const el = createMessageElement(msg);
@@ -1581,152 +1982,135 @@ export function renderChatPage(threadId: string): string {
         }
       }
 
-      // ==========================================================================
-      // XỬ LÝ GỬI 1 ẢNH TRỰC TIẾP VỚI XHR PROGRESS
-      // ==========================================================================
-      function uploadImageWithProgress(dataUrl, filename, progressEl) {
-        return new Promise((resolve, reject) => {
-          const textEl = progressEl ? progressEl.querySelector(".progress-text") : null;
-          const fillEl = progressEl ? progressEl.querySelector(".progress-bar-fill") : null;
+      // Lazy load tin cũ khi cuộn lên đỉnh (Scroll-to-Top Infinite Scroll)
+      async function loadOlderMessages() {
+        if (!currentThreadId || !hasMoreOlderMessages || isFetchingOlderMessages || !oldestMessageTimestamp) return;
 
-          const xhr = new XMLHttpRequest();
-          xhr.open("POST", "/api/chat/send-image");
-          xhr.setRequestHeader("Content-Type", "application/json");
+        isFetchingOlderMessages = true;
+        btnLoadOlder.textContent = "Đang nạp tin cũ...";
 
-          xhr.upload.onprogress = function(event) {
-            if (event.lengthComputable) {
-              const percent = Math.round((event.loaded / event.total) * 85);
-              if (textEl) textEl.textContent = "Đang gửi " + percent + "%...";
-              if (fillEl) fillEl.style.width = percent + "%";
-            }
-          };
-
-          xhr.onload = function() {
-            if (xhr.status >= 200 && xhr.status < 300) {
-              try {
-                const res = JSON.parse(xhr.responseText);
-                if (res.success) {
-                  if (textEl) textEl.textContent = "✓ Đã gửi Zalo!";
-                  if (fillEl) fillEl.style.width = "100%";
-                  setTimeout(() => {
-                    if (progressEl) progressEl.classList.add("done");
-                  }, 500);
-                  resolve(res);
-                } else {
-                  if (textEl) textEl.textContent = "⚠️ " + (res.error || "Thất bại");
-                  reject(new Error(res.error || "Lỗi gửi ảnh"));
-                }
-              } catch (e) {
-                reject(e);
-              }
-            } else {
-              if (textEl) textEl.textContent = "⚠️ Lỗi máy chủ";
-              reject(new Error("Lỗi HTTP " + xhr.status));
-            }
-          };
-
-          xhr.onerror = function() {
-            if (textEl) textEl.textContent = "⚠️ Lỗi mạng";
-            reject(new Error("Lỗi kết nối mạng"));
-          };
-
-          const payload = JSON.stringify({
-            threadId: threadId,
-            imageBase64: dataUrl,
-            filename: filename || "upload.png",
-          });
-
-          if (textEl) textEl.textContent = "Đang chuẩn bị...";
-          xhr.send(payload);
-        });
-      }
-
-      // Hàm gửi ảnh ngay lập tức
-      async function sendSingleImageDirectly(dataUrl, filename) {
-        const tempMsg = {
-          role: "model",
-          senderId: "642903586588799919",
-          senderName: "Admin (Tôi)",
-          content: "",
-          hasImage: true,
-          imageUrls: [dataUrl],
-          timestamp: Date.now(),
-        };
-        const tempEl = createMessageElement(tempMsg, true);
-        if (tempEl) {
-          chatContainer.appendChild(tempEl);
-          scrollToBottom();
-        }
-
-        const progressEl = tempEl ? tempEl.querySelector(".upload-progress-overlay") : null;
+        const previousScrollHeight = chatContainer.scrollHeight;
+        const previousScrollTop = chatContainer.scrollTop;
 
         try {
-          await uploadImageWithProgress(dataUrl, filename, progressEl);
-        } catch (err) {
-          console.error("Lỗi khi gửi ảnh lên server:", err);
-          if (progressEl) {
-            const textEl = progressEl.querySelector(".progress-text");
-            if (textEl) textEl.textContent = "❌ Gửi thất bại";
+          const res = await fetch(\`/api/chat/history?thread=\${encodeURIComponent(currentThreadId)}&before=\${oldestMessageTimestamp}&limit=30\`);
+          const data = await res.json();
+
+          const olderList = data.messages || [];
+          hasMoreOlderMessages = Boolean(data.hasMoreOlder);
+          olderMessagesLoader.style.display = hasMoreOlderMessages ? "flex" : "none";
+
+          if (Array.isArray(olderList) && olderList.length > 0) {
+            oldestMessageTimestamp = olderList[0].timestamp || oldestMessageTimestamp;
+
+            // Chèn tin cũ vào ngay sau olderMessagesLoader mà không làm giật vị trí cuộn
+            const fragment = document.createDocumentFragment();
+            olderList.forEach(msg => {
+              if (msg.id && renderedMessageIds.has(msg.id)) return;
+              if (msg.id) renderedMessageIds.add(msg.id);
+              const el = createMessageElement(msg);
+              if (el) fragment.appendChild(el);
+            });
+
+            olderMessagesLoader.insertAdjacentElement("afterend", fragment as any);
+
+            // Bảo lưu vị trí cuộn
+            const newScrollHeight = chatContainer.scrollHeight;
+            chatContainer.scrollTop = previousScrollTop + (newScrollHeight - previousScrollHeight);
           }
-          alert("Lỗi khi gửi ảnh tới Zalo: " + (err.message || "Không rõ nguyên nhân"));
+        } catch (err) {
+          console.error("Lỗi tải tin nhắn cũ:", err);
+        } finally {
+          isFetchingOlderMessages = false;
+          btnLoadOlder.textContent = "⬆️ Tải thêm tin nhắn cũ";
         }
       }
 
-      // 1. Nút "Gửi ảnh" -> Mở File Dialog -> Chọn file là GỬI NGAY LẬP TỨC!
-      btnPhoto.addEventListener("click", () => imageFileInput.click());
+      btnLoadOlder.addEventListener("click", loadOlderMessages);
 
-      imageFileInput.addEventListener("change", function() {
-        const files = Array.from(this.files || []);
-        if (files.length === 0) return;
-        this.value = ""; // reset
-
-        files.forEach(file => {
-          const reader = new FileReader();
-          reader.onload = async function(e) {
-            const compressed = await compressImageClient(e.target.result);
-            await sendSingleImageDirectly(compressed, file.name);
-          };
-          reader.readAsDataURL(file);
-        });
-      });
-
-      // 2. Paste ảnh từ Clipboard (Ctrl+V / Cmd+V) -> GỬI NGAY LẬP TỨC!
-      window.addEventListener("paste", function(e) {
-        const items = (e.clipboardData || e.originalEvent.clipboardData).items;
-        for (const item of items) {
-          if (item.type.indexOf("image") === 0) {
-            const blob = item.getAsFile();
-            const reader = new FileReader();
-            reader.onload = async function(event) {
-              const compressed = await compressImageClient(event.target.result);
-              await sendSingleImageDirectly(compressed, "pasted_image.png");
-            };
-            reader.readAsDataURL(blob);
-          }
+      // Tự động tải tin cũ khi cuộn lên gần đỉnh (scrollTop < 30)
+      chatContainer.addEventListener("scroll", function() {
+        if (chatContainer.scrollTop < 30 && hasMoreOlderMessages && !isFetchingOlderMessages) {
+          loadOlderMessages();
         }
       });
 
-      // 3. Drag & Drop ảnh -> GỬI NGAY LẬP TỨC!
-      window.addEventListener("dragover", (e) => e.preventDefault());
-      window.addEventListener("drop", function(e) {
-        e.preventDefault();
-        const files = Array.from(e.dataTransfer.files || []);
-        files.forEach(file => {
-          if (file.type.startsWith("image/")) {
-            const reader = new FileReader();
-            reader.onload = async function(event) {
-              const compressed = await compressImageClient(event.target.result);
-              await sendSingleImageDirectly(compressed, file.name);
-            };
-            reader.readAsDataURL(file);
+      // =========================================================================
+      // 4. QUẢN LÝ CHẾ ĐỘ AI / THỦ CÔNG (-M)
+      // =========================================================================
+      function setMode(isManual, showNotice = false) {
+        isManualMode = isManual;
+
+        if (isManual) {
+          if (btnToggleMode) btnToggleMode.className = "mode-switch-btn is-manual";
+          if (modeIcon) modeIcon.textContent = "👤";
+          if (modeText) modeText.textContent = "Thủ công (-M)";
+          if (inputWrapper) inputWrapper.style.display = "flex";
+          if (aiActiveBanner) aiActiveBanner.style.display = "none";
+          if (showNotice) showToast("👤 Đã chuyển sang Thủ công (-M)", "success");
+        } else {
+          if (btnToggleMode) btnToggleMode.className = "mode-switch-btn is-ai";
+          if (modeIcon) modeIcon.textContent = "🤖";
+          if (modeText) modeText.textContent = "AI Tự động";
+          if (inputWrapper) inputWrapper.style.display = "none";
+          if (aiActiveBanner) aiActiveBanner.style.display = "flex";
+          if (showNotice) showToast("🤖 Đã bật AI Tự động", "success");
+        }
+      }
+
+      async function toggleAIMode(targetMode) {
+        if (!currentThreadId) return;
+        if (btnToggleMode) btnToggleMode.disabled = true;
+
+        try {
+          const res = await fetch("/api/chat/toggle-mode", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              threadId: currentThreadId,
+              targetMode: targetMode || (isManualMode ? "ai" : "manual"),
+              isGroup: isCurrentGroup,
+            }),
+          });
+          const data = await res.json();
+          if (data.success) {
+            const isManual = data.mode === "manual";
+            setMode(isManual, true);
+            if (data.newName) {
+              threadNameEl.textContent = data.newName;
+              messageInput.placeholder = "Nhập tin nhắn tới " + data.newName + "...";
+              avatarLetterEl.textContent = data.newName.trim().charAt(0).toUpperCase();
+
+              // Cập nhật cache sidebar
+              const cached = threadsCache.get(currentThreadId);
+              if (cached) {
+                cached.threadName = data.newName;
+                cached.isManual = isManual;
+                renderSidebarThreads();
+              }
+            }
           }
-        });
+        } catch (err) {
+          console.error("Lỗi toggle mode:", err);
+        } finally {
+          if (btnToggleMode) btnToggleMode.disabled = false;
+        }
+      }
+
+      btnToggleMode.addEventListener("click", () => toggleAIMode());
+      btnActivateManual.addEventListener("click", () => toggleAIMode("manual"));
+
+      // =========================================================================
+      // 5. GỬI TIN NHẮN & ẢNH
+      // =========================================================================
+      messageInput.addEventListener("input", function() {
+        this.style.height = "auto";
+        this.style.height = Math.min(this.scrollHeight, 120) + "px";
       });
 
-      // Xử lý gửi tin nhắn Text
       async function handleSendMessage() {
         const text = messageInput.value.trim();
-        if (!text) return;
+        if (!text || !currentThreadId) return;
 
         btnSend.disabled = true;
 
@@ -1748,27 +2132,21 @@ export function renderChatPage(threadId: string): string {
         messageInput.style.height = "auto";
 
         try {
-          const res = await fetch("/api/chat/send", {
+          await fetch("/api/chat/send", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              threadId: threadId,
+              threadId: currentThreadId,
               message: text,
             }),
           });
-          const resData = await res.json();
-          if (!resData.success) {
-            alert("Lỗi khi gửi tin nhắn: " + (resData.error || "Không rõ"));
-          }
         } catch (err) {
           console.error("Lỗi gửi tin nhắn:", err);
-          alert("Lỗi kết nối khi gửi tin nhắn!");
         } finally {
           btnSend.disabled = false;
         }
       }
 
-      // Nút Gửi & Enter
       btnSend.addEventListener("click", handleSendMessage);
       messageInput.addEventListener("keydown", function(e) {
         if (e.key === "Enter" && !e.shiftKey) {
@@ -1777,96 +2155,111 @@ export function renderChatPage(threadId: string): string {
         }
       });
 
-      // ==========================================================================
-      // REALTIME SSE (Server-Sent Events) với Cơ Chế Chống Duplicate Tuyệt Đối
-      // ==========================================================================
-      let sseEventSource = null;
+      // Upload ảnh
+      btnPhoto.addEventListener("click", () => imageFileInput.click());
+      imageFileInput.addEventListener("change", function() {
+        const files = Array.from(this.files || []);
+        if (files.length === 0 || !currentThreadId) return;
+        this.value = "";
+
+        files.forEach(file => {
+          const reader = new FileReader();
+          reader.onload = async function(e) {
+            const dataUrl = e.target.result;
+            const tempMsg = {
+              role: "model",
+              senderId: "642903586588799919",
+              senderName: "Admin (Tôi)",
+              content: "",
+              hasImage: true,
+              imageUrls: [dataUrl],
+              timestamp: Date.now(),
+            };
+            const tempEl = createMessageElement(tempMsg, true);
+            if (tempEl) {
+              chatContainer.appendChild(tempEl);
+              scrollToBottom();
+            }
+
+            try {
+              await fetch("/api/chat/send-image", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  threadId: currentThreadId,
+                  imageBase64: dataUrl,
+                  filename: file.name || "image.png",
+                }),
+              });
+            } catch (err) {
+              console.error("Lỗi gửi ảnh:", err);
+            }
+          };
+          reader.readAsDataURL(file);
+        });
+      });
+
+      // =========================================================================
+      // 6. REALTIME SSE (ĐỒNG BỘ TIN NHẮN & CẬP NHẬT SIDEBAR ĐƯA LÊN ĐẦU)
+      // =========================================================================
       function setupRealtimeSSE() {
         if (sseEventSource) sseEventSource.close();
-        sseEventSource = new EventSource("/api/chat/events?thread=" + encodeURIComponent(threadId));
+        sseEventSource = new EventSource("/api/chat/events?thread=" + encodeURIComponent(currentThreadId));
 
         sseEventSource.onmessage = function(event) {
           try {
             const newMsg = JSON.parse(event.data);
             if (!newMsg) return;
 
-            // Xử lý sự kiện đổi tên thread thời gian thực
+            // Đổi tên
             if (newMsg.type === "thread_renamed" && newMsg.newName) {
-              threadNameEl.textContent = newMsg.newName;
-              messageInput.placeholder = "Nhập @, tin nhắn tới " + newMsg.newName + "...";
-              avatarLetterEl.textContent = newMsg.newName.trim().charAt(0).toUpperCase();
-              document.title = newMsg.newName + " - Trò Chuyện Trực Tiếp";
-
-              const isManual = /^-M(\s|_|-|$)/i.test(newMsg.newName);
-              setMode(isManual, false);
-
-              showToast("✓ Đã cập nhật: " + newMsg.newName, "success");
-
-              if (!isCurrentGroup) {
-                const incomingNames = chatContainer.querySelectorAll(".message-row.incoming .msg-sender-name");
-                incomingNames.forEach((el) => {
-                  el.textContent = newMsg.newName;
-                });
+              if (currentThreadId === newMsg.threadId) {
+                threadNameEl.textContent = newMsg.newName;
+              }
+              const cached = threadsCache.get(newMsg.threadId);
+              if (cached) {
+                cached.threadName = newMsg.newName;
+                renderSidebarThreads();
               }
               return;
             }
 
-            if (newMsg.id && renderedMessageIds.has(newMsg.id)) {
-              return;
-            }
-
-            const cleanContent = sanitizeContent(newMsg.content);
-            const hasImages = Boolean(newMsg.hasImage && newMsg.imageUrls && newMsg.imageUrls.length > 0);
-
-            // Bỏ qua tin nhắn rỗng không có chữ lẫn ảnh
-            if (!cleanContent && !hasImages) return;
-
-            // 1. Reconcile với tin nhắn tạm đang chờ (optimistic temp)
-            const pendingTemps = chatContainer.querySelectorAll(".message-row.temp-pending");
-            let reconciled = false;
-            for (const tempEl of pendingTemps) {
-              if (
-                (tempEl.dataset.content === cleanContent || (hasImages && tempEl.querySelector(".msg-images"))) &&
-                newMsg.role === "model"
-              ) {
-                tempEl.classList.remove("temp-pending");
-                if (newMsg.id) {
-                  tempEl.dataset.id = newMsg.id;
-                  renderedMessageIds.add(newMsg.id);
-                }
-                const timeEl = tempEl.querySelector(".msg-time");
-                if (timeEl) timeEl.textContent = formatTime(newMsg.timestamp) + " ✓";
-                const progressOverlay = tempEl.querySelector(".upload-progress-overlay");
-                if (progressOverlay) progressOverlay.classList.add("done");
-                reconciled = true;
-                break;
-              }
-            }
-
-            // 2. Chống duplicate với tin nhắn cuối cùng vừa được render
-            if (!reconciled) {
-              const allRows = chatContainer.querySelectorAll(".message-row");
-              if (allRows.length > 0) {
-                const lastRow = allRows[allRows.length - 1];
-                const lastContent = lastRow.dataset.content || "";
-                const lastHasImage = Boolean(lastRow.querySelector(".msg-images"));
-                const lastIsOutgoing = lastRow.classList.contains("outgoing");
-                const newIsOutgoing = (newMsg.role === "model" || newMsg.senderId === "642903586588799919" || newMsg.senderId === "admin");
-
-                if (
-                  lastIsOutgoing === newIsOutgoing &&
-                  ((cleanContent && lastContent === cleanContent) || (hasImages && lastHasImage))
-                ) {
-                  // Tin nhắn trùng lặp vừa được hiển thị, cập nhật id và bỏ qua
-                  if (newMsg.id) {
-                    lastRow.dataset.id = newMsg.id;
-                    renderedMessageIds.add(newMsg.id);
-                  }
-                  return;
-                }
+            // Cập nhật Sidebar: Đưa thread có tin nhắn mới lên đầu danh sách
+            if (newMsg.threadId) {
+              let t = threadsCache.get(newMsg.threadId);
+              if (!t) {
+                t = {
+                  threadId: newMsg.threadId,
+                  threadName: newMsg.senderName || newMsg.threadId,
+                  avatarLetter: (newMsg.senderName || "U").trim().charAt(0).toUpperCase(),
+                  isGroup: Boolean(newMsg.isGroup),
+                  isManual: false,
+                  lastContent: newMsg.content || "",
+                  lastHasImage: Boolean(newMsg.hasImage),
+                  lastTimestamp: newMsg.timestamp || Date.now(),
+                  lastRole: newMsg.role || "user",
+                };
+              } else {
+                t.lastContent = newMsg.content || "";
+                t.lastHasImage = Boolean(newMsg.hasImage);
+                t.lastTimestamp = newMsg.timestamp || Date.now();
+                t.lastRole = newMsg.role || "user";
               }
 
+              // Xóa và set lại để nhảy lên đầu Map
+              threadsCache.delete(newMsg.threadId);
+              const newMap = new Map();
+              newMap.set(newMsg.threadId, t);
+              threadsCache.forEach((v, k) => newMap.set(k, v));
+              threadsCache = newMap;
+              renderSidebarThreads();
+            }
+
+            // Nếu tin nhắn thuộc thread hiện tại -> hiển thị vào timeline
+            if (newMsg.threadId === currentThreadId) {
+              if (newMsg.id && renderedMessageIds.has(newMsg.id)) return;
               if (newMsg.id) renderedMessageIds.add(newMsg.id);
+
               const el = createMessageElement(newMsg);
               if (el) {
                 chatContainer.appendChild(el);
@@ -1874,141 +2267,89 @@ export function renderChatPage(threadId: string): string {
               }
             }
           } catch (err) {
-            console.error("Lỗi khi xử lý SSE:", err);
+            console.error("Lỗi SSE:", err);
           }
         };
       }
 
-      // ==========================================================================
-      // XỬ LÝ ĐỔI TÊN NHANH (QUICK RENAME CHUẨN ZALO)
-      // ==========================================================================
-      function showToast(text, type = "success") {
-        if (!zaloToast) return;
-        zaloToast.className = "zalo-toast " + type;
-        zaloToast.textContent = text;
-        zaloToast.classList.add("show");
-        setTimeout(() => {
-          zaloToast.classList.remove("show");
-        }, 3000);
+      // =========================================================================
+      // 7. MODALS (NEW THREAD, RENAME)
+      // =========================================================================
+      function openThreadModal() {
+        threadModal.style.display = "flex";
+        threadModalInput.value = "";
+        setTimeout(() => threadModalInput.focus(), 50);
       }
 
-      function updateCharCount() {
-        const len = renameInput.value.length;
-        renameCharCount.textContent = len + "/50";
-        renameClearBtn.style.display = len > 0 ? "flex" : "none";
-      }
+      btnOpenNewThreadModal.addEventListener("click", openThreadModal);
+      btnWelcomeNew.addEventListener("click", openThreadModal);
+      btnCancelThreadModal.addEventListener("click", () => {
+        threadModal.style.display = "none";
+      });
 
-      function openRenameModal() {
-        if (!threadId) return;
-        const currentName = (threadNameEl.textContent || "").trim();
-        const cleanName =
-          currentName === "Đang tải..." ||
-          currentName.startsWith("Người dùng ") ||
-          currentName.startsWith("Nhóm ")
-            ? ""
-            : currentName;
-
-        renameModalTitle.textContent = isCurrentGroup ? "Đổi tên nhóm" : "Đổi tên gợi nhớ";
-        renameModalSub.textContent = isCurrentGroup
-          ? "Tên nhóm mới sẽ hiển thị cho tất cả thành viên trong nhóm chat."
-          : "Đặt tên gợi nhớ giúp bạn dễ dàng nhận diện và phân loại liên hệ này.";
-
-        renameInput.value = cleanName;
-        updateCharCount();
-        renameModal.style.display = "flex";
-        setTimeout(() => {
-          renameInput.focus();
-          renameInput.select();
-        }, 50);
-      }
-
-      function closeRenameModal() {
-        renameModal.style.display = "none";
-        renameInput.value = "";
-      }
-
-      if (btnRename) btnRename.addEventListener("click", openRenameModal);
-      if (threadNameEl) threadNameEl.addEventListener("dblclick", openRenameModal);
-      if (renameModalClose) renameModalClose.addEventListener("click", closeRenameModal);
-      if (btnRenameCancel) btnRenameCancel.addEventListener("click", closeRenameModal);
-
-      if (renameClearBtn) {
-        renameClearBtn.addEventListener("click", function() {
-          renameInput.value = "";
-          updateCharCount();
-          renameInput.focus();
-        });
-      }
-
-      if (renameInput) {
-        renameInput.addEventListener("input", updateCharCount);
-      }
-
-      if (renameModal) {
-        renameModal.addEventListener("click", function(e) {
-          if (e.target === renameModal) closeRenameModal();
-        });
-      }
-
-      window.addEventListener("keydown", function(e) {
-        if (e.key === "Escape" && renameModal && renameModal.style.display === "flex") {
-          closeRenameModal();
+      threadModalForm.addEventListener("submit", function(e) {
+        e.preventDefault();
+        const val = threadModalInput.value.trim();
+        if (val) {
+          threadModal.style.display = "none";
+          switchThread(val);
         }
       });
 
-      if (renameForm) {
-        renameForm.addEventListener("submit", async function(e) {
-          e.preventDefault();
-          const newName = renameInput.value.trim();
-          if (!newName) return;
+      // Quick Rename
+      btnRename.addEventListener("click", () => {
+        if (!currentThreadId) return;
+        renameInput.value = threadNameEl.textContent === "Đang tải..." ? "" : threadNameEl.textContent;
+        renameModal.style.display = "flex";
+        setTimeout(() => renameInput.focus(), 50);
+      });
 
-          btnRenameSave.disabled = true;
-          btnRenameSave.textContent = "Đang lưu...";
+      btnRenameCancel.addEventListener("click", () => {
+        renameModal.style.display = "none";
+      });
 
-          try {
-            const res = await fetch("/api/chat/rename", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                threadId: threadId,
-                newName: newName,
-                isGroup: isCurrentGroup,
-              }),
-            });
-            const data = await res.json();
-            if (data.success) {
-              threadNameEl.textContent = newName;
-              messageInput.placeholder = "Nhập @, tin nhắn tới " + newName + "...";
-              avatarLetterEl.textContent = newName.trim().charAt(0).toUpperCase();
-              document.title = newName + " - Trò Chuyện Trực Tiếp";
+      renameForm.addEventListener("submit", async function(e) {
+        e.preventDefault();
+        const newName = renameInput.value.trim();
+        if (!newName || !currentThreadId) return;
 
-              const isManual = /^-M(\s|_|-|$)/i.test(newName);
-              setMode(isManual, false);
-
-              if (!isCurrentGroup) {
-                const incomingNames = chatContainer.querySelectorAll(".message-row.incoming .msg-sender-name");
-                incomingNames.forEach((el) => {
-                  el.textContent = newName;
-                });
-              }
-              showToast("✓ Đã đổi tên thành công!", "success");
-              closeRenameModal();
-            } else {
-              showToast("⚠️ " + (data.error || "Không thể đổi tên"), "error");
+        btnRenameSave.disabled = true;
+        try {
+          const res = await fetch("/api/chat/rename", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              threadId: currentThreadId,
+              newName: newName,
+              isGroup: isCurrentGroup,
+            }),
+          });
+          const data = await res.json();
+          if (data.success) {
+            threadNameEl.textContent = newName;
+            const cached = threadsCache.get(currentThreadId);
+            if (cached) {
+              cached.threadName = newName;
+              renderSidebarThreads();
             }
-          } catch (err) {
-            console.error("Lỗi khi đổi tên:", err);
-            showToast("⚠️ Lỗi kết nối máy chủ", "error");
-          } finally {
-            btnRenameSave.disabled = false;
-            btnRenameSave.textContent = "Lưu";
+            showToast("✓ Đã đổi tên thành công!");
+            renameModal.style.display = "none";
           }
-        });
-      }
+        } catch (err) {
+          console.error("Lỗi đổi tên:", err);
+        } finally {
+          btnRenameSave.disabled = false;
+        }
+      });
 
-      // Khởi động
-      loadHistory();
-      setupRealtimeSSE();
+      // =========================================================================
+      // 8. KHỞI ĐỘNG BAN ĐẦU
+      // =========================================================================
+      fetchThreads(true);
+
+      if (currentThreadId) {
+        switchThread(currentThreadId);
+      }
     })();
   </script>
 </body>

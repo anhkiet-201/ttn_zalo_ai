@@ -164,7 +164,95 @@ export function startQrWebServer(port: number = config.qrPort): void {
       return;
     }
 
-    // 3. API GET: Lấy toàn bộ lịch sử chat và thông tin ứng viên của thread
+    // 2.5. API GET: Lấy danh sách các cuộc trò chuyện (Threads List) phân trang phục vụ Lazy Load
+    if (pathname === "/api/chat/threads") {
+      try {
+        const limitParam = Number(parsedUrl.searchParams.get("limit")) || 20;
+        const limit = Math.min(Math.max(limitParam, 1), 100);
+        const offset = Math.max(Number(parsedUrl.searchParams.get("offset")) || 0, 0);
+        const search = parsedUrl.searchParams.get("search") || "";
+
+        const chatHistoryRepo = new ChatHistoryRepository();
+        const candidateRepo = new CandidateRepository();
+        const total = chatHistoryRepo.getTotalThreadsCount(search);
+        const threadItems = chatHistoryRepo.getThreadList(limit, offset, search);
+
+        // Làm giàu thông tin từng thread với tên hiển thị, isGroup và isManual
+        const enrichedThreads = await Promise.all(
+          threadItems.map(async (item) => {
+            let threadName = "";
+            let isGroup = false;
+
+            if (activeZaloService) {
+              try {
+                isGroup = await activeZaloService.isGroupThread(item.threadId);
+                if (isGroup) {
+                  threadName = await activeZaloService.getGroupName(item.threadId);
+                } else {
+                  threadName = await activeZaloService.getUserName(item.threadId);
+                }
+              } catch {
+                // Bỏ qua lỗi ZaloService
+              }
+            }
+
+            if (!threadName) {
+              if (item.candidateName) {
+                threadName = item.candidateName;
+              } else if (item.senderName && item.senderName !== "Unknown" && item.senderName !== "Ứng viên") {
+                threadName = item.senderName;
+              } else {
+                threadName = isGroup ? `Nhóm ${item.threadId}` : `Người dùng ${item.threadId}`;
+              }
+            }
+
+            const isManual = /^-M(\s|_|-|$)/i.test(threadName);
+            const avatarLetter = (threadName || "U").trim().charAt(0).toUpperCase();
+
+            return {
+              threadId: item.threadId,
+              threadName,
+              avatarLetter,
+              isGroup,
+              isManual,
+              lastContent: item.lastContent,
+              lastHasImage: item.lastHasImage,
+              lastTimestamp: item.lastTimestamp,
+              lastRole: item.lastRole,
+              candidateName: item.candidateName,
+              targetCompany: item.targetCompany,
+              phoneNumber: item.phoneNumber,
+            };
+          })
+        );
+
+        const hasMore = offset + threadItems.length < total;
+        const nextOffset = offset + threadItems.length;
+
+        res.writeHead(200, {
+          "Content-Type": "application/json; charset=utf-8",
+          "Cache-Control": "no-cache, no-store, must-revalidate",
+        });
+        res.end(
+          JSON.stringify({
+            success: true,
+            threads: enrichedThreads,
+            total,
+            limit,
+            offset,
+            hasMore,
+            nextOffset,
+          })
+        );
+      } catch (err) {
+        console.error("❌ [API Chat Threads] Lỗi khi lấy danh sách cuộc trò chuyện:", err);
+        res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
+        res.end(JSON.stringify({ success: false, error: String(err) }));
+      }
+      return;
+    }
+
+    // 3. API GET: Lấy lịch sử chat và thông tin ứng viên của thread (hỗ trợ lazy load tin cũ với ?before=)
     if (pathname === "/api/chat/history") {
       const threadId = parsedUrl.searchParams.get("thread");
       if (!threadId) {
@@ -176,8 +264,17 @@ export function startQrWebServer(port: number = config.qrPort): void {
       try {
         const chatHistoryRepo = new ChatHistoryRepository();
         const candidateRepo = new CandidateRepository();
+        const beforeParam = parsedUrl.searchParams.get("before");
+        const limitParam = Number(parsedUrl.searchParams.get("limit")) || 30;
+        const limit = Math.min(Math.max(limitParam, 5), 100);
 
-        const messages = chatHistoryRepo.getRecentHistory(threadId, 100);
+        let messages: import("../database/repositories/chatHistoryRepository.js").ChatMessageRecord[] = [];
+        if (beforeParam && !isNaN(Number(beforeParam))) {
+          messages = chatHistoryRepo.getHistoryBefore(threadId, Number(beforeParam), limit);
+        } else {
+          messages = chatHistoryRepo.getRecentHistory(threadId, limit);
+        }
+
         const candidate = candidateRepo.getLatestCandidate(threadId);
 
         let threadName = "";
@@ -238,6 +335,14 @@ export function startQrWebServer(port: number = config.qrPort): void {
           };
         });
 
+        // Kiểm tra xem còn tin cũ hơn mốc tin nhắn đầu tiên không
+        const oldestTimestamp = enrichedMessages.length > 0 ? enrichedMessages[0].timestamp : 0;
+        let hasMoreOlder = false;
+        if (oldestTimestamp > 0) {
+          const olderRows = chatHistoryRepo.getHistoryBefore(threadId, oldestTimestamp, 1);
+          hasMoreOlder = olderRows.length > 0;
+        }
+
         res.writeHead(200, {
           "Content-Type": "application/json; charset=utf-8",
           "Cache-Control": "no-cache, no-store, must-revalidate",
@@ -251,6 +356,8 @@ export function startQrWebServer(port: number = config.qrPort): void {
             candidate,
             messages: enrichedMessages,
             history: enrichedMessages,
+            hasMoreOlder,
+            oldestTimestamp,
           })
         );
       } catch (err) {
