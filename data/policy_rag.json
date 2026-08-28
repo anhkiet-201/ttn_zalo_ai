@@ -24,5 +24,23 @@
       },
       "nghi_huu_truoc_tuoi": "Bị suy giảm khả năng lao động từ 61% trở lên và tuổi đời thấp hơn tối đa 5-10 tuổi so với bình thường."
     }
+  },
+  {
+    "id": "policy_02",
+    "title": "Quy định về chế độ nhận lương và ứng lương",
+    "details": {
+      "dieu_kien_nhan_luong": "Lao động phải làm tối thiểu 5 ngày công để đủ điều kiện nhận lương (ngoại trừ các công ty có chế độ nhận lương 3 ngày).",
+      "luong_thang": "Phát lương định kỳ từ ngày 13 đến ngày 15 hàng tháng.",
+      "luong_tuan": "Chốt công vào cuối tuần và phát lương vào Thứ 5 hàng tuần.",
+      "luong_3_ngay": "Phát lương định kỳ vào Thứ 2 và Thứ 5 hàng tuần.",
+      "ung_luong_tuan": "Hỗ trợ cho ứng lương vào Thứ 5 hàng tuần."
+    }
+  },
+  {
+    "id": "policy_03",
+    "title": "Quy định về xin nghỉ việc và nghỉ phép",
+    "details": {
+      "quy_dinh_xin_nghi": "Công nhân muốn xin nghỉ phải viết đơn xin nghỉ trước tối thiểu 3 ngày theo quy định của công ty."
+    }
   }
 ]
