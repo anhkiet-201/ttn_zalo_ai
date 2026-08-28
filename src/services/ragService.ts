@@ -33,7 +33,7 @@ export function loadRagContext(baseDir: string = process.cwd()): string {
 
         if (item.nearby_suggestions && Array.isArray(item.nearby_suggestions)) {
           const suggestStr = item.nearby_suggestions.join(", ");
-          content += `\nGỢI Ý LÂN CẬN: Nếu khán giả tìm việc ở đây nhưng đang hết, CHỈ ĐƯỢC PHÉP đề xuất sang các khu vực: ${suggestStr}.`;
+          content += `\nKHU VỰC / CỤM LIỀN KỀ LÂN CẬN: ${suggestStr}. (Lưu ý: Chỉ mở rộng gợi ý các khu vực lân cận này khi khu vực chính có dưới 2 công ty đang tuyển).`;
         }
       } else {
         content = JSON.stringify(item, null, 2);
