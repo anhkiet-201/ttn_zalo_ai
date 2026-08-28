@@ -12,4 +12,7 @@ data/*.db-wal
 data/*.db-shm
 data/*.sqlite
 data/uploads/
+data/job_rag.json
+data/location_rag.json
+data/policy_rag.json
 .DS_Store
