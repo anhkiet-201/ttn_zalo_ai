@@ -2,7 +2,7 @@ import type { ChatMessageRecord } from "../database/repositories/chatHistoryRepo
 
 /**
  * renderChatPage: Render giao diện Web Chat chuẩn Zalo PC
- * Khắc phục triệt để lỗi duplicate timeline label, loại bỏ tin nhắn rỗng, chống trùng lặp SSE và render ảnh mượt mà.
+ * Nếu không có threadId trong URL -> Hiện popup nhập Thread ID.
  */
 export function renderChatPage(threadId: string): string {
   return `
@@ -263,7 +263,7 @@ export function renderChatPage(threadId: string): string {
       border-top-right-radius: 2px;
     }
 
-    /* Message chỉ có Ảnh (Không bubble rườm rà) */
+    /* Message chỉ có Ảnh */
     .msg-media-card {
       display: inline-block;
       border-radius: 10px;
@@ -399,27 +399,20 @@ export function renderChatPage(threadId: string): string {
     .tool-btn-photo {
       display: inline-flex;
       align-items: center;
-      gap: 6px;
-      padding: 6px 12px;
+      justify-content: center;
+      width: 32px;
+      height: 32px;
       border-radius: 6px;
       border: 1px solid #e2e8f0;
       background: #f8fafc;
-      color: #334155;
-      font-size: 13px;
-      font-weight: 600;
-      font-family: var(--font-main);
+      color: #0068ff;
       cursor: pointer;
       transition: all 0.15s ease;
-    }
-
-    .tool-btn-photo svg {
-      color: #0068ff;
     }
 
     .tool-btn-photo:hover {
       background: #eff6ff;
       border-color: #bfdbfe;
-      color: var(--zalo-blue);
     }
 
     /* Main Textarea Row */
@@ -483,6 +476,91 @@ export function renderChatPage(threadId: string): string {
     .send-action-btn:disabled {
       background: #93c5fd;
       cursor: not-allowed;
+    }
+
+    /* ==========================================================================
+       POPUP NHẬP THREAD ID (KHI URL THIẾU THREADID)
+       ========================================================================== */
+    .thread-modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.6);
+      backdrop-filter: blur(6px);
+      z-index: 10000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .thread-modal-box {
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 20px 48px rgba(0, 0, 0, 0.25);
+      width: 100%;
+      max-width: 440px;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      animation: modalFadeIn 0.25s ease-out;
+    }
+
+    @keyframes modalFadeIn {
+      from { transform: scale(0.95); opacity: 0; }
+      to { transform: scale(1); opacity: 1; }
+    }
+
+    .thread-modal-title {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--zalo-text-primary);
+    }
+
+    .thread-modal-sub {
+      font-size: 13.5px;
+      color: var(--zalo-text-secondary);
+      line-height: 1.4;
+    }
+
+    .thread-modal-input {
+      width: 100%;
+      padding: 10px 14px;
+      font-size: 14.5px;
+      font-family: var(--font-main);
+      border: 1.5px solid #cbd5e1;
+      border-radius: 8px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .thread-modal-input:focus {
+      border-color: var(--zalo-blue);
+      box-shadow: 0 0 0 3px rgba(0, 104, 255, 0.15);
+    }
+
+    .thread-modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      margin-top: 4px;
+    }
+
+    .thread-modal-submit-btn {
+      padding: 9px 20px;
+      background: var(--zalo-blue);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      font-family: var(--font-main);
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .thread-modal-submit-btn:hover {
+      background: var(--zalo-blue-hover);
     }
 
     /* ==========================================================================
@@ -563,7 +641,7 @@ export function renderChatPage(threadId: string): string {
           <span class="badge-candidate" id="candidateBadge" style="display:none;">Ứng viên</span>
         </div>
         <div class="header-sub">
-          <span id="threadSubInfo">ID: ${threadId}</span>
+          <span id="threadSubInfo">${threadId || "Chưa chọn thread"}</span>
           <span id="candidateDetails" style="color: #059669; font-weight: 600;"></span>
         </div>
       </div>
@@ -599,7 +677,7 @@ export function renderChatPage(threadId: string): string {
         class="zalo-textarea" 
         id="messageInput" 
         rows="1" 
-        placeholder="Nhập @, tin nhắn tới ${threadId}..."
+        placeholder="Nhập @, tin nhắn tới ${threadId || '...'}"
         autofocus
       ></textarea>
       
@@ -612,7 +690,28 @@ export function renderChatPage(threadId: string): string {
     </div>
   </footer>
 
-  <!-- 4. LIGHTBOX ZOOM MODAL -->
+  <!-- 4. MODAL POPUP NHẬP THREAD ID (KHI THIẾU THREADID) -->
+  <div class="thread-modal-backdrop" id="threadModal" style="${threadId ? 'display:none;' : 'display:flex;'}">
+    <div class="thread-modal-box">
+      <div class="thread-modal-title">💬 Nhập Thread ID để bắt đầu</div>
+      <div class="thread-modal-sub">Vui lòng nhập User ID hoặc Group ID Zalo để vào khung chat.</div>
+      <form id="threadModalForm">
+        <input 
+          type="text" 
+          class="thread-modal-input" 
+          id="threadModalInput" 
+          placeholder="Ví dụ: 8289935740050353992 hoặc 7022361798516490807" 
+          autofocus 
+          required 
+        />
+        <div class="thread-modal-actions">
+          <button type="submit" class="thread-modal-submit-btn">Vào trò chuyện</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 5. LIGHTBOX ZOOM MODAL -->
   <div class="lightbox-modal" id="lightboxModal">
     <button class="lightbox-close-btn" id="lightboxClose">✕</button>
     <img class="lightbox-img" id="lightboxImg" src="" alt="Full view">
@@ -633,12 +732,32 @@ export function renderChatPage(threadId: string): string {
       const candidateBadge = document.getElementById("candidateBadge");
       const candidateDetails = document.getElementById("candidateDetails");
 
+      const threadModal = document.getElementById("threadModal");
+      const threadModalForm = document.getElementById("threadModalForm");
+      const threadModalInput = document.getElementById("threadModalInput");
+
       const lightboxModal = document.getElementById("lightboxModal");
       const lightboxImg = document.getElementById("lightboxImg");
       const lightboxCaption = document.getElementById("lightboxCaption");
       const lightboxClose = document.getElementById("lightboxClose");
 
       const renderedMessageIds = new Set();
+
+      // Xử lý submit Popup nhập Thread ID
+      if (threadModalForm) {
+        threadModalForm.addEventListener("submit", function(e) {
+          e.preventDefault();
+          const val = threadModalInput.value.trim();
+          if (val) {
+            window.location.href = "/chat?thread=" + encodeURIComponent(val);
+          }
+        });
+      }
+
+      if (!threadId) {
+        if (threadModalInput) threadModalInput.focus();
+        return;
+      }
 
       // Auto-resize textarea
       messageInput.addEventListener("input", function() {
@@ -775,7 +894,6 @@ export function renderChatPage(threadId: string): string {
             img.alt = "Hình ảnh Zalo";
             img.addEventListener("click", () => openLightbox(url, msg.senderName || ""));
             
-            // Nếu ảnh lỗi
             img.onerror = function() {
               container.style.display = "none";
             };
