@@ -57,7 +57,12 @@ export class MessageHandler {
    */
   public async handle(parsedMessage: ParsedMessage): Promise<void> {
     // 0. Tự động lưu tin nhắn vào SQLite và kích hoạt Realtime SSE Stream tới Web Chat
-    if (parsedMessage.text || parsedMessage.hasImage) {
+    const isSticker =
+      parsedMessage.raw?.data?.msgType === "chat.sticker" ||
+      parsedMessage.text === "[Sticker]" ||
+      Boolean(parsedMessage.text && parsedMessage.text.includes("[Sticker]"));
+
+    if (parsedMessage.text || parsedMessage.hasImage || isSticker) {
       try {
         this.chatHistoryRepo.addMessage({
           threadId: parsedMessage.threadId,
@@ -72,7 +77,11 @@ export class MessageHandler {
           role: parsedMessage.isSelf ? "model" : "user",
           content:
             parsedMessage.text ||
-            (parsedMessage.hasImage ? "[Hình ảnh đính kèm]" : ""),
+            (isSticker
+              ? "[Sticker]"
+              : parsedMessage.hasImage
+              ? "[Hình ảnh đính kèm]"
+              : ""),
           hasImage: parsedMessage.hasImage,
           imageUrls: parsedMessage.imageUrls,
           timestamp: parsedMessage.timestamp || Date.now(),

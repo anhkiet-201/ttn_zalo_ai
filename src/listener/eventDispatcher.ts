@@ -43,7 +43,18 @@ export function isValidHttpUrl(urlString: unknown): boolean {
  * Trích xuất URL hình ảnh có chất lượng tốt nhất từ object attachment (ưu tiên hdUrl > url > normalUrl > href > thumb)
  */
 export function extractBestImageUrl(obj: Record<string, unknown>): string | null {
-  const candidates = [obj.hdUrl, obj.url, obj.normalUrl, obj.href, obj.thumb];
+  const candidates = [
+    obj.hdUrl,
+    obj.url,
+    obj.normalUrl,
+    obj.href,
+    obj.thumb,
+    obj.spriteUrl,
+    obj.webUrl,
+    obj.fullUrl,
+    obj.stickerUrl,
+    obj.previewUrl,
+  ];
   for (const candidate of candidates) {
     if (isValidHttpUrl(candidate)) {
       return (candidate as string).trim();
@@ -189,11 +200,21 @@ export class EventDispatcher {
     // Lọc trùng lặp URL và chỉ giữ các URL hợp lệ
     const imageUrls = Array.from(new Set(rawImageUrls)).filter((u) => isValidHttpUrl(u));
 
-    const isPhoto = rawMessage.data.msgType === "chat.photo";
-    const hasImage = isPhoto || imageUrls.length > 0;
+    const msgType = String(rawMessage.data?.msgType || "");
+    const isPhoto = msgType === "chat.photo";
+    const isSticker =
+      msgType === "chat.sticker" ||
+      msgType.includes("sticker") ||
+      rawMessage.data?.paramsExt?.containType === 36;
+    const hasImage = isPhoto || isSticker || imageUrls.length > 0;
+
+    // Nếu là sticker mà không có text và không trích xuất được image URL:
+    if (isSticker && !text && imageUrls.length === 0) {
+      text = "[Sticker]";
+    }
 
     // Nếu tin nhắn chỉ gửi ảnh mà không có chữ, giữ text rỗng hoặc theo mô tả ảnh
-    if (hasImage && !text) {
+    if (hasImage && !isSticker && !text) {
       text = imageDescription || "";
     }
 

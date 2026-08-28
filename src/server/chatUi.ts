@@ -926,7 +926,11 @@ export function renderChatPage(threadId: string): string {
 
           if (cleanText) {
             const textEl = document.createElement("div");
-            textEl.textContent = cleanText;
+            if (cleanText === "[Sticker]") {
+              textEl.innerHTML = '<span style="display:inline-flex;align-items:center;gap:6px;font-style:italic;color:#475569;">🏷️ [Nhãn dán / Sticker]</span>';
+            } else {
+              textEl.textContent = cleanText;
+            }
             bubble.appendChild(textEl);
           }
 
