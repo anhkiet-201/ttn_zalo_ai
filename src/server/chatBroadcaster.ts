@@ -35,6 +35,31 @@ class ChatBroadcasterEmitter extends EventEmitter {
       this.off(eventName, listener);
     };
   }
+
+  /**
+   * Phát sự kiện đổi tên thread thời gian thực
+   */
+  public broadcastThreadRenamed(threadId: string, newName: string): void {
+    const data = { type: "thread_renamed", threadId, newName };
+    this.emit("thread_renamed", data);
+    if (threadId) {
+      this.emit(`thread_renamed:${threadId}`, data);
+    }
+  }
+
+  /**
+   * Đăng ký lắng nghe sự kiện đổi tên của một thread cụ thể
+   */
+  public onThreadRename(
+    threadId: string,
+    listener: (data: { type: string; threadId: string; newName: string }) => void
+  ): () => void {
+    const eventName = `thread_renamed:${threadId}`;
+    this.on(eventName, listener);
+    return () => {
+      this.off(eventName, listener);
+    };
+  }
 }
 
 export const chatBroadcaster = new ChatBroadcasterEmitter();

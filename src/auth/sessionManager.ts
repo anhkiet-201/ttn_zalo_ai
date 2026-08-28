@@ -19,6 +19,7 @@ import { CandidateRepository } from "../database/repositories/candidateRepositor
 import { ZaloService } from "../services/zaloService.js";
 import { ThreadType } from "../types/zalo.types.js";
 import { chatBroadcaster } from "../server/chatBroadcaster.js";
+import { UserContextManager } from "../services/userContextManager.js";
 
 /**
  * Trích xuất kích thước và metadata ảnh cho zca-js v2+
@@ -131,9 +132,17 @@ export function startQrWebServer(port: number = config.qrPort): void {
       // Gửi event chào ban đầu
       res.write(`: connected\n\n`);
 
-      const unsubscribe = chatBroadcaster.onThreadMessage(threadId, (record) => {
+      const unsubscribeMessage = chatBroadcaster.onThreadMessage(threadId, (record) => {
         try {
           res.write(`data: ${JSON.stringify(record)}\n\n`);
+        } catch {
+          // Bỏ qua nếu socket đã đóng
+        }
+      });
+
+      const unsubscribeRename = chatBroadcaster.onThreadRename(threadId, (data) => {
+        try {
+          res.write(`data: ${JSON.stringify(data)}\n\n`);
         } catch {
           // Bỏ qua nếu socket đã đóng
         }
@@ -148,7 +157,8 @@ export function startQrWebServer(port: number = config.qrPort): void {
       }, 15000);
 
       req.on("close", () => {
-        unsubscribe();
+        unsubscribeMessage();
+        unsubscribeRename();
         clearInterval(keepAlive);
       });
       return;
@@ -390,7 +400,81 @@ export function startQrWebServer(port: number = config.qrPort): void {
       return;
     }
 
-    // 4. API GET: Trả về trạng thái phiên đăng nhập & mã QR
+    // 5. API POST: Đổi tên hiển thị / Đặt tên gợi nhớ nhanh như Zalo
+    if (req.method === "POST" && pathname === "/api/chat/rename") {
+      let body = "";
+      req.on("data", (chunk) => {
+        body += chunk;
+      });
+      req.on("end", async () => {
+        try {
+          const payload = JSON.parse(body || "{}");
+          const { threadId, newName, isGroup } = payload;
+
+          if (!threadId || !newName || !newName.trim()) {
+            res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" });
+            res.end(
+              JSON.stringify({
+                success: false,
+                error: "Thiếu thông tin threadId hoặc tên mới (newName)",
+              })
+            );
+            return;
+          }
+
+          const trimmedName = newName.trim();
+          let zaloResult: { success: boolean; error?: string } = { success: true };
+
+          // 1. Đồng bộ lên Zalo API (đổi tên nhóm hoặc đặt tên gợi nhớ bạn bè)
+          if (activeZaloService) {
+            zaloResult = await activeZaloService.changeThreadName(
+              threadId,
+              trimmedName,
+              isGroup
+            );
+          }
+
+          // 2. Cập nhật UserContext bộ nhớ
+          try {
+            const userContextMgr = UserContextManager.getInstance();
+            const ctx = userContextMgr.getContext(threadId, threadId, trimmedName);
+            if (ctx) {
+              ctx.senderName = trimmedName;
+              userContextMgr.saveAndSync(ctx);
+            }
+          } catch (ucErr) {
+            // ignore
+          }
+
+          // 3. Phát sự kiện Realtime tới Web Chat SSE
+          chatBroadcaster.broadcastThreadRenamed(threadId, trimmedName);
+
+          console.log(
+            `✏️ [Web Chat] Đã đổi tên nhanh thread [${threadId}] thành "${trimmedName}" (Zalo Sync: ${
+              zaloResult.success ? "OK" : "Lỗi: " + zaloResult.error
+            })`
+          );
+
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(
+            JSON.stringify({
+              success: true,
+              threadId,
+              newName: trimmedName,
+              zaloSynced: zaloResult.success,
+              zaloError: zaloResult.error || undefined,
+            })
+          );
+        } catch (err: any) {
+          console.error("❌ [API Chat Rename] Lỗi khi xử lý đổi tên:", err);
+          res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ success: false, error: err?.message || String(err) }));
+        }
+      });
+      return;
+    }
+
+    // 6. API GET: Trả về trạng thái phiên đăng nhập & mã QR
     if (pathname === "/api/status" || pathname === "/api/qr") {
       res.writeHead(200, {
         "Content-Type": "application/json; charset=utf-8",

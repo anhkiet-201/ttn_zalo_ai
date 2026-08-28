@@ -401,4 +401,37 @@ export class ZaloService {
       return false;
     }
   }
+
+  /**
+   * Đổi tên hiển thị / Đặt tên gợi nhớ (Alias) cho bạn bè hoặc đổi tên Nhóm
+   */
+  public async changeThreadName(
+    threadId: string,
+    newName: string,
+    isGroup?: boolean
+  ): Promise<{ success: boolean; error?: string }> {
+    const trimmedName = newName.trim();
+    if (!trimmedName) {
+      return { success: false, error: "Tên mới không được để trống" };
+    }
+
+    const checkGroup =
+      isGroup !== undefined ? isGroup : await this.isGroupThread(threadId);
+
+    try {
+      if (checkGroup) {
+        await this.api.changeGroupName(trimmedName, threadId);
+        this.groupNameCache.set(threadId, trimmedName);
+        console.log(`✅ [Zalo API] Đã đổi tên nhóm [${threadId}] thành: "${trimmedName}"`);
+      } else {
+        await this.api.changeFriendAlias(trimmedName, threadId);
+        this.groupNameCache.set(`user_${threadId}`, trimmedName);
+        console.log(`✅ [Zalo API] Đã đặt tên gợi nhớ cho bạn bè [${threadId}] thành: "${trimmedName}"`);
+      }
+      return { success: true };
+    } catch (err: any) {
+      console.error(`❌ Lỗi khi đổi tên cho thread ${threadId}:`, err);
+      return { success: false, error: err?.message || String(err) };
+    }
+  }
 }

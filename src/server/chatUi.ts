@@ -117,6 +117,37 @@ export function renderChatPage(threadId: string): string {
       font-weight: 700;
       color: var(--zalo-text-primary);
       line-height: 1.2;
+      cursor: pointer;
+      border-radius: 4px;
+      padding: 2px 4px;
+      margin-left: -4px;
+      transition: background 0.15s;
+    }
+
+    .header-name:hover {
+      background: #f1f5f9;
+      color: var(--zalo-blue);
+    }
+
+    .btn-quick-rename {
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      color: var(--zalo-text-secondary);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 26px;
+      height: 26px;
+      border-radius: 6px;
+      transition: all 0.2s ease;
+      padding: 0;
+      flex-shrink: 0;
+    }
+
+    .btn-quick-rename:hover {
+      background: var(--zalo-blue-light);
+      color: var(--zalo-blue);
     }
 
     .badge-candidate {
@@ -624,6 +655,219 @@ export function renderChatPage(threadId: string): string {
       margin-top: 14px;
       font-weight: 500;
     }
+
+    /* ==========================================================================
+       QUICK RENAME MODAL & TOAST STYLING (Chuẩn Zalo PC)
+       ========================================================================== */
+    .rename-modal-backdrop {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(8, 28, 54, 0.45);
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+      z-index: 1000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      animation: fadeIn 0.2s ease;
+    }
+
+    .rename-modal-box {
+      background: var(--zalo-white);
+      width: 100%;
+      max-width: 440px;
+      border-radius: 16px;
+      box-shadow: 0 20px 40px rgba(8, 28, 54, 0.15), 0 0 0 1px rgba(0, 0, 0, 0.05);
+      overflow: hidden;
+      animation: scaleUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .rename-modal-header {
+      padding: 18px 20px 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .rename-modal-title {
+      font-size: 17px;
+      font-weight: 700;
+      color: var(--zalo-text-primary);
+    }
+
+    .rename-modal-close {
+      background: transparent;
+      border: none;
+      font-size: 18px;
+      color: var(--zalo-text-secondary);
+      cursor: pointer;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.15s;
+    }
+
+    .rename-modal-close:hover {
+      background: #f1f5f9;
+      color: #0f172a;
+    }
+
+    .rename-modal-sub {
+      padding: 0 20px 16px;
+      font-size: 13px;
+      color: var(--zalo-text-secondary);
+      line-height: 1.4;
+    }
+
+    .rename-modal-body {
+      padding: 0 20px 20px;
+    }
+
+    .rename-input-wrap {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+
+    .rename-input {
+      width: 100%;
+      height: 44px;
+      padding: 0 40px 0 14px;
+      border: 1.5px solid #cbd5e1;
+      border-radius: 10px;
+      font-size: 14px;
+      font-family: inherit;
+      color: var(--zalo-text-primary);
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .rename-input:focus {
+      border-color: var(--zalo-blue);
+      box-shadow: 0 0 0 3px rgba(0, 104, 255, 0.15);
+    }
+
+    .rename-clear-btn {
+      position: absolute;
+      right: 12px;
+      background: #e2e8f0;
+      border: none;
+      color: #64748b;
+      border-radius: 50%;
+      width: 20px;
+      height: 20px;
+      font-size: 11px;
+      cursor: pointer;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s;
+    }
+
+    .rename-clear-btn:hover {
+      background: #cbd5e1;
+      color: #1e293b;
+    }
+
+    .rename-meta-row {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 6px;
+      font-size: 12px;
+      color: var(--zalo-text-muted);
+    }
+
+    .rename-modal-actions {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 10px;
+      margin-top: 20px;
+      padding-top: 14px;
+      border-top: 1px solid var(--zalo-border);
+    }
+
+    .btn-rename-cancel {
+      padding: 9px 18px;
+      background: #f1f5f9;
+      color: #334155;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .btn-rename-cancel:hover {
+      background: #e2e8f0;
+    }
+
+    .btn-rename-save {
+      padding: 9px 22px;
+      background: var(--zalo-blue);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .btn-rename-save:hover {
+      background: var(--zalo-blue-hover);
+    }
+
+    .btn-rename-save:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .zalo-toast {
+      position: fixed;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%) translateY(-30px);
+      background: #1e293b;
+      color: white;
+      padding: 10px 20px;
+      border-radius: 30px;
+      font-size: 13px;
+      font-weight: 600;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+      opacity: 0;
+      visibility: hidden;
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      z-index: 2000;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      pointer-events: none;
+    }
+
+    .zalo-toast.show {
+      opacity: 1;
+      visibility: visible;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    .zalo-toast.success {
+      background: #059669;
+    }
+
+    .zalo-toast.error {
+      background: #dc2626;
+    }
   </style>
 </head>
 <body>
@@ -637,7 +881,13 @@ export function renderChatPage(threadId: string): string {
       </div>
       <div class="header-info">
         <div class="header-title-row">
-          <span class="header-name" id="threadName">Đang tải...</span>
+          <span class="header-name" id="threadName" title="Nhấp đúp hoặc bấm bút chì để đổi tên">Đang tải...</span>
+          <button class="btn-quick-rename" id="btnRename" title="Đổi tên gợi nhớ / Đổi tên nhóm">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+            </svg>
+          </button>
           <span class="badge-candidate" id="candidateBadge" style="display:none;">Ứng viên</span>
         </div>
         <div class="header-sub">
@@ -718,6 +968,44 @@ export function renderChatPage(threadId: string): string {
     <div class="lightbox-caption" id="lightboxCaption"></div>
   </div>
 
+  <!-- 6. MODAL ĐỔI TÊN NHANH (CHUẨN ZALO) -->
+  <div class="rename-modal-backdrop" id="renameModal" style="display: none;">
+    <div class="rename-modal-box">
+      <div class="rename-modal-header">
+        <span class="rename-modal-title" id="renameModalTitle">Đổi tên gợi nhớ</span>
+        <button class="rename-modal-close" id="renameModalClose" type="button" title="Đóng">✕</button>
+      </div>
+      <div class="rename-modal-sub" id="renameModalSub">
+        Đặt tên gợi nhớ giúp bạn dễ dàng nhận diện và phân loại liên hệ này.
+      </div>
+      <form id="renameForm" class="rename-modal-body">
+        <div class="rename-input-wrap">
+          <input 
+            type="text" 
+            class="rename-input" 
+            id="renameInput" 
+            placeholder="Nhập tên mới..." 
+            maxlength="50" 
+            autocomplete="off"
+            required
+          />
+          <button class="rename-clear-btn" id="renameClearBtn" type="button" title="Xóa">✕</button>
+        </div>
+        <div class="rename-meta-row">
+          <span id="renameHint">Tối đa 50 ký tự</span>
+          <span id="renameCharCount">0/50</span>
+        </div>
+        <div class="rename-modal-actions">
+          <button type="button" class="btn-rename-cancel" id="btnRenameCancel">Hủy</button>
+          <button type="submit" class="btn-rename-save" id="btnRenameSave">Lưu</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 7. TOAST NOTIFICATION -->
+  <div class="zalo-toast" id="zaloToast"></div>
+
   <script>
     (function() {
       const threadId = "${threadId}";
@@ -732,7 +1020,22 @@ export function renderChatPage(threadId: string): string {
       const candidateBadge = document.getElementById("candidateBadge");
       const candidateDetails = document.getElementById("candidateDetails");
 
-      const threadModal = document.getElementById("threadModal");
+      const btnRename = document.getElementById("btnRename");
+      const renameModal = document.getElementById("renameModal");
+      const renameForm = document.getElementById("renameForm");
+      const renameInput = document.getElementById("renameInput");
+      const renameModalTitle = document.getElementById("renameModalTitle");
+      const renameModalSub = document.getElementById("renameModalSub");
+      const renameModalClose = document.getElementById("renameModalClose");
+      const btnRenameCancel = document.getElementById("btnRenameCancel");
+      const btnRenameSave = document.getElementById("btnRenameSave");
+      const renameClearBtn = document.getElementById("renameClearBtn");
+      const renameCharCount = document.getElementById("renameCharCount");
+      const zaloToast = document.getElementById("zaloToast");
+
+      let isCurrentGroup = false;
+
+      const renderedMessageIds = new Set();
       const threadModalForm = document.getElementById("threadModalForm");
       const threadModalInput = document.getElementById("threadModalInput");
 
@@ -1008,10 +1311,14 @@ export function renderChatPage(threadId: string): string {
             threadNameEl.textContent = data.threadName;
             messageInput.placeholder = "Nhập @, tin nhắn tới " + data.threadName + "...";
             avatarLetterEl.textContent = data.threadName.trim().charAt(0).toUpperCase();
+            document.title = data.threadName + " - Trò Chuyện Trực Tiếp";
           }
 
           if (data.isGroup) {
+            isCurrentGroup = true;
             document.getElementById("threadAvatar").classList.add("is-group");
+          } else {
+            isCurrentGroup = false;
           }
 
           threadSubInfoEl.textContent = threadId;
@@ -1244,6 +1551,17 @@ export function renderChatPage(threadId: string): string {
           try {
             const newMsg = JSON.parse(event.data);
             if (!newMsg) return;
+
+            // Xử lý sự kiện đổi tên thread thời gian thực
+            if (newMsg.type === "thread_renamed" && newMsg.newName) {
+              threadNameEl.textContent = newMsg.newName;
+              messageInput.placeholder = "Nhập @, tin nhắn tới " + newMsg.newName + "...";
+              avatarLetterEl.textContent = newMsg.newName.trim().charAt(0).toUpperCase();
+              document.title = newMsg.newName + " - Trò Chuyện Trực Tiếp";
+              showToast("✓ Đã cập nhật tên: " + newMsg.newName, "success");
+              return;
+            }
+
             if (newMsg.id && renderedMessageIds.has(newMsg.id)) {
               return;
             }
@@ -1310,6 +1628,123 @@ export function renderChatPage(threadId: string): string {
             console.error("Lỗi khi xử lý SSE:", err);
           }
         };
+      }
+
+      // ==========================================================================
+      // XỬ LÝ ĐỔI TÊN NHANH (QUICK RENAME CHUẨN ZALO)
+      // ==========================================================================
+      function showToast(text, type = "success") {
+        if (!zaloToast) return;
+        zaloToast.className = "zalo-toast " + type;
+        zaloToast.textContent = text;
+        zaloToast.classList.add("show");
+        setTimeout(() => {
+          zaloToast.classList.remove("show");
+        }, 3000);
+      }
+
+      function updateCharCount() {
+        const len = renameInput.value.length;
+        renameCharCount.textContent = len + "/50";
+        renameClearBtn.style.display = len > 0 ? "flex" : "none";
+      }
+
+      function openRenameModal() {
+        if (!threadId) return;
+        const currentName = (threadNameEl.textContent || "").trim();
+        const cleanName =
+          currentName === "Đang tải..." ||
+          currentName.startsWith("Người dùng ") ||
+          currentName.startsWith("Nhóm ")
+            ? ""
+            : currentName;
+
+        renameModalTitle.textContent = isCurrentGroup ? "Đổi tên nhóm" : "Đổi tên gợi nhớ";
+        renameModalSub.textContent = isCurrentGroup
+          ? "Tên nhóm mới sẽ hiển thị cho tất cả thành viên trong nhóm chat."
+          : "Đặt tên gợi nhớ giúp bạn dễ dàng nhận diện và phân loại liên hệ này.";
+
+        renameInput.value = cleanName;
+        updateCharCount();
+        renameModal.style.display = "flex";
+        setTimeout(() => {
+          renameInput.focus();
+          renameInput.select();
+        }, 50);
+      }
+
+      function closeRenameModal() {
+        renameModal.style.display = "none";
+        renameInput.value = "";
+      }
+
+      if (btnRename) btnRename.addEventListener("click", openRenameModal);
+      if (threadNameEl) threadNameEl.addEventListener("dblclick", openRenameModal);
+      if (renameModalClose) renameModalClose.addEventListener("click", closeRenameModal);
+      if (btnRenameCancel) btnRenameCancel.addEventListener("click", closeRenameModal);
+
+      if (renameClearBtn) {
+        renameClearBtn.addEventListener("click", function() {
+          renameInput.value = "";
+          updateCharCount();
+          renameInput.focus();
+        });
+      }
+
+      if (renameInput) {
+        renameInput.addEventListener("input", updateCharCount);
+      }
+
+      if (renameModal) {
+        renameModal.addEventListener("click", function(e) {
+          if (e.target === renameModal) closeRenameModal();
+        });
+      }
+
+      window.addEventListener("keydown", function(e) {
+        if (e.key === "Escape" && renameModal && renameModal.style.display === "flex") {
+          closeRenameModal();
+        }
+      });
+
+      if (renameForm) {
+        renameForm.addEventListener("submit", async function(e) {
+          e.preventDefault();
+          const newName = renameInput.value.trim();
+          if (!newName) return;
+
+          btnRenameSave.disabled = true;
+          btnRenameSave.textContent = "Đang lưu...";
+
+          try {
+            const res = await fetch("/api/chat/rename", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                threadId: threadId,
+                newName: newName,
+                isGroup: isCurrentGroup,
+              }),
+            });
+            const data = await res.json();
+            if (data.success) {
+              threadNameEl.textContent = newName;
+              messageInput.placeholder = "Nhập @, tin nhắn tới " + newName + "...";
+              avatarLetterEl.textContent = newName.trim().charAt(0).toUpperCase();
+              document.title = newName + " - Trò Chuyện Trực Tiếp";
+              showToast("✓ Đã đổi tên thành công!", "success");
+              closeRenameModal();
+            } else {
+              showToast("⚠️ " + (data.error || "Không thể đổi tên"), "error");
+            }
+          } catch (err) {
+            console.error("Lỗi khi đổi tên:", err);
+            showToast("⚠️ Lỗi kết nối máy chủ", "error");
+          } finally {
+            btnRenameSave.disabled = false;
+            btnRenameSave.textContent = "Lưu";
+          }
+        });
       }
 
       // Khởi động
