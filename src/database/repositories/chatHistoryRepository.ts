@@ -7,7 +7,7 @@ export interface ChatMessageRecord {
   id?: string;
   threadId: string;
   senderId: string;
-  senderName: string;
+  senderName?: string;
   role: "user" | "model";
   content: string;
   hasImage?: boolean;
@@ -71,7 +71,7 @@ export class ChatHistoryRepository {
       id,
       thread_id: record.threadId,
       sender_id: record.senderId,
-      sender_name: record.senderName,
+      sender_name: record.senderName || "",
       role: record.role,
       content: record.content,
       has_image: record.hasImage ? 1 : 0,

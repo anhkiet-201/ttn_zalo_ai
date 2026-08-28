@@ -382,14 +382,22 @@ export class MessageHandler {
       console.log(`   ↪️ Đang Reply tin nhắn trước: "${parsedMessage.quoteText}"`);
     }
 
-    // Bỏ qua nếu senderName bắt đầu bằng -M hoặc -m (tài khoản nội bộ / quản trị)
+    // Bỏ qua nếu senderName hoặc tên Zalo bắt đầu bằng -M hoặc -m (chế độ Thủ công Manual / tài khoản nội bộ)
     const senderNameTrimmed = (parsedMessage.senderName || "").trim();
-    if (
+    let isManual =
       senderNameTrimmed.startsWith("-M") ||
-      senderNameTrimmed.startsWith("-m")
-    ) {
+      senderNameTrimmed.startsWith("-m");
+
+    if (!isManual) {
+      const liveName = await this.zaloService.getUserName(parsedMessage.threadId);
+      if (liveName && (liveName.startsWith("-M") || liveName.startsWith("-m"))) {
+        isManual = true;
+      }
+    }
+
+    if (isManual) {
       console.log(
-        `🚫 [Cá Nhân-Skip] Bỏ qua tin nhắn từ tài khoản nội bộ [${senderInfo}] (tên bắt đầu bằng -M/-m)`
+        `🛑 [Chế độ Thủ Công (-M)] Bỏ qua phản hồi AI cho [${senderInfo}] (tên bắt đầu bằng -M/-m)`
       );
       return;
     }
@@ -409,7 +417,7 @@ export class MessageHandler {
 
   /**
    * Xử lý tin nhắn NHÓM CHAT (Group Message)
-   * Bỏ qua: ảnh, sticker (text rỗng), từ khóa nội bộ.
+   * Bỏ qua: ảnh, sticker (text rỗng), từ khóa nội bộ, nhóm ở chế độ Manual (-M).
    * Chỉ xử lý văn bản thuần → enqueue vào GroupMessageBatcher để phân tích RAG.
    */
   private async handleGroupMessage(
@@ -437,6 +445,14 @@ export class MessageHandler {
 
     // 4. Lấy tên nhóm từ ZaloService (có cache)
     const groupName = await this.zaloService.getGroupName(groupInfo);
+
+    // Bỏ qua nếu nhóm đang ở chế độ Manual (-M)
+    if (groupName.startsWith("-M") || groupName.startsWith("-m")) {
+      console.log(
+        `🛑 [Nhóm Thủ Công (-M)] Bỏ qua phân tích AI cho Nhóm [${groupName}] (bắt đầu bằng -M/-m)`
+      );
+      return;
+    }
 
     console.log(
       `\n📥 [NHÓM CHAT 👥] Tại Nhóm: "${groupName}" [${groupInfo}] | Thành viên: ${senderInfo}`

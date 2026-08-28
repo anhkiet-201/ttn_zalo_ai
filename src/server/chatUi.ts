@@ -868,6 +868,138 @@ export function renderChatPage(threadId: string): string {
     .zalo-toast.error {
       background: #dc2626;
     }
+
+    /* ==========================================================================
+       AI / MANUAL MODE SWITCH & BANNER STYLING
+       ========================================================================== */
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .mode-switch-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      outline: none;
+      user-select: none;
+    }
+
+    .mode-switch-btn.is-ai {
+      background: #ecfdf5;
+      color: #065f46;
+      border: 1.5px solid #a7f3d0;
+      box-shadow: 0 1px 3px rgba(16, 185, 129, 0.12);
+    }
+    .mode-switch-btn.is-ai:hover {
+      background: #d1fae5;
+      border-color: #6ee7b7;
+      transform: translateY(-1px);
+    }
+
+    .mode-switch-btn.is-manual {
+      background: #fffbeb;
+      color: #92400e;
+      border: 1.5px solid #fde68a;
+      box-shadow: 0 1px 3px rgba(245, 158, 11, 0.12);
+    }
+    .mode-switch-btn.is-manual:hover {
+      background: #fef3c7;
+      border-color: #fcd34d;
+      transform: translateY(-1px);
+    }
+
+    .mode-pulse-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      transition: background-color 0.2s;
+    }
+
+    .mode-switch-btn.is-ai .mode-pulse-dot {
+      background: #10b981;
+      box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.25);
+    }
+
+    .mode-switch-btn.is-manual .mode-pulse-dot {
+      background: #f59e0b;
+      box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.25);
+    }
+
+    /* AI Active Banner (Ẩn thanh input khi ở chế độ AI) */
+    .ai-active-banner {
+      background: var(--zalo-white);
+      border-top: 1px solid var(--zalo-border);
+      padding: 14px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      z-index: 10;
+      box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.02);
+    }
+
+    .ai-banner-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .ai-banner-icon-box {
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      background: #ecfdf5;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      color: #059669;
+      flex-shrink: 0;
+      border: 1px solid #a7f3d0;
+    }
+
+    .ai-banner-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--zalo-text-primary);
+    }
+
+    .ai-banner-sub {
+      font-size: 12px;
+      color: var(--zalo-text-secondary);
+      margin-top: 2px;
+    }
+
+    .btn-activate-manual {
+      background: #f8fafc;
+      border: 1.5px solid #cbd5e1;
+      color: #334155;
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+      white-space: nowrap;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .btn-activate-manual:hover {
+      background: #fffbeb;
+      border-color: #fde68a;
+      color: #92400e;
+    }
   </style>
 </head>
 <body>
@@ -896,6 +1028,15 @@ export function renderChatPage(threadId: string): string {
         </div>
       </div>
     </div>
+
+    <!-- Header Right: Switch Toggle giữa AI & Thủ công (Manual) -->
+    <div class="header-right">
+      <button class="mode-switch-btn is-ai" id="btnToggleMode" title="Bấm để chuyển đổi giữa Chế độ AI Tự động và Thủ công (Manual)">
+        <span class="mode-pulse-dot"></span>
+        <span id="modeIcon">🤖</span>
+        <span id="modeText">AI Tự động</span>
+      </button>
+    </div>
   </header>
 
   <!-- 2. CHAT TIMELINE -->
@@ -904,6 +1045,20 @@ export function renderChatPage(threadId: string): string {
       <span class="timeline-date-pill" id="todayPill">Hôm nay</span>
     </div>
   </main>
+
+  <!-- 2.5. AI ACTIVE BANNER (Hiển thị khi ở chế độ AI, ẩn thanh input) -->
+  <div class="ai-active-banner" id="aiActiveBanner" style="display: none;">
+    <div class="ai-banner-left">
+      <div class="ai-banner-icon-box">🤖</div>
+      <div class="ai-banner-info">
+        <div class="ai-banner-title">Chế độ AI Tự động đang phản hồi</div>
+        <div class="ai-banner-sub">Hệ thống đang tự động tư vấn ứng viên. Chuyển sang Thủ công để trực tiếp nhắn tin.</div>
+      </div>
+    </div>
+    <button class="btn-activate-manual" id="btnActivateManual" type="button">
+      <span>👤 Chuyển sang Thủ công</span>
+    </button>
+  </div>
 
   <!-- 3. INPUT AREA -->
   <footer class="zalo-input-wrapper">
@@ -1033,7 +1188,15 @@ export function renderChatPage(threadId: string): string {
       const renameCharCount = document.getElementById("renameCharCount");
       const zaloToast = document.getElementById("zaloToast");
 
+      const btnToggleMode = document.getElementById("btnToggleMode");
+      const modeIcon = document.getElementById("modeIcon");
+      const modeText = document.getElementById("modeText");
+      const aiActiveBanner = document.getElementById("aiActiveBanner");
+      const btnActivateManual = document.getElementById("btnActivateManual");
+      const inputWrapper = document.querySelector(".zalo-input-wrapper");
+
       let isCurrentGroup = false;
+      let isManualMode = false;
 
       const renderedMessageIds = new Set();
       const threadModalForm = document.getElementById("threadModalForm");
@@ -1044,7 +1207,79 @@ export function renderChatPage(threadId: string): string {
       const lightboxCaption = document.getElementById("lightboxCaption");
       const lightboxClose = document.getElementById("lightboxClose");
 
-      const renderedMessageIds = new Set();
+      // ==========================================================================
+      // QUẢN LÝ CHẾ ĐỘ AI / THỦ CÔNG (MANUAL MODE -M)
+      // ==========================================================================
+      function setMode(isManual, showNotice = false) {
+        isManualMode = isManual;
+
+        if (isManual) {
+          if (btnToggleMode) btnToggleMode.className = "mode-switch-btn is-manual";
+          if (modeIcon) modeIcon.textContent = "👤";
+          if (modeText) modeText.textContent = "Thủ công (-M)";
+          if (inputWrapper) inputWrapper.style.display = "flex";
+          if (aiActiveBanner) aiActiveBanner.style.display = "none";
+          if (showNotice) showToast("👤 Đã chuyển sang Thủ công (-M). Hiện thanh nhập tin nhắn & nút gửi ảnh.", "success");
+        } else {
+          if (btnToggleMode) btnToggleMode.className = "mode-switch-btn is-ai";
+          if (modeIcon) modeIcon.textContent = "🤖";
+          if (modeText) modeText.textContent = "AI Tự động";
+          if (inputWrapper) inputWrapper.style.display = "none";
+          if (aiActiveBanner) aiActiveBanner.style.display = "flex";
+          if (showNotice) showToast("🤖 Đã bật AI Tự động. Tự động ẩn thanh nhập tin nhắn.", "success");
+        }
+      }
+
+      async function toggleAIMode(targetMode) {
+        if (!threadId) return;
+        if (btnToggleMode) btnToggleMode.disabled = true;
+        if (btnActivateManual) btnActivateManual.disabled = true;
+
+        try {
+          const res = await fetch("/api/chat/toggle-mode", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              threadId: threadId,
+              targetMode: targetMode || (isManualMode ? "ai" : "manual"),
+              isGroup: isCurrentGroup,
+            }),
+          });
+          const data = await res.json();
+          if (data.success) {
+            const isManual = data.mode === "manual";
+            setMode(isManual, true);
+            if (data.newName) {
+              threadNameEl.textContent = data.newName;
+              messageInput.placeholder = "Nhập @, tin nhắn tới " + data.newName + "...";
+              avatarLetterEl.textContent = data.newName.trim().charAt(0).toUpperCase();
+              document.title = data.newName + " - Trò Chuyện Trực Tiếp";
+
+              if (!isCurrentGroup) {
+                const incomingNames = chatContainer.querySelectorAll(".message-row.incoming .msg-sender-name");
+                incomingNames.forEach((el) => {
+                  el.textContent = data.newName;
+                });
+              }
+            }
+          } else {
+            showToast("⚠️ " + (data.error || "Không thể chuyển chế độ"), "error");
+          }
+        } catch (err) {
+          console.error("Lỗi toggle mode:", err);
+          showToast("⚠️ Lỗi kết nối khi chuyển chế độ", "error");
+        } finally {
+          if (btnToggleMode) btnToggleMode.disabled = false;
+          if (btnActivateManual) btnActivateManual.disabled = false;
+        }
+      }
+
+      if (btnToggleMode) {
+        btnToggleMode.addEventListener("click", () => toggleAIMode());
+      }
+      if (btnActivateManual) {
+        btnActivateManual.addEventListener("click", () => toggleAIMode("manual"));
+      }
 
       // Xử lý submit Popup nhập Thread ID
       if (threadModalForm) {
@@ -1312,6 +1547,9 @@ export function renderChatPage(threadId: string): string {
             messageInput.placeholder = "Nhập @, tin nhắn tới " + data.threadName + "...";
             avatarLetterEl.textContent = data.threadName.trim().charAt(0).toUpperCase();
             document.title = data.threadName + " - Trò Chuyện Trực Tiếp";
+
+            const isManual = /^-M(\s|_|-|$)/i.test(data.threadName);
+            setMode(isManual, false);
           }
 
           if (data.isGroup) {
@@ -1558,7 +1796,18 @@ export function renderChatPage(threadId: string): string {
               messageInput.placeholder = "Nhập @, tin nhắn tới " + newMsg.newName + "...";
               avatarLetterEl.textContent = newMsg.newName.trim().charAt(0).toUpperCase();
               document.title = newMsg.newName + " - Trò Chuyện Trực Tiếp";
-              showToast("✓ Đã cập nhật tên: " + newMsg.newName, "success");
+
+              const isManual = /^-M(\s|_|-|$)/i.test(newMsg.newName);
+              setMode(isManual, false);
+
+              showToast("✓ Đã cập nhật: " + newMsg.newName, "success");
+
+              if (!isCurrentGroup) {
+                const incomingNames = chatContainer.querySelectorAll(".message-row.incoming .msg-sender-name");
+                incomingNames.forEach((el) => {
+                  el.textContent = newMsg.newName;
+                });
+              }
               return;
             }
 
@@ -1732,6 +1981,16 @@ export function renderChatPage(threadId: string): string {
               messageInput.placeholder = "Nhập @, tin nhắn tới " + newName + "...";
               avatarLetterEl.textContent = newName.trim().charAt(0).toUpperCase();
               document.title = newName + " - Trò Chuyện Trực Tiếp";
+
+              const isManual = /^-M(\s|_|-|$)/i.test(newName);
+              setMode(isManual, false);
+
+              if (!isCurrentGroup) {
+                const incomingNames = chatContainer.querySelectorAll(".message-row.incoming .msg-sender-name");
+                incomingNames.forEach((el) => {
+                  el.textContent = newName;
+                });
+              }
               showToast("✓ Đã đổi tên thành công!", "success");
               closeRenameModal();
             } else {

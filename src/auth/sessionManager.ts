@@ -218,6 +218,26 @@ export function startQrWebServer(port: number = config.qrPort): void {
           threadName = isGroup ? `Nhóm ${threadId}` : `Người dùng ${threadId}`;
         }
 
+        const ownId = loggedInAccount?.id || "642903586588799919";
+        const enrichedMessages = messages.map((m) => {
+          if (m.role === "model" || m.senderId === ownId || m.senderId === "admin") {
+            return {
+              ...m,
+              senderName: "Admin (Tôi)",
+            };
+          }
+          if (!isGroup) {
+            return {
+              ...m,
+              senderName: threadName || m.senderName || "Ứng viên",
+            };
+          }
+          return {
+            ...m,
+            senderName: m.senderName || `Thành viên (${m.senderId})`,
+          };
+        });
+
         res.writeHead(200, {
           "Content-Type": "application/json; charset=utf-8",
           "Cache-Control": "no-cache, no-store, must-revalidate",
@@ -229,8 +249,8 @@ export function startQrWebServer(port: number = config.qrPort): void {
             threadName,
             isGroup,
             candidate,
-            messages,
-            history: messages,
+            messages: enrichedMessages,
+            history: enrichedMessages,
           })
         );
       } catch (err) {
@@ -474,7 +494,116 @@ export function startQrWebServer(port: number = config.qrPort): void {
       return;
     }
 
-    // 6. API GET: Trả về trạng thái phiên đăng nhập & mã QR
+    // 6. API POST: Chuyển đổi nhanh chế độ AI / Manual (Thủ công) với tiền tố -M
+    if (req.method === "POST" && pathname === "/api/chat/toggle-mode") {
+      let body = "";
+      req.on("data", (chunk) => {
+        body += chunk;
+      });
+      req.on("end", async () => {
+        try {
+          const payload = JSON.parse(body || "{}");
+          const { threadId, targetMode, isGroup } = payload;
+
+          if (!threadId) {
+            res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" });
+            res.end(JSON.stringify({ success: false, error: "Thiếu tham số threadId" }));
+            return;
+          }
+
+          let currentName = "";
+          let checkGroup = isGroup;
+          if (activeZaloService) {
+            if (checkGroup === undefined) {
+              checkGroup = await activeZaloService.isGroupThread(threadId);
+            }
+            currentName = checkGroup
+              ? await activeZaloService.getGroupName(threadId)
+              : await activeZaloService.getUserName(threadId);
+          }
+
+          if (!currentName || currentName.startsWith("Người dùng ") || currentName.startsWith("Nhóm ")) {
+            const candidateRepo = new CandidateRepository();
+            const candidate = candidateRepo.getLatestCandidate(threadId);
+            if (candidate?.fullName || candidate?.senderName) {
+              currentName = candidate.fullName || candidate.senderName;
+            }
+          }
+
+          if (!currentName) {
+            currentName = checkGroup ? `Nhóm_${threadId.slice(-4)}` : `Khách_${threadId.slice(-4)}`;
+          }
+
+          let newName = currentName.trim();
+          let newMode: "ai" | "manual" = targetMode;
+
+          if (targetMode === "manual") {
+            if (!/^-M(\s|_|-|$)/i.test(newName)) {
+              newName = `-M ${newName}`;
+            }
+            newMode = "manual";
+          } else if (targetMode === "ai") {
+            newName = newName.replace(/^-M[\s\-_]*/i, "").trim();
+            if (!newName) {
+              newName = checkGroup ? `Nhóm ${threadId}` : `Khách ${threadId}`;
+            }
+            newMode = "ai";
+          } else {
+            // Tự động đảo mode nếu không truyền targetMode
+            if (/^-M(\s|_|-|$)/i.test(newName)) {
+              newName = newName.replace(/^-M[\s\-_]*/i, "").trim();
+              newMode = "ai";
+            } else {
+              newName = `-M ${newName}`;
+              newMode = "manual";
+            }
+          }
+
+          let zaloResult: { success: boolean; error?: string } = { success: true };
+          if (activeZaloService) {
+            zaloResult = await activeZaloService.changeThreadName(threadId, newName, checkGroup);
+          }
+
+          // Cập nhật UserContext
+          try {
+            const userContextMgr = UserContextManager.getInstance();
+            const ctx = userContextMgr.getContext(threadId, threadId, newName);
+            if (ctx) {
+              ctx.senderName = newName;
+              userContextMgr.saveAndSync(ctx);
+            }
+          } catch {}
+
+          // Phát sự kiện Realtime SSE
+          chatBroadcaster.broadcastThreadRenamed(threadId, newName);
+
+          console.log(
+            `🔄 [Chuyển chế độ] Thread [${threadId}] -> Mode: ${newMode.toUpperCase()} | Tên mới: "${newName}" (Zalo: ${
+              zaloResult.success ? "OK" : "Lỗi: " + zaloResult.error
+            })`
+          );
+
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(
+            JSON.stringify({
+              success: true,
+              threadId,
+              mode: newMode,
+              newName,
+              zaloSynced: zaloResult.success,
+              zaloError: zaloResult.error || undefined,
+            })
+          );
+        } catch (err: any) {
+          console.error("❌ [API Toggle Mode] Lỗi khi chuyển chế độ:", err);
+          res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ success: false, error: err?.message || String(err) }));
+        }
+      });
+      return;
+    }
+
+    // 7. API GET: Trả về trạng thái phiên đăng nhập & mã QR
     if (pathname === "/api/status" || pathname === "/api/qr") {
       res.writeHead(200, {
         "Content-Type": "application/json; charset=utf-8",

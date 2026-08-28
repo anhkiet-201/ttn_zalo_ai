@@ -531,11 +531,26 @@ LƯU Ý: Chỉ trả về JSON thuần túy, không bao bọc bằng markdown, k
 
       const history: ChatContent[] = dbRecords.map((rec) => {
         const timeStr = this.formatTimestamp(rec.timestamp);
+        let resolvedName = rec.senderName || "";
+        if (rec.role === "user") {
+          if (!isGroup) {
+            // Trong luồng 1-1: luôn dùng tên người gửi hiện hành mới nhất
+            resolvedName = senderName || resolvedName || "Ứng viên";
+          } else {
+            // Trong nhóm: nếu cùng senderId với tin nhắn hiện tại -> dùng senderName hiện hành
+            if (rec.senderId === senderId && senderName) {
+              resolvedName = senderName;
+            } else if (!resolvedName) {
+              resolvedName = `Thành viên ${rec.senderId}`;
+            }
+          }
+        }
+
         const prefix =
           rec.role === "user"
             ? isGroup
-              ? `[${timeStr}] [Thành viên: ${rec.senderName}]`
-              : `[${timeStr}] [${rec.senderName}]`
+              ? `[${timeStr}] [Thành viên: ${resolvedName}]`
+              : `[${timeStr}] [${resolvedName}]`
             : `[${timeStr}] [Bot]`;
         return {
           role: rec.role,

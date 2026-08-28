@@ -56,7 +56,7 @@ export class SQLiteDatabase {
         id TEXT PRIMARY KEY,
         thread_id TEXT NOT NULL,
         sender_id TEXT NOT NULL,
-        sender_name TEXT NOT NULL,
+        sender_name TEXT DEFAULT '',
         role TEXT NOT NULL CHECK(role IN ('user', 'model')),
         content TEXT NOT NULL,
         has_image INTEGER DEFAULT 0,
