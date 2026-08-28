@@ -3,6 +3,8 @@ import { config } from "../../config/index.js";
 import { chatBroadcaster } from "../../server/chatBroadcaster.js";
 import crypto from "node:crypto";
 
+export type ThreadFilter = "all" | "personal" | "group" | "manual";
+
 export interface ChatMessageRecord {
   id?: string;
   threadId: string;
@@ -16,6 +18,7 @@ export interface ChatMessageRecord {
   quoteText?: string;
   quoteSenderName?: string;
   quoteSenderId?: string;
+  isGroup?: boolean;
   timestamp: number;
 }
 
@@ -27,6 +30,8 @@ export interface ThreadListItem {
   lastHasImage: boolean;
   lastTimestamp: number;
   lastRole: "user" | "model";
+  isGroup: boolean;
+  isManual?: boolean;
   candidateName?: string;
   targetCompany?: string;
   phoneNumber?: string;
@@ -50,21 +55,21 @@ export class ChatHistoryRepository {
     try {
       let existing: any = null;
       if (record.hasImage) {
-        // Đối với tin nhắn có ảnh, chống trùng lặp trong vòng 15 giây
+        // Đối với tin nhắn có ảnh, chống trùng lặp trong vòng 30 giây
         const checkImageStmt = this.db.connection.prepare(`
           SELECT id FROM chat_messages 
-          WHERE thread_id = ? AND role = ? AND has_image = 1 AND abs(timestamp - ?) < 15000 
+          WHERE thread_id = ? AND role = ? AND has_image = 1 AND abs(timestamp - ?) < 30000 
           LIMIT 1
         `);
         existing = checkImageStmt.get(record.threadId, record.role, record.timestamp);
       } else if (record.content && record.content.trim()) {
-        // Đối với tin nhắn chữ, chống trùng lặp cùng nội dung trong vòng 10 giây
+        // Đối với tin nhắn chữ, chống trùng lặp cùng nội dung trong vòng 30 giây
         const checkTextStmt = this.db.connection.prepare(`
           SELECT id FROM chat_messages 
-          WHERE thread_id = ? AND role = ? AND content = ? AND abs(timestamp - ?) < 10000 
+          WHERE thread_id = ? AND role = ? AND TRIM(content) = ? AND abs(timestamp - ?) < 30000 
           LIMIT 1
         `);
-        existing = checkTextStmt.get(record.threadId, record.role, record.content, record.timestamp);
+        existing = checkTextStmt.get(record.threadId, record.role, record.content.trim(), record.timestamp);
       }
 
       if (existing) {
@@ -79,10 +84,10 @@ export class ChatHistoryRepository {
     const stmt = this.db.connection.prepare(`
       INSERT INTO chat_messages (
         id, thread_id, sender_id, sender_name, role, content, has_image, image_urls,
-        has_quote, quote_text, quote_sender_name, quote_sender_id, timestamp
+        has_quote, quote_text, quote_sender_name, quote_sender_id, is_group, timestamp
       ) VALUES (
         @id, @thread_id, @sender_id, @sender_name, @role, @content, @has_image, @image_urls,
-        @has_quote, @quote_text, @quote_sender_name, @quote_sender_id, @timestamp
+        @has_quote, @quote_text, @quote_sender_name, @quote_sender_id, @is_group, @timestamp
       )
     `);
 
@@ -99,10 +104,10 @@ export class ChatHistoryRepository {
       quote_text: record.quoteText || null,
       quote_sender_name: record.quoteSenderName || null,
       quote_sender_id: record.quoteSenderId || null,
+      is_group: record.isGroup ? 1 : 0,
       timestamp: record.timestamp,
     });
 
-    // Phát sự kiện Realtime tới tất cả các client đang kết nối SSE
     try {
       chatBroadcaster.broadcast({
         ...record,
@@ -110,6 +115,22 @@ export class ChatHistoryRepository {
       });
     } catch (err) {
       console.warn("⚠️ Lỗi khi phát sự kiện Realtime tin nhắn:", err);
+    }
+  }
+
+  /**
+   * Cập nhật cờ is_group cho toàn bộ tin nhắn thuộc một thread
+   */
+  public updateThreadIsGroup(threadId: string, isGroup: boolean): void {
+    try {
+      const stmt = this.db.connection.prepare(`
+        UPDATE chat_messages 
+        SET is_group = ? 
+        WHERE thread_id = ? AND is_group != ?
+      `);
+      stmt.run(isGroup ? 1 : 0, threadId, isGroup ? 1 : 0);
+    } catch (err) {
+      console.warn(`⚠️ Không thể cập nhật is_group cho thread ${threadId}:`, err);
     }
   }
 
@@ -126,7 +147,7 @@ export class ChatHistoryRepository {
         role, content, has_image as hasImage, image_urls as imageUrls,
         has_quote as hasQuote, quote_text as quoteText,
         quote_sender_name as quoteSenderName, quote_sender_id as quoteSenderId,
-        timestamp
+        is_group as isGroup, timestamp
       FROM chat_messages
       WHERE thread_id = ?
       ORDER BY timestamp DESC
@@ -146,6 +167,7 @@ export class ChatHistoryRepository {
       quoteText: string | null;
       quoteSenderName: string | null;
       quoteSenderId: string | null;
+      isGroup: number;
       timestamp: number;
     }>;
 
@@ -166,7 +188,7 @@ export class ChatHistoryRepository {
         role, content, has_image as hasImage, image_urls as imageUrls,
         has_quote as hasQuote, quote_text as quoteText,
         quote_sender_name as quoteSenderName, quote_sender_id as quoteSenderId,
-        timestamp
+        is_group as isGroup, timestamp
       FROM chat_messages
       WHERE thread_id = ? AND timestamp < ?
       ORDER BY timestamp DESC
@@ -186,6 +208,7 @@ export class ChatHistoryRepository {
       quoteText: string | null;
       quoteSenderName: string | null;
       quoteSenderId: string | null;
+      isGroup: number;
       timestamp: number;
     }>;
 
@@ -194,21 +217,25 @@ export class ChatHistoryRepository {
 
   /**
    * Lấy danh sách các cuộc trò chuyện (Threads) phân trang có tin nhắn mới nhất
+   * Hỗ trợ lọc theo tab: "all" | "personal" | "group" | "manual"
    */
   public getThreadList(
     limit: number = 20,
     offset: number = 0,
-    search?: string
+    search?: string,
+    filter: ThreadFilter = "all"
   ): ThreadListItem[] {
     let query = `
       SELECT 
         m.thread_id as threadId,
-        m.sender_name as senderName,
+        COALESCE(tm.custom_name, c.full_name, m.sender_name) as senderName,
         m.sender_id as senderId,
         m.content as lastContent,
         m.has_image as lastHasImage,
         m.timestamp as lastTimestamp,
         m.role as lastRole,
+        COALESCE(tm.is_group, m.is_group) as isGroup,
+        COALESCE(tm.is_manual, CASE WHEN m.sender_name LIKE '-M%' OR m.sender_name LIKE '-m%' OR c.full_name LIKE '-M%' OR c.full_name LIKE '-m%' THEN 1 ELSE 0 END) as isManual,
         c.full_name as candidateName,
         c.target_company as targetCompany,
         c.phone_number as phoneNumber
@@ -219,15 +246,19 @@ export class ChatHistoryRepository {
         GROUP BY thread_id
       ) latest ON m.thread_id = latest.thread_id AND m.timestamp = latest.max_ts
       LEFT JOIN candidates c ON m.thread_id = c.thread_id
+      LEFT JOIN thread_metadata tm ON m.thread_id = tm.thread_id
+      WHERE 1=1
     `;
 
     const params: any[] = [];
+
+    // 1. Điều kiện tìm kiếm (Search)
     if (search && search.trim()) {
       const searchTerm = `%${search.trim().toLowerCase()}%`;
       query += `
-        WHERE (
+        AND (
           LOWER(m.thread_id) LIKE ? OR
-          LOWER(m.sender_name) LIKE ? OR
+          LOWER(COALESCE(tm.custom_name, m.sender_name)) LIKE ? OR
           LOWER(m.content) LIKE ? OR
           LOWER(COALESCE(c.full_name, '')) LIKE ? OR
           LOWER(COALESCE(c.phone_number, '')) LIKE ? OR
@@ -235,6 +266,32 @@ export class ChatHistoryRepository {
         )
       `;
       params.push(searchTerm, searchTerm, searchTerm, searchTerm, searchTerm, searchTerm);
+    }
+
+    // 2. Điều kiện lọc theo Tab Filter (all, personal, group, manual)
+    if (filter === "personal") {
+      query += ` 
+        AND COALESCE(tm.is_group, m.is_group) = 0 
+        AND COALESCE(tm.is_manual, 0) = 0
+        AND (m.sender_name NOT LIKE '-M%' AND m.sender_name NOT LIKE '-m%')
+        AND (COALESCE(tm.custom_name, '') NOT LIKE '-M%' AND COALESCE(tm.custom_name, '') NOT LIKE '-m%')
+      `;
+    } else if (filter === "group") {
+      query += ` 
+        AND COALESCE(tm.is_group, m.is_group) = 1 
+        AND COALESCE(tm.is_manual, 0) = 0
+        AND (m.sender_name NOT LIKE '-M%' AND m.sender_name NOT LIKE '-m%')
+        AND (COALESCE(tm.custom_name, '') NOT LIKE '-M%' AND COALESCE(tm.custom_name, '') NOT LIKE '-m%')
+      `;
+    } else if (filter === "manual") {
+      query += ` 
+        AND (
+          COALESCE(tm.is_manual, 0) = 1 OR
+          m.sender_name LIKE '-M%' OR m.sender_name LIKE '-m%' OR
+          c.full_name LIKE '-M%' OR c.full_name LIKE '-m%' OR
+          COALESCE(tm.custom_name, '') LIKE '-M%' OR COALESCE(tm.custom_name, '') LIKE '-m%'
+        )
+      `;
     }
 
     query += `
@@ -253,6 +310,8 @@ export class ChatHistoryRepository {
       lastHasImage: number;
       lastTimestamp: number;
       lastRole: "user" | "model";
+      isGroup: number;
+      isManual: number;
       candidateName?: string;
       targetCompany?: string;
       phoneNumber?: string;
@@ -266,6 +325,8 @@ export class ChatHistoryRepository {
       lastHasImage: Boolean(r.lastHasImage),
       lastTimestamp: r.lastTimestamp,
       lastRole: r.lastRole,
+      isGroup: Boolean(r.isGroup),
+      isManual: Boolean(r.isManual),
       candidateName: r.candidateName || undefined,
       targetCompany: r.targetCompany || undefined,
       phoneNumber: r.phoneNumber || undefined,
@@ -273,21 +334,23 @@ export class ChatHistoryRepository {
   }
 
   /**
-   * Đếm tổng số lượng cuộc trò chuyện duy nhất
+   * Đếm tổng số lượng cuộc trò chuyện duy nhất theo bộ lọc
    */
-  public getTotalThreadsCount(search?: string): number {
+  public getTotalThreadsCount(search?: string, filter: ThreadFilter = "all"): number {
     let query = `
       SELECT COUNT(DISTINCT m.thread_id) as total
       FROM chat_messages m
       LEFT JOIN candidates c ON m.thread_id = c.thread_id
+      LEFT JOIN thread_metadata tm ON m.thread_id = tm.thread_id
+      WHERE 1=1
     `;
     const params: any[] = [];
     if (search && search.trim()) {
       const searchTerm = `%${search.trim().toLowerCase()}%`;
       query += `
-        WHERE (
+        AND (
           LOWER(m.thread_id) LIKE ? OR
-          LOWER(m.sender_name) LIKE ? OR
+          LOWER(COALESCE(tm.custom_name, m.sender_name)) LIKE ? OR
           LOWER(m.content) LIKE ? OR
           LOWER(COALESCE(c.full_name, '')) LIKE ? OR
           LOWER(COALESCE(c.phone_number, '')) LIKE ? OR
@@ -295,6 +358,31 @@ export class ChatHistoryRepository {
         )
       `;
       params.push(searchTerm, searchTerm, searchTerm, searchTerm, searchTerm, searchTerm);
+    }
+
+    if (filter === "personal") {
+      query += ` 
+        AND COALESCE(tm.is_group, m.is_group) = 0 
+        AND COALESCE(tm.is_manual, 0) = 0
+        AND (m.sender_name NOT LIKE '-M%' AND m.sender_name NOT LIKE '-m%')
+        AND (COALESCE(tm.custom_name, '') NOT LIKE '-M%' AND COALESCE(tm.custom_name, '') NOT LIKE '-m%')
+      `;
+    } else if (filter === "group") {
+      query += ` 
+        AND COALESCE(tm.is_group, m.is_group) = 1 
+        AND COALESCE(tm.is_manual, 0) = 0
+        AND (m.sender_name NOT LIKE '-M%' AND m.sender_name NOT LIKE '-m%')
+        AND (COALESCE(tm.custom_name, '') NOT LIKE '-M%' AND COALESCE(tm.custom_name, '') NOT LIKE '-m%')
+      `;
+    } else if (filter === "manual") {
+      query += ` 
+        AND (
+          COALESCE(tm.is_manual, 0) = 1 OR
+          m.sender_name LIKE '-M%' OR m.sender_name LIKE '-m%' OR
+          c.full_name LIKE '-M%' OR c.full_name LIKE '-m%' OR
+          COALESCE(tm.custom_name, '') LIKE '-M%' OR COALESCE(tm.custom_name, '') LIKE '-m%'
+        )
+      `;
     }
 
     const stmt = this.db.connection.prepare(query);
@@ -318,6 +406,7 @@ export class ChatHistoryRepository {
     quoteText?: string | null;
     quoteSenderName?: string | null;
     quoteSenderId?: string | null;
+    isGroup?: number;
     timestamp: number;
   }): ChatMessageRecord {
     let parsedUrls: string[] | undefined = undefined;
@@ -345,6 +434,7 @@ export class ChatHistoryRepository {
       quoteText: row.quoteText || undefined,
       quoteSenderName: row.quoteSenderName || undefined,
       quoteSenderId: row.quoteSenderId || undefined,
+      isGroup: Boolean(row.isGroup),
       timestamp: row.timestamp,
     };
   }
@@ -362,7 +452,7 @@ export class ChatHistoryRepository {
   /**
    * Dọn dẹp các tin nhắn quá cũ, chỉ giữ lại số lượng tin nhắn mới nhất
    */
-  public trimOldMessages(threadId: string, keepCount: number = 50): void {
+  public cleanupOldMessages(threadId: string, keepCount: number = config.chatHistoryLimit): void {
     const stmt = this.db.connection.prepare(`
       DELETE FROM chat_messages 
       WHERE thread_id = ? AND id NOT IN (
@@ -373,5 +463,9 @@ export class ChatHistoryRepository {
       )
     `);
     stmt.run(threadId, threadId, keepCount);
+  }
+
+  public trimOldMessages(threadId: string, keepCount: number = config.chatHistoryLimit): void {
+    this.cleanupOldMessages(threadId, keepCount);
   }
 }

@@ -64,16 +64,25 @@ export class MessageHandler {
 
     if (parsedMessage.text || parsedMessage.hasImage || isSticker) {
       try {
+        const { ThreadMetadataRepository } = await import("../database/repositories/threadMetadataRepository.js");
+        const threadMetaRepo = new ThreadMetadataRepository();
+        const isThreadManual = threadMetaRepo.isManual(parsedMessage.threadId);
+
+        let finalSenderName = parsedMessage.senderName;
+        if (isThreadManual && finalSenderName && !/^-M(\s|_|-|$)/i.test(finalSenderName) && !parsedMessage.isSelf) {
+          finalSenderName = `-M ${finalSenderName}`;
+        }
+
         this.chatHistoryRepo.addMessage({
           threadId: parsedMessage.threadId,
           senderId: parsedMessage.senderId,
           senderName:
-            parsedMessage.senderName ||
+            finalSenderName ||
             (parsedMessage.isSelf
               ? "Admin (Tôi)"
               : parsedMessage.isGroup
               ? "Thành viên nhóm"
-              : "Ứng viên"),
+              : isThreadManual ? "-M Ứng viên" : "Ứng viên"),
           role: parsedMessage.isSelf ? "model" : "user",
           content:
             parsedMessage.text ||
@@ -88,6 +97,7 @@ export class MessageHandler {
           quoteText: parsedMessage.quoteText,
           quoteSenderName: parsedMessage.quoteSenderName,
           quoteSenderId: parsedMessage.quoteSenderId,
+          isGroup: parsedMessage.isGroup,
           timestamp: parsedMessage.timestamp || Date.now(),
         });
       } catch (err) {
@@ -388,9 +398,12 @@ export class MessageHandler {
 
     // Bỏ qua nếu senderName hoặc tên Zalo bắt đầu bằng -M hoặc -m (chế độ Thủ công Manual / tài khoản nội bộ)
     const senderNameTrimmed = (parsedMessage.senderName || "").trim();
+    const { ThreadMetadataRepository } = await import("../database/repositories/threadMetadataRepository.js");
+    const threadMetaRepo = new ThreadMetadataRepository();
     let isManual =
       senderNameTrimmed.startsWith("-M") ||
-      senderNameTrimmed.startsWith("-m");
+      senderNameTrimmed.startsWith("-m") ||
+      threadMetaRepo.isManual(parsedMessage.threadId);
 
     if (!isManual) {
       const liveName = await this.zaloService.getUserName(parsedMessage.threadId);
@@ -450,11 +463,14 @@ export class MessageHandler {
       return;
     }
 
-    // 4. Lấy tên nhóm từ ZaloService (có cache)
+    // 4. Lấy tên nhóm từ ZaloService (có cache và DB metadata)
+    const { ThreadMetadataRepository } = await import("../database/repositories/threadMetadataRepository.js");
+    const threadMetaRepo = new ThreadMetadataRepository();
+    const isGroupManual = threadMetaRepo.isManual(groupInfo);
     const groupName = await this.zaloService.getGroupName(groupInfo);
 
     // Bỏ qua nếu nhóm đang ở chế độ Manual (-M)
-    if (groupName.startsWith("-M") || groupName.startsWith("-m")) {
+    if (isGroupManual || groupName.startsWith("-M") || groupName.startsWith("-m")) {
       console.log(
         `🛑 [Nhóm Thủ Công (-M)] Bỏ qua phân tích AI cho Nhóm [${groupName}] (bắt đầu bằng -M/-m)`
       );

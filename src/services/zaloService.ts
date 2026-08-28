@@ -327,16 +327,26 @@ export class ZaloService {
   }
 
   /**
-   * Lấy tên nhóm chat (có kèm in-memory cache để tối ưu hiệu năng)
+   * Lấy tên nhóm chat (có kèm in-memory cache và database metadata)
    */
   public async getGroupName(groupId: string): Promise<string> {
+    const threadMetaRepo = new (await import("../database/repositories/threadMetadataRepository.js")).ThreadMetadataRepository();
+    const meta = threadMetaRepo.getMetadata(groupId);
+    if (meta?.customName) {
+      this.groupNameCache.set(groupId, meta.customName);
+      return meta.customName;
+    }
+
     const cached = this.groupNameCache.get(groupId);
     if (cached) return cached;
 
     try {
       const info = await this.api.getGroupInfo(groupId);
-      const name = info?.gridInfoMap?.[groupId]?.name;
+      let name = info?.gridInfoMap?.[groupId]?.name;
       if (name) {
+        if (meta?.isManual && !/^-M(\s|_|-|$)/i.test(name)) {
+          name = `-M ${name}`;
+        }
         this.groupNameCache.set(groupId, name);
         return name;
       }
@@ -344,13 +354,23 @@ export class ZaloService {
       console.warn(`⚠️ Không thể lấy tên nhóm [${groupId}]:`, error);
     }
 
+    if (meta?.isManual) {
+      return `-M Nhóm ${groupId}`;
+    }
     return groupId;
   }
 
   /**
-   * Lấy tên hiển thị của người dùng (Zalo cá nhân 1-1 kèm in-memory cache)
+   * Lấy tên hiển thị của người dùng (Zalo cá nhân 1-1 kèm in-memory cache và database metadata)
    */
   public async getUserName(userId: string): Promise<string> {
+    const threadMetaRepo = new (await import("../database/repositories/threadMetadataRepository.js")).ThreadMetadataRepository();
+    const meta = threadMetaRepo.getMetadata(userId);
+    if (meta?.customName) {
+      this.groupNameCache.set(`user_${userId}`, meta.customName);
+      return meta.customName;
+    }
+
     const cacheKey = `user_${userId}`;
     const cached = this.groupNameCache.get(cacheKey);
     if (cached) return cached;
@@ -361,8 +381,11 @@ export class ZaloService {
         info?.changed_profiles?.[userId] ||
         info?.unchanged_profiles?.[userId] ||
         info?.[userId];
-      const name = profile?.displayName || profile?.zaloName || profile?.username;
+      let name = profile?.displayName || profile?.zaloName || profile?.username;
       if (name) {
+        if (meta?.isManual && !/^-M(\s|_|-|$)/i.test(name)) {
+          name = `-M ${name}`;
+        }
         this.groupNameCache.set(cacheKey, name);
         return name;
       }
@@ -370,6 +393,9 @@ export class ZaloService {
       console.warn(`⚠️ Không thể lấy tên user [${userId}]:`, error);
     }
 
+    if (meta?.isManual) {
+      return `-M Khách ${userId}`;
+    }
     return "";
   }
 
@@ -418,6 +444,17 @@ export class ZaloService {
     const checkGroup =
       isGroup !== undefined ? isGroup : await this.isGroupThread(threadId);
 
+    const isManual = /^-M(\s|_|-|$)/i.test(trimmedName);
+
+    // 1. Lưu bền vững vào SQLite database trước tiên
+    try {
+      const { ThreadMetadataRepository } = await import("../database/repositories/threadMetadataRepository.js");
+      const threadMetaRepo = new ThreadMetadataRepository();
+      threadMetaRepo.upsertMetadata(threadId, trimmedName, isManual, checkGroup);
+    } catch (dbErr) {
+      console.warn(`⚠️ Không thể lưu metadata cho thread ${threadId}:`, dbErr);
+    }
+
     try {
       if (checkGroup) {
         await this.api.changeGroupName(trimmedName, threadId);
@@ -431,6 +468,7 @@ export class ZaloService {
       return { success: true };
     } catch (err: any) {
       console.error(`❌ Lỗi khi đổi tên cho thread ${threadId}:`, err);
+      // Dù Zalo API có lỗi (ví dụ chưa là bạn bè nên không đặt alias được), ta vẫn lưu thành công trong bot DB
       return { success: false, error: err?.message || String(err) };
     }
   }

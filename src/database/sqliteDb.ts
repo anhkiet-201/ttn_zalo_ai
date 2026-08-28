@@ -65,6 +65,7 @@ export class SQLiteDatabase {
         quote_text TEXT,
         quote_sender_name TEXT,
         quote_sender_id TEXT,
+        is_group INTEGER DEFAULT 0,
         timestamp INTEGER NOT NULL,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       );
@@ -114,6 +115,17 @@ export class SQLiteDatabase {
       -- Index tra cứu User Context
       CREATE INDEX IF NOT EXISTS idx_user_context_sender ON user_contexts(sender_id);
       CREATE INDEX IF NOT EXISTS idx_user_context_thread ON user_contexts(thread_id);
+
+      -- 4. Bảng lưu trữ Metadata cuộc trò chuyện (Tên tùy chỉnh, Chế độ Manual -M, Loại nhóm)
+      CREATE TABLE IF NOT EXISTS thread_metadata (
+        thread_id TEXT PRIMARY KEY,
+        custom_name TEXT,
+        is_manual INTEGER DEFAULT 0,
+        is_group INTEGER DEFAULT 0,
+        updated_at INTEGER NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_thread_meta_manual ON thread_metadata(is_manual);
     `);
 
     // Migration bổ sung các cột mới nếu bảng chat_messages hoặc candidates đã tồn tại từ trước
@@ -135,6 +147,15 @@ export class SQLiteDatabase {
       if (!msgColNames.includes("quote_sender_id")) {
         this.db.exec("ALTER TABLE chat_messages ADD COLUMN quote_sender_id TEXT");
       }
+      if (!msgColNames.includes("is_group")) {
+        this.db.exec("ALTER TABLE chat_messages ADD COLUMN is_group INTEGER DEFAULT 0");
+      }
+
+      // Tạo Index sau khi đảm bảo cột is_group đã tồn tại
+      this.db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_chat_is_group
+        ON chat_messages(is_group, timestamp DESC);
+      `);
 
       const columns = this.db
         .prepare("PRAGMA table_info(candidates)")

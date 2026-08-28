@@ -4,7 +4,7 @@ import type { ChatMessageRecord } from "../database/repositories/chatHistoryRepo
  * renderChatPage: Render giao diện Web Chat chuẩn Zalo PC 2 cột (Sidebar Danh sách chat + Khung chat chi tiết)
  * Tích hợp Lazy Loading / Infinite Scroll cho cả danh sách thread và lịch sử tin nhắn cũ.
  */
-export function renderChatPage(initialThreadId: string = ""): string {
+export function renderChatPage(initialThreadId: string = "", initialOwnId: string = ""): string {
   return `
 <!DOCTYPE html>
 <html lang="vi">
@@ -1496,15 +1496,17 @@ export function renderChatPage(initialThreadId: string = ""): string {
   <script>
     (function() {
       let currentThreadId = "${initialThreadId}";
+      let currentOwnId = "${initialOwnId}";
       let currentFilter = "all";
       let currentSearch = "";
 
       // Threads pagination state
       let threadsOffset = 0;
       const threadsLimit = 20;
-      let threadsHasMore = true;
+      let threadsHasMore = false;
       let isFetchingThreads = false;
       let threadsCache = new Map(); // threadId -> threadObject
+      let threadsObserver = null;
 
       // Messages pagination state
       let oldestMessageTimestamp = 0;
@@ -1632,15 +1634,18 @@ export function renderChatPage(initialThreadId: string = ""): string {
         isFetchingThreads = true;
         if (isReset) {
           threadsOffset = 0;
-          threadsHasMore = true;
+          threadsHasMore = false;
           threadsCache.clear();
           sidebarThreadsContainer.innerHTML = '<div class="threads-loader-sentinel"><div class="threads-spinner-sm"></div> Đang tải danh sách...</div>';
+        } else {
+          updateSentinelLoadingState(true);
         }
 
         try {
           const params = new URLSearchParams({
             limit: String(threadsLimit),
             offset: String(threadsOffset),
+            filter: currentFilter,
           });
           if (currentSearch) params.set("search", currentSearch);
 
@@ -1663,35 +1668,55 @@ export function renderChatPage(initialThreadId: string = ""): string {
                 switchThread(firstThreadId);
               }
             }
+
+            // Nếu còn dữ liệu tiếp theo mà nội dung chưa lấp đầy chiều cao sidebar -> tải tiếp
+            if (threadsHasMore && sidebarThreadsContainer.scrollHeight <= sidebarThreadsContainer.clientHeight + 50) {
+              setTimeout(() => fetchThreads(false), 150);
+            }
           } else {
+            threadsHasMore = false;
             if (isReset) {
               sidebarThreadsContainer.innerHTML = '<div class="empty-threads-state"><span>🔍 Không có cuộc trò chuyện nào.</span></div>';
+            } else {
+              renderSidebarThreads();
             }
           }
         } catch (err) {
           console.error("Lỗi khi nạp danh sách cuộc trò chuyện:", err);
+          threadsHasMore = false;
           if (isReset) {
             sidebarThreadsContainer.innerHTML = '<div class="empty-threads-state">⚠️ Lỗi kết nối máy chủ. Vui lòng tải lại trang.</div>';
+          } else {
+            renderSidebarThreads();
           }
         } finally {
           isFetchingThreads = false;
+          updateSentinelLoadingState(false);
+        }
+      }
+
+      function updateSentinelLoadingState(isLoading) {
+        const sentinel = document.getElementById("threadsSentinel");
+        if (!sentinel) return;
+        if (isLoading) {
+          sentinel.style.display = "flex";
+          sentinel.innerHTML = '<div class="threads-spinner-sm"></div> Đang cuộn tải thêm...';
+        } else {
+          if (!threadsHasMore) {
+            sentinel.style.display = "none";
+          } else {
+            sentinel.style.display = "flex";
+            sentinel.innerHTML = '';
+          }
         }
       }
 
       function renderSidebarThreads() {
         const allThreads = Array.from(threadsCache.values());
 
-        // Lọc theo tabs
-        const filtered = allThreads.filter(t => {
-          if (currentFilter === "personal") return !t.isGroup;
-          if (currentFilter === "group") return Boolean(t.isGroup);
-          if (currentFilter === "manual") return Boolean(t.isManual);
-          return true;
-        });
-
         sidebarThreadsContainer.innerHTML = "";
 
-        if (filtered.length === 0) {
+        if (allThreads.length === 0) {
           if (!threadsHasMore) {
             sidebarThreadsContainer.innerHTML = '<div class="empty-threads-state"><span>🔍 Không có cuộc trò chuyện nào phù hợp.</span></div>';
           } else {
@@ -1700,8 +1725,8 @@ export function renderChatPage(initialThreadId: string = ""): string {
           return;
         }
 
-        // Xây dựng DOM
-        filtered.forEach(t => {
+        // Xây dựng DOM danh sách thread
+        allThreads.forEach(t => {
           const itemEl = createThreadItemElement(t);
           sidebarThreadsContainer.appendChild(itemEl);
         });
@@ -1711,9 +1736,30 @@ export function renderChatPage(initialThreadId: string = ""): string {
           const sentinel = document.createElement("div");
           sentinel.className = "threads-loader-sentinel";
           sentinel.id = "threadsSentinel";
-          sentinel.innerHTML = '<div class="threads-spinner-sm"></div> Đang cuộn tải thêm...';
+          sentinel.style.minHeight = "20px";
+          sentinel.style.display = isFetchingThreads ? "flex" : "none";
+          if (isFetchingThreads) {
+            sentinel.innerHTML = '<div class="threads-spinner-sm"></div> Đang cuộn tải thêm...';
+          }
           sidebarThreadsContainer.appendChild(sentinel);
+          setupSentinelObserver(sentinel);
         }
+      }
+
+      function setupSentinelObserver(sentinelEl) {
+        if (!window.IntersectionObserver || !sentinelEl) return;
+        if (threadsObserver) {
+          threadsObserver.disconnect();
+        }
+        threadsObserver = new IntersectionObserver((entries) => {
+          if (entries[0] && entries[0].isIntersecting && threadsHasMore && !isFetchingThreads) {
+            fetchThreads(false);
+          }
+        }, {
+          root: sidebarThreadsContainer,
+          rootMargin: "80px",
+        });
+        threadsObserver.observe(sentinelEl);
       }
 
       function createThreadItemElement(t) {
@@ -1812,10 +1858,11 @@ export function renderChatPage(initialThreadId: string = ""): string {
       // Filter tabs
       filterTabBtns.forEach(btn => {
         btn.addEventListener("click", function() {
+          if (this.classList.contains("active")) return;
           filterTabBtns.forEach(b => b.classList.remove("active"));
           this.classList.add("active");
           currentFilter = this.dataset.filter || "all";
-          renderSidebarThreads();
+          fetchThreads(true); // Reset và gọi API nạp trực tiếp danh sách của tab đó từ Backend!
         });
       });
 
@@ -1864,7 +1911,7 @@ export function renderChatPage(initialThreadId: string = ""): string {
 
         if (!cleanText && !hasValidImages) return null;
 
-        const isSelf = msg.role === "model" || msg.senderId === "642903586588799919" || msg.senderId === "admin";
+        const isSelf = msg.role === "model" || (currentOwnId && msg.senderId === currentOwnId) || msg.senderId === "admin";
         const row = document.createElement("div");
         row.className = "message-row " + (isSelf ? "outgoing" : "incoming");
         if (isOptimistic) row.classList.add("temp-pending");
@@ -1894,7 +1941,7 @@ export function renderChatPage(initialThreadId: string = ""): string {
         if (msg.hasQuote && msg.quoteText) {
           quoteCardEl = document.createElement("div");
           quoteCardEl.className = "msg-quote-card";
-          const qSender = escapeHtml(msg.quoteSenderName || (msg.quoteSenderId === "642903586588799919" ? "Admin (Tôi)" : "Tin nhắn trước"));
+          const qSender = escapeHtml(msg.quoteSenderName || ((currentOwnId && msg.quoteSenderId === currentOwnId) ? "Admin (Tôi)" : "Tin nhắn trước"));
           const qText = escapeHtml(msg.quoteText);
           quoteCardEl.innerHTML = \`
             <span class="quote-sender">↪️ \${qSender}</span>
@@ -2013,12 +2060,14 @@ export function renderChatPage(initialThreadId: string = ""): string {
           const data = await res.json();
 
           if (data.threadName) {
-            threadNameEl.textContent = data.threadName;
-            messageInput.placeholder = "Nhập tin nhắn tới " + data.threadName + "...";
-            avatarLetterEl.textContent = data.threadName.trim().charAt(0).toUpperCase();
-            document.title = data.threadName + " - Trò Chuyện Trực Tiếp";
+            const isManual = data.isManual !== undefined ? Boolean(data.isManual) : /^-M(\s|_|-|$)/i.test(data.threadName);
+            const displayName = isManual && !/^-M(\s|_|-|$)/i.test(data.threadName) ? "-M " + data.threadName : data.threadName;
 
-            const isManual = /^-M(\s|_|-|$)/i.test(data.threadName);
+            threadNameEl.textContent = displayName;
+            messageInput.placeholder = "Nhập tin nhắn tới " + displayName + "...";
+            avatarLetterEl.textContent = displayName.trim().charAt(0).toUpperCase();
+            document.title = displayName + " - Trò Chuyện Trực Tiếp";
+
             setMode(isManual, false);
           }
 
@@ -2187,9 +2236,11 @@ export function renderChatPage(initialThreadId: string = ""): string {
 
         btnSend.disabled = true;
 
+        const tempId = "temp_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6);
         const tempMsg = {
+          id: tempId,
           role: "model",
-          senderId: "642903586588799919",
+          senderId: currentOwnId || "admin",
           senderName: "Admin (Tôi)",
           content: text,
           timestamp: Date.now(),
@@ -2197,6 +2248,8 @@ export function renderChatPage(initialThreadId: string = ""): string {
 
         const tempEl = createMessageElement(tempMsg, true);
         if (tempEl) {
+          tempEl.dataset.tempId = tempId;
+          tempEl.dataset.msgContent = text;
           chatContainer.appendChild(tempEl);
           scrollToBottom();
         }
@@ -2239,9 +2292,11 @@ export function renderChatPage(initialThreadId: string = ""): string {
           const reader = new FileReader();
           reader.onload = async function(e) {
             const dataUrl = e.target.result;
+            const tempId = "temp_img_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6);
             const tempMsg = {
+              id: tempId,
               role: "model",
-              senderId: "642903586588799919",
+              senderId: currentOwnId || "admin",
               senderName: "Admin (Tôi)",
               content: "",
               hasImage: true,
@@ -2250,6 +2305,8 @@ export function renderChatPage(initialThreadId: string = ""): string {
             };
             const tempEl = createMessageElement(tempMsg, true);
             if (tempEl) {
+              tempEl.dataset.tempId = tempId;
+              tempEl.dataset.isTempImage = "true";
               chatContainer.appendChild(tempEl);
               scrollToBottom();
             }
@@ -2331,6 +2388,52 @@ export function renderChatPage(initialThreadId: string = ""): string {
             // Nếu tin nhắn thuộc thread hiện tại -> hiển thị vào timeline
             if (newMsg.threadId === currentThreadId) {
               if (newMsg.id && renderedMessageIds.has(newMsg.id)) return;
+
+              const cleanText = sanitizeContent(newMsg.content);
+              const isSelf = newMsg.role === "model" || (currentOwnId && newMsg.senderId === currentOwnId) || newMsg.senderId === "admin";
+
+              // Nếu là tin nhắn gửi đi của chính mình -> Khớp và xác nhận tin nhắn tạm (optimistic)
+              if (isSelf) {
+                const pendingEls = chatContainer.querySelectorAll(".message-row.temp-pending");
+                let matchedPending = null;
+                for (const pEl of pendingEls) {
+                  if (newMsg.hasImage && pEl.dataset.isTempImage === "true") {
+                    matchedPending = pEl;
+                    break;
+                  } else if (cleanText && pEl.dataset.msgContent === cleanText) {
+                    matchedPending = pEl;
+                    break;
+                  }
+                }
+
+                if (matchedPending) {
+                  matchedPending.classList.remove("temp-pending");
+                  delete matchedPending.dataset.tempId;
+                  delete matchedPending.dataset.isTempImage;
+                  const overlay = matchedPending.querySelector(".upload-progress-overlay");
+                  if (overlay) overlay.remove();
+                  if (newMsg.id) {
+                    matchedPending.dataset.id = newMsg.id;
+                    renderedMessageIds.add(newMsg.id);
+                  }
+                  return; // Đã xác nhận tin nhắn tạm, dừng ngay để không tạo bong bóng duplicate!
+                }
+              }
+
+              // Kiểm tra chống duplicate nếu tin nhắn cuối cùng trên UI giống hệt
+              const allRows = chatContainer.querySelectorAll(".message-row:not(.temp-pending)");
+              if (allRows.length > 0) {
+                const lastRow = allRows[allRows.length - 1];
+                if (
+                  lastRow.dataset.content === cleanText &&
+                  lastRow.classList.contains(isSelf ? "outgoing" : "incoming") &&
+                  !newMsg.hasImage
+                ) {
+                  if (newMsg.id) renderedMessageIds.add(newMsg.id);
+                  return;
+                }
+              }
+
               if (newMsg.id) renderedMessageIds.add(newMsg.id);
 
               const el = createMessageElement(newMsg);

@@ -245,7 +245,7 @@ export class EventDispatcher {
       quoteMsgType = rawQuote.msgType ? String(rawQuote.msgType) : undefined;
 
       // Nhận diện tên người gửi tin nhắn gốc được quote
-      if (quoteSenderId === this.ownId || quoteSenderId === "642903586588799919" || quoteSenderId === "admin") {
+      if ((this.ownId && quoteSenderId === this.ownId) || quoteSenderId === "admin") {
         quoteSenderName = "Bot";
       } else if (rawQuote.fromDName || rawQuote.dName) {
         quoteSenderName = String(rawQuote.fromDName || rawQuote.dName);

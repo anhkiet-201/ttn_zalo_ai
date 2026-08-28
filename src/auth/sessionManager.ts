@@ -114,8 +114,9 @@ export function startQrWebServer(port: number = config.qrPort): void {
     // 1. Giao diện Web Chat (/chat?thread=...)
     if (pathname === "/chat") {
       const threadId = parsedUrl.searchParams.get("thread") || "";
+      const ownId = loggedInAccount?.id || (activeZaloService ? activeZaloService.getOwnId() : "");
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-      res.end(renderChatPage(threadId));
+      res.end(renderChatPage(threadId, ownId));
       return;
     }
 
@@ -171,24 +172,32 @@ export function startQrWebServer(port: number = config.qrPort): void {
         const limit = Math.min(Math.max(limitParam, 1), 100);
         const offset = Math.max(Number(parsedUrl.searchParams.get("offset")) || 0, 0);
         const search = parsedUrl.searchParams.get("search") || "";
+        const filter = (parsedUrl.searchParams.get("filter") || "all") as import("../database/repositories/chatHistoryRepository.js").ThreadFilter;
 
         const chatHistoryRepo = new ChatHistoryRepository();
         const candidateRepo = new CandidateRepository();
-        const total = chatHistoryRepo.getTotalThreadsCount(search);
-        const threadItems = chatHistoryRepo.getThreadList(limit, offset, search);
+        const { ThreadMetadataRepository } = await import("../database/repositories/threadMetadataRepository.js");
+        const threadMetaRepo = new ThreadMetadataRepository();
+        const total = chatHistoryRepo.getTotalThreadsCount(search, filter);
+        const threadItems = chatHistoryRepo.getThreadList(limit, offset, search, filter);
 
         // Làm giàu thông tin từng thread với tên hiển thị, isGroup và isManual
         const enrichedThreads = await Promise.all(
           threadItems.map(async (item) => {
             let threadName = "";
-            let isGroup = false;
+            let isGroup = item.isGroup;
 
             if (activeZaloService) {
               try {
                 const timeoutPromise = <T>(p: Promise<T>, ms: number, fallback: T): Promise<T> =>
                   Promise.race([p, new Promise<T>((res) => setTimeout(() => res(fallback), ms))]);
 
-                isGroup = await timeoutPromise(activeZaloService.isGroupThread(item.threadId), 300, false);
+                const detectedGroup = await timeoutPromise(activeZaloService.isGroupThread(item.threadId), 300, isGroup);
+                if (detectedGroup !== item.isGroup) {
+                  isGroup = detectedGroup;
+                  chatHistoryRepo.updateThreadIsGroup(item.threadId, detectedGroup);
+                }
+
                 if (isGroup) {
                   threadName = await timeoutPromise(activeZaloService.getGroupName(item.threadId), 300, "");
                 } else {
@@ -209,7 +218,11 @@ export function startQrWebServer(port: number = config.qrPort): void {
               }
             }
 
-            const isManual = /^-M(\s|_|-|$)/i.test(threadName);
+            const isManual = Boolean(item.isManual || threadMetaRepo.isManual(item.threadId) || /^-M(\s|_|-|$)/i.test(threadName));
+            if (isManual && !/^-M(\s|_|-|$)/i.test(threadName)) {
+              threadName = `-M ${threadName}`;
+            }
+
             const avatarLetter = (threadName || "U").trim().charAt(0).toUpperCase();
 
             return {
@@ -229,7 +242,7 @@ export function startQrWebServer(port: number = config.qrPort): void {
           })
         );
 
-        const hasMore = offset + threadItems.length < total;
+        const hasMore = threadItems.length === limit && offset + threadItems.length < total;
         const nextOffset = offset + threadItems.length;
 
         res.writeHead(200, {
@@ -243,6 +256,7 @@ export function startQrWebServer(port: number = config.qrPort): void {
             total,
             limit,
             offset,
+            filter,
             hasMore,
             nextOffset,
           })
@@ -280,15 +294,22 @@ export function startQrWebServer(port: number = config.qrPort): void {
 
         const candidate = candidateRepo.getLatestCandidate(threadId);
 
-        let threadName = "";
-        let isGroup = false;
+        const { ThreadMetadataRepository } = await import("../database/repositories/threadMetadataRepository.js");
+        const threadMetaRepo = new ThreadMetadataRepository();
+        const meta = threadMetaRepo.getMetadata(threadId);
+
+        let threadName = meta?.customName || "";
+        let isGroup = meta ? meta.isGroup : false;
+
         if (activeZaloService) {
           try {
             isGroup = await activeZaloService.isGroupThread(threadId);
-            if (isGroup) {
-              threadName = await activeZaloService.getGroupName(threadId);
-            } else {
-              threadName = await activeZaloService.getUserName(threadId);
+            if (!threadName) {
+              if (isGroup) {
+                threadName = await activeZaloService.getGroupName(threadId);
+              } else {
+                threadName = await activeZaloService.getUserName(threadId);
+              }
             }
           } catch {
             // Bỏ qua
@@ -318,9 +339,14 @@ export function startQrWebServer(port: number = config.qrPort): void {
           threadName = isGroup ? `Nhóm ${threadId}` : `Người dùng ${threadId}`;
         }
 
-        const ownId = loggedInAccount?.id || "642903586588799919";
+        const isManual = Boolean(meta?.isManual || /^-M(\s|_|-|$)/i.test(threadName));
+        if (isManual && !/^-M(\s|_|-|$)/i.test(threadName)) {
+          threadName = `-M ${threadName}`;
+        }
+
+        const ownId = loggedInAccount?.id || (activeZaloService ? activeZaloService.getOwnId() : "");
         const enrichedMessages = messages.map((m) => {
-          if (m.role === "model" || m.senderId === ownId || m.senderId === "admin") {
+          if (m.role === "model" || (ownId && m.senderId === ownId) || m.senderId === "admin") {
             return {
               ...m,
               senderName: "Admin (Tôi)",
@@ -356,6 +382,7 @@ export function startQrWebServer(port: number = config.qrPort): void {
             threadId,
             threadName,
             isGroup,
+            isManual,
             candidate,
             messages: enrichedMessages,
             history: enrichedMessages,
@@ -407,17 +434,6 @@ export function startQrWebServer(port: number = config.qrPort): void {
           // Gửi tin nhắn tự động phân biệt ThreadType và fallback
           const sendType = type !== undefined ? type : undefined;
           await activeZaloService.sendMessageAuto(threadId, message, sendType);
-
-          // Lưu tin nhắn vào SQLite database để đồng bộ lịch sử và kích hoạt broadcast Realtime
-          const chatHistoryRepo = new ChatHistoryRepository();
-          chatHistoryRepo.addMessage({
-            threadId,
-            senderId: loggedInAccount?.id || "admin",
-            senderName: "Admin",
-            role: "model",
-            content: message,
-            timestamp: Date.now(),
-          });
 
           console.log(`📤 [Web Chat] Đã gửi tin nhắn trực tiếp tới thread [${threadId}]: "${message}"`);
           res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
