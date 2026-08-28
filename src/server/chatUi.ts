@@ -1540,6 +1540,28 @@ export function renderChatPage(initialThreadId: string = ""): string {
       // =========================================================================
       // 1. HELPERS & FORMATTERS
       // =========================================================================
+      function escapeHtml(text) {
+        if (!text) return "";
+        return String(text)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#039;");
+      }
+
+      function formatTime(timestamp) {
+        if (!timestamp) return "";
+        const d = new Date(timestamp);
+        if (isNaN(d.getTime())) return "";
+        const now = new Date();
+        const isToday = d.toDateString() === now.toDateString();
+        if (isToday) {
+          return d.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" });
+        }
+        return d.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit" });
+      }
+
       function showToast(text, type = "success") {
         if (!zaloToast) return;
         zaloToast.className = "zalo-toast " + type;
@@ -1548,17 +1570,6 @@ export function renderChatPage(initialThreadId: string = ""): string {
         setTimeout(() => {
           zaloToast.classList.remove("show");
         }, 3000);
-      }
-
-      function formatTime(timestamp) {
-        if (!timestamp) return "";
-        const d = new Date(timestamp);
-        const now = new Date();
-        const isToday = d.toDateString() === now.toDateString();
-        if (isToday) {
-          return d.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" });
-        }
-        return d.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit" });
       }
 
       function sanitizeContent(text) {
@@ -1604,23 +1615,31 @@ export function renderChatPage(initialThreadId: string = ""): string {
           const res = await fetch("/api/chat/threads?" + params.toString());
           const data = await res.json();
 
-          if (isReset) {
-            sidebarThreadsContainer.innerHTML = "";
-          }
-
           if (data.success && Array.isArray(data.threads)) {
             data.threads.forEach(t => {
               threadsCache.set(t.threadId, t);
             });
 
-            threadsHasMore = data.hasMore;
+            threadsHasMore = Boolean(data.hasMore);
             threadsOffset = data.nextOffset || (threadsOffset + data.threads.length);
             renderSidebarThreads();
+
+            // Nếu người dùng vào /chat mà chưa có threadId, tự động mở thread đầu tiên trên Desktop
+            if (!currentThreadId && threadsCache.size > 0 && window.innerWidth > 768) {
+              const firstThreadId = threadsCache.keys().next().value;
+              if (firstThreadId) {
+                switchThread(firstThreadId);
+              }
+            }
+          } else {
+            if (isReset) {
+              sidebarThreadsContainer.innerHTML = '<div class="empty-threads-state"><span>🔍 Không có cuộc trò chuyện nào.</span></div>';
+            }
           }
         } catch (err) {
           console.error("Lỗi khi nạp danh sách cuộc trò chuyện:", err);
           if (isReset) {
-            sidebarThreadsContainer.innerHTML = '<div class="empty-threads-state">⚠️ Lỗi khi tải danh sách. Nhấn để thử lại.</div>';
+            sidebarThreadsContainer.innerHTML = '<div class="empty-threads-state">⚠️ Lỗi kết nối máy chủ. Vui lòng tải lại trang.</div>';
           }
         } finally {
           isFetchingThreads = false;
@@ -1628,9 +1647,6 @@ export function renderChatPage(initialThreadId: string = ""): string {
       }
 
       function renderSidebarThreads() {
-        const existingSentinel = sidebarThreadsContainer.querySelector(".threads-loader-sentinel");
-        if (existingSentinel) existingSentinel.remove();
-
         const allThreads = Array.from(threadsCache.values());
 
         // Lọc theo tabs
@@ -1641,20 +1657,21 @@ export function renderChatPage(initialThreadId: string = ""): string {
           return true;
         });
 
-        if (filtered.length === 0 && !threadsHasMore) {
-          sidebarThreadsContainer.innerHTML = '<div class="empty-threads-state"><span>🔍 Không có cuộc trò chuyện nào phù hợp.</span></div>';
+        sidebarThreadsContainer.innerHTML = "";
+
+        if (filtered.length === 0) {
+          if (!threadsHasMore) {
+            sidebarThreadsContainer.innerHTML = '<div class="empty-threads-state"><span>🔍 Không có cuộc trò chuyện nào phù hợp.</span></div>';
+          } else {
+            sidebarThreadsContainer.innerHTML = '<div class="threads-loader-sentinel"><div class="threads-spinner-sm"></div> Đang tìm tiếp...</div>';
+          }
           return;
         }
 
         // Xây dựng DOM
         filtered.forEach(t => {
-          let itemEl = sidebarThreadsContainer.querySelector(\`[data-thread-id="\${t.threadId}"]\`);
-          if (!itemEl) {
-            itemEl = createThreadItemElement(t);
-            sidebarThreadsContainer.appendChild(itemEl);
-          } else {
-            updateThreadItemElement(itemEl, t);
-          }
+          const itemEl = createThreadItemElement(t);
+          sidebarThreadsContainer.appendChild(itemEl);
         });
 
         // Thêm Sentinel Loader ở đáy nếu còn dữ liệu để cuộn tiếp
@@ -1675,23 +1692,26 @@ export function renderChatPage(initialThreadId: string = ""): string {
         const avatarClass = t.isGroup ? "thread-item-avatar is-group" : "thread-item-avatar";
         const isSelfLast = t.lastRole === "model";
         const previewPrefix = isSelfLast ? "Bạn: " : "";
-        let previewText = t.lastHasImage ? "🖼️ [Hình ảnh]" : (t.lastContent || "Bắt đầu cuộc trò chuyện");
+        const rawPreviewText = t.lastHasImage ? "🖼️ [Hình ảnh]" : (t.lastContent || "Bắt đầu cuộc trò chuyện");
+        const safeName = escapeHtml(t.threadName || t.threadId);
+        const safePreview = escapeHtml(previewPrefix + rawPreviewText);
+        const safeCompany = t.targetCompany ? escapeHtml(t.targetCompany) : "";
 
         div.innerHTML = \`
           <div class="\${avatarClass}">
-            <span>\${t.avatarLetter || "Z"}</span>
+            <span>\${escapeHtml(t.avatarLetter || "Z")}</span>
             <div class="thread-online-dot"></div>
           </div>
           <div class="thread-item-body">
             <div class="thread-item-row1">
-              <span class="thread-item-name">\${t.threadName || t.threadId}</span>
+              <span class="thread-item-name">\${safeName}</span>
               <span class="thread-item-time">\${formatTime(t.lastTimestamp)}</span>
             </div>
             <div class="thread-item-row2">
-              <span class="thread-item-preview \${isSelfLast ? 'is-self' : ''}">\${previewPrefix}\${previewText}</span>
+              <span class="thread-item-preview \${isSelfLast ? 'is-self' : ''}">\${safePreview}</span>
               <div class="thread-badge-group">
-                \${t.targetCompany ? \`<span class="thread-badge-candidate">\${t.targetCompany}</span>\` : ''}
-                \${t.isManual ? \`<span class="thread-badge-manual">-M</span>\` : ''}
+                \${safeCompany ? '<span class="thread-badge-candidate">' + safeCompany + '</span>' : ''}
+                \${t.isManual ? '<span class="thread-badge-manual">-M</span>' : ''}
               </div>
             </div>
           </div>
@@ -2010,9 +2030,9 @@ export function renderChatPage(initialThreadId: string = ""): string {
               if (msg.id) renderedMessageIds.add(msg.id);
               const el = createMessageElement(msg);
               if (el) fragment.appendChild(el);
-            });
+            }); 
 
-            olderMessagesLoader.insertAdjacentElement("afterend", fragment as any);
+            olderMessagesLoader.after(fragment);
 
             // Bảo lưu vị trí cuộn
             const newScrollHeight = chatContainer.scrollHeight;

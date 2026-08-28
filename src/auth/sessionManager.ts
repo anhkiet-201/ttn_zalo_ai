@@ -185,11 +185,14 @@ export function startQrWebServer(port: number = config.qrPort): void {
 
             if (activeZaloService) {
               try {
-                isGroup = await activeZaloService.isGroupThread(item.threadId);
+                const timeoutPromise = <T>(p: Promise<T>, ms: number, fallback: T): Promise<T> =>
+                  Promise.race([p, new Promise<T>((res) => setTimeout(() => res(fallback), ms))]);
+
+                isGroup = await timeoutPromise(activeZaloService.isGroupThread(item.threadId), 300, false);
                 if (isGroup) {
-                  threadName = await activeZaloService.getGroupName(item.threadId);
+                  threadName = await timeoutPromise(activeZaloService.getGroupName(item.threadId), 300, "");
                 } else {
-                  threadName = await activeZaloService.getUserName(item.threadId);
+                  threadName = await timeoutPromise(activeZaloService.getUserName(item.threadId), 300, "");
                 }
               } catch {
                 // Bỏ qua lỗi ZaloService
