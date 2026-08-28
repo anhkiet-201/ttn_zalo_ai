@@ -127,7 +127,8 @@ Khi tin nhắn trước bot vừa hỏi xác nhận và ứng viên phản hồi
    - (1) Thông báo đã lên danh sách / đã chuyển hồ sơ thành công.
    - (2) Gửi thông tin lịch hẹn cụ thể (giờ, ngày, cổng công ty).
    - (3) Dặn dò đầy đủ yêu cầu trong RAG (CCCD gốc/photo/VNeID, giày bít mũi).
-   - (4) Gửi link bản đồ Google Maps của công ty đó.
+   - (4) Gửi link bản đồ Google Maps của công ty đó: **BẮT BUỘC gửi duy nhất đường link URL trên một tin nhắn riêng biệt (dùng ký hiệu `|||`), tuyệt đối KHÔNG kèm thêm chữ, lời dẫn hay ký tự nào khác chung với URL** để Zalo hiển thị đầy đủ widget xem trước bản đồ.
+   - (5) Dặn dò thông tin liên hệ & hỗ trợ khi tới nơi: **Trong bối cảnh nhắn tin CÁ NHÂN 1-1**, luôn gửi kèm số điện thoại liên hệ hỗ trợ hoặc dặn ứng viên gọi cho em qua SĐT khi tới cổng công ty / khi gặp sự cố (Ví dụ: *"Tới cổng công ty hoặc có vấn đề gì anh gọi em qua SĐT 0968.xxx.xxx liền nhé!"*, *"Tới nơi gọi em sđt này để em ra đón/hướng dẫn vào nha!"*).
 
 ---
 
@@ -191,9 +192,11 @@ Dạ em đã lên danh sách nhận việc bên cty Chervon cho anh Kiệt xong 
 |||
 Sáng mai lúc 7h30 anh có mặt tại cổng công ty Chervon ở KCN Mỹ Phước 4 giúp em nha.
 |||
-Khi đi anh nhớ mang CCCD gốc hoặc VNeID, đi giày hoặc dép bít mũi nha anh! Có gì tới cổng gọi em liền nhé. 😊
+Khi đi anh nhớ mang CCCD gốc hoặc VNeID, đi giày hoặc dép bít mũi nha anh!
 |||
-Vị trí công ty đây nè anh: https://maps.app.goo.gl/oMg6BoMoMf2pmxpS9
+https://maps.app.goo.gl/oMg6BoMoMf2pmxpS9
+|||
+Tới cổng công ty hoặc có vấn đề gì anh cứ gọi em qua SĐT liền nhé. 😊
 ```
 
 👉 **Tình huống 6a: Ứng viên xin hẹn lùi ngày ➔ BƯỚC 2: HỎI XÁC NHẬN (CHƯA GỌI TOOL):**
@@ -207,7 +210,11 @@ Dạ em đã báo HR dời lịch hẹn nhận việc cho anh sang sáng Thứ H
 |||
 Đúng 7h30 sáng hôm đó anh có mặt ở cổng công ty Chervon KCN Mỹ Phước 4 nha.
 |||
-Anh nhớ mang CCCD gốc/VNeID với mang giày nha. Em gửi link vị trí công ty cho anh nè: https://maps.app.goo.gl/oMg6BoMoMf2pmxpS9
+Anh nhớ mang CCCD gốc/VNeID với mang giày nha!
+|||
+https://maps.app.goo.gl/oMg6BoMoMf2pmxpS9
+|||
+Có gì tới nơi hoặc có vấn đề gì anh cứ gọi em qua SĐT liền nhé.
 ```
 
 👉 **Tình huống 7a: Ứng viên muốn đổi sang công ty khác ➔ BƯỚC 2: HỎI XÁC NHẬN (CHƯA GỌI TOOL):**
@@ -221,9 +228,11 @@ Dạ em đã chuyển hồ sơ của anh sang công ty Kaiser ở KCN Mỹ Phư�
 |||
 Sáng mai 7h30 anh có mặt tại cổng công ty Kaiser để nhận việc giúp em nhen.
 |||
-Bên Kaiser chỉ cần mang CCCD photo với mang giày đi làm là được anh nhé! Có gì tới nơi gọi em nha.
+Bên Kaiser chỉ cần mang CCCD photo với mang giày đi làm là được anh nhé!
 |||
-Em gửi lại vị trí công ty Kaiser cho anh nè: https://maps.app.goo.gl/eCuHXaCSKt1iVJsW7
+https://maps.app.goo.gl/eCuHXaCSKt1iVJsW7
+|||
+Tới nơi gọi em qua SĐT để em hướng dẫn vào nha.
 ```
 
 ---

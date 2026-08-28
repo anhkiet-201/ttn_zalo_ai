@@ -221,7 +221,7 @@ export class MessageHandler {
           return;
         }
 
-        // 2.2. Nếu chỉ gõ /rag hoặc rag đơn thuần -> Hiển thị danh sách tổng hợp công ty
+        // 2.2. Nếu chỉ gõ /rag hoặc rag đơn thuần -> Hiển thị danh sách tổng hợp công ty ngắn gọn theo nhiều phần
         const jobRag = this.ragService.getJobRag();
         if (jobRag.length === 0) {
           await this.zaloService.replyMessage(
@@ -231,19 +231,37 @@ export class MessageHandler {
           return;
         }
 
-        let report = `🏢 TỔNG HỢP CÔNG TY ĐANG TUYỂN DỤNG (${jobRag.length} công ty):\n\n`;
-        jobRag.forEach((job: any, idx: number) => {
-          report += `${idx + 1}. ${job.title || job.id} (Chỉ tiêu: ${job.vacancies ?? "Đang tuyển"})\n`;
-          if (job.location) report += `   • Địa điểm: ${job.location}\n`;
-          if (job.interview_schedule) report += `   • Lịch hẹn: ${job.interview_schedule}\n`;
-        });
+        const pageSize = 10;
+        const totalPages = Math.ceil(jobRag.length / pageSize);
 
-        await this.zaloService.replyMessage(
-          parsedMessage.raw,
-          report.trim()
-        );
+        for (let p = 0; p < totalPages; p++) {
+          const pageJobs = jobRag.slice(p * pageSize, (p + 1) * pageSize);
+          let text = `🏢 KHO DỮ LIỆU RAG (${p + 1}/${totalPages}) - ${jobRag.length} CÔNG TY:\n\n`;
+
+          pageJobs.forEach((job: any, idx: number) => {
+            const globalIdx = p * pageSize + idx + 1;
+            let vacStr = "Đang tuyển";
+            if (job.vacancies !== undefined && job.vacancies !== null) {
+              vacStr = Number(job.vacancies) === 0 ? "⛔ Tạm ngưng" : `✅ Tuyển ${job.vacancies}`;
+            }
+            const schedule = job.interview_schedule ? ` | ⏰ ${job.interview_schedule}` : "";
+            text += `${globalIdx}. ${job.title || job.id} [${vacStr}${schedule}]\n`;
+          });
+
+          if (p === 0) {
+            await this.zaloService.replyMessage(parsedMessage.raw, text.trim());
+          } else {
+            await new Promise((resolve) => setTimeout(resolve, 400));
+            await this.zaloService.sendMessage(
+              parsedMessage.threadId,
+              text.trim(),
+              targetThreadType
+            );
+          }
+        }
+
         console.log(
-          `📤 [HR Admin] Đã reply thông tin RAG ${jobRag.length} công ty tới [${parsedMessage.threadId}]`
+          `📤 [HR Admin] Đã reply thông tin RAG ${jobRag.length} công ty (${totalPages} phần) tới [${parsedMessage.threadId}]`
         );
         return;
       }

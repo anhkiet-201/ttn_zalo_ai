@@ -11,6 +11,50 @@ import {
 } from "zca-js";
 
 /**
+ * Tách một chuỗi văn bản dài thành nhiều đoạn ngắn (mặc định <= 1500 ký tự)
+ * Ưu tiên ngắt tại dòng mới (\n) để giữ nguyên cấu trúc văn bản.
+ */
+export function splitTextIntoChunks(
+  text: string,
+  maxChunkLength: number = 1500
+): string[] {
+  if (!text || text.length <= maxChunkLength) {
+    return [text];
+  }
+
+  const chunks: string[] = [];
+  const lines = text.split("\n");
+  let currentChunk = "";
+
+  for (const line of lines) {
+    if (currentChunk.length + line.length + 1 > maxChunkLength) {
+      if (currentChunk.trim().length > 0) {
+        chunks.push(currentChunk.trim());
+        currentChunk = "";
+      }
+      if (line.length > maxChunkLength) {
+        let remainingLine = line;
+        while (remainingLine.length > maxChunkLength) {
+          chunks.push(remainingLine.slice(0, maxChunkLength));
+          remainingLine = remainingLine.slice(maxChunkLength);
+        }
+        currentChunk = remainingLine;
+      } else {
+        currentChunk = line;
+      }
+    } else {
+      currentChunk = currentChunk ? `${currentChunk}\n${line}` : line;
+    }
+  }
+
+  if (currentChunk.trim().length > 0) {
+    chunks.push(currentChunk.trim());
+  }
+
+  return chunks;
+}
+
+/**
  * Service đóng gói các thao tác gọi API Zalo thuận tiện và an toàn
  */
 export class ZaloService {
@@ -34,6 +78,7 @@ export class ZaloService {
 
   /**
    * Gửi tin nhắn văn bản hoặc tin nhắn có định dạng đến người dùng/nhóm
+   * Tự động chia nhỏ nếu nội dung văn bản vượt quá 1500 ký tự.
    */
   public async sendMessage(
     threadId: string,
@@ -41,6 +86,17 @@ export class ZaloService {
     type: ThreadType = ThreadType.User
   ): Promise<SendMessageResponse> {
     try {
+      if (typeof content === "string" && content.length > 1500) {
+        const chunks = splitTextIntoChunks(content, 1500);
+        let lastRes: SendMessageResponse | null = null;
+        for (let i = 0; i < chunks.length; i++) {
+          if (i > 0) {
+            await new Promise((resolve) => setTimeout(resolve, 400));
+          }
+          lastRes = await this.api.sendMessage(chunks[i], threadId, type);
+        }
+        return lastRes!;
+      }
       return await this.api.sendMessage(content, threadId, type);
     } catch (error) {
       console.error(`❌ Lỗi khi gửi tin nhắn tới ${threadId}:`, error);
@@ -50,6 +106,7 @@ export class ZaloService {
 
   /**
    * Trả lời (Reply/Quote) một tin nhắn cụ thể
+   * - Tự động chia nhỏ nếu replyText vượt quá 1500 ký tự.
    * - Đối với Nhóm (Group): Gửi kèm trích dẫn (quote), có fallback tự động nếu Zalo từ chối quote.
    * - Đối với Cá nhân (User 1-1): Gửi trực tiếp tin nhắn thường (do Zalo Web API không hỗ trợ /api/message/quote).
    */
@@ -57,7 +114,10 @@ export class ZaloService {
     message: Message,
     replyText: string
   ): Promise<SendMessageResponse> {
+    const chunks = splitTextIntoChunks(replyText, 1500);
+    const firstChunk = chunks[0];
     const isGroup = message.type === ThreadType.Group;
+    let firstResponse: SendMessageResponse;
 
     if (isGroup) {
       try {
@@ -73,11 +133,11 @@ export class ZaloService {
         };
 
         const messageContent: MessageContent = {
-          msg: replyText,
+          msg: firstChunk,
           quote,
         };
 
-        return await this.api.sendMessage(
+        firstResponse = await this.api.sendMessage(
           messageContent,
           message.threadId,
           ThreadType.Group
@@ -87,28 +147,36 @@ export class ZaloService {
           `⚠️ Quote tin nhắn nhóm ${message.data.msgId} thất bại, fallback sang gửi tin nhắn thường:`,
           quoteError
         );
-        return await this.api.sendMessage(
-          replyText,
+        firstResponse = await this.api.sendMessage(
+          firstChunk,
           message.threadId,
           ThreadType.Group
         );
       }
+    } else {
+      // Tin nhắn cá nhân 1-1 (ThreadType.User): gửi trực tiếp tin nhắn thường
+      try {
+        firstResponse = await this.api.sendMessage(
+          firstChunk,
+          message.threadId,
+          ThreadType.User
+        );
+      } catch (error) {
+        console.error(
+          `❌ Lỗi khi gửi tin nhắn phản hồi tới ${message.threadId}:`,
+          error
+        );
+        throw error;
+      }
     }
 
-    // Tin nhắn cá nhân 1-1 (ThreadType.User): gửi trực tiếp tin nhắn thường
-    try {
-      return await this.api.sendMessage(
-        replyText,
-        message.threadId,
-        ThreadType.User
-      );
-    } catch (error) {
-      console.error(
-        `❌ Lỗi khi gửi tin nhắn phản hồi tới ${message.threadId}:`,
-        error
-      );
-      throw error;
+    // Nếu có các đoạn tiếp theo, gửi lần lượt nối tiếp
+    for (let i = 1; i < chunks.length; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      await this.sendMessage(message.threadId, chunks[i], message.type);
     }
+
+    return firstResponse;
   }
 
   /**
