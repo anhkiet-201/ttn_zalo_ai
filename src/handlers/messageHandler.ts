@@ -431,14 +431,17 @@ export class MessageHandler {
       return;
     }
 
-    // 3. Lọc từ khóa nội bộ (mai pv, mai nv, ...)
-    const lowerText = parsedMessage.text.toLowerCase();
+    // 3. Lọc từ khóa nội bộ (mai pv, mai nv, pv, nv...) khi độ dài ngắn hơn 10 ký tự
+    const lowerText = parsedMessage.text.toLowerCase().trim();
     const matchedKeyword = config.groupIgnoreKeywords.find((kw) =>
       lowerText.includes(kw)
     );
-    if (matchedKeyword) {
+    if (matchedKeyword || lowerText.length < 10) {
+      const reason = matchedKeyword
+        ? `từ khóa "${matchedKeyword}"`
+        : `độ dài ngắn (${lowerText.length} < 10 ký tự)`;
       console.log(
-        `🚫 [Nhóm-Skip] Bỏ qua từ khóa "${matchedKeyword}" từ ${senderInfo} trong nhóm [${groupInfo}]`
+        `🚫 [Nhóm-Skip] Bỏ qua ${reason} từ ${senderInfo} trong nhóm [${groupInfo}]`
       );
       return;
     }
