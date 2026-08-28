@@ -661,36 +661,7 @@ LƯU Ý: Chỉ trả về JSON thuần túy, không bao bọc bằng markdown, k
         return "";
       }
 
-      // 6. Lưu lượt tương tác vào SQLite Database (lưu bền vững trên ổ cứng data/zalo_bot.db)
-      const historyUserText = imageUrls.length > 0
-        ? `${senderHeader}: ${userText} [Đã đính kèm ${imageUrls.length} ảnh]`
-        : `${senderHeader}: ${userText}`;
-
-      const now = Date.now();
-
-      // Lưu tin nhắn người dùng
-      this.chatHistoryRepo.addMessage({
-        threadId,
-        senderId,
-        senderName,
-        role: "user",
-        content: historyUserText,
-        hasImage: imageUrls.length > 0,
-        imageUrls: imageUrls.length > 0 ? imageUrls : undefined,
-        timestamp: now,
-      });
-
-      // Lưu câu trả lời của AI Model
-      this.chatHistoryRepo.addMessage({
-        threadId,
-        senderId: "bot",
-        senderName: "TTN HR Assistant",
-        role: "model",
-        content: replyText,
-        timestamp: now + 1,
-      });
-
-      // Dọn dẹp tin nhắn quá cũ nếu cần (giữ lại 50 tin gần nhất)
+      // 6. Dọn dẹp tin nhắn quá cũ nếu cần (giữ lại 50 tin gần nhất)
       this.chatHistoryRepo.trimOldMessages(threadId, 50);
 
       return replyText;

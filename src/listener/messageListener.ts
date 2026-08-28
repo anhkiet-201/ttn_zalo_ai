@@ -6,6 +6,7 @@ import {
   type Reaction,
   type Undo,
   type Typing,
+  ThreadType,
   CloseReason,
 } from "zca-js";
 import { EventDispatcher } from "./eventDispatcher.js";
@@ -71,6 +72,16 @@ export class MessageListener {
     this.api.listener.on("message", (message: Message) => {
       this.dispatcher.dispatchMessage(message);
     });
+
+    // 5.1. Sự kiện nhận tin nhắn đồng bộ / tin nhắn cũ
+    this.api.listener.on(
+      "old_messages",
+      (messages: Message[]) => {
+        for (const msg of messages) {
+          this.dispatcher.dispatchMessage(msg);
+        }
+      }
+    );
 
     // 6. Sự kiện nhóm chat
     this.api.listener.on("group_event", (event: GroupEvent) => {

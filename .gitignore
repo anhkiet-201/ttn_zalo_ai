@@ -10,4 +10,6 @@ session.json
 data/*.db
 data/*.db-wal
 data/*.db-shm
+data/*.sqlite
+data/uploads/
 .DS_Store

@@ -1,4 +1,4 @@
-import { authenticateZalo, onLogout } from "./auth/sessionManager.js";
+import { authenticateZalo, onLogout, setZaloService } from "./auth/sessionManager.js";
 import { ZaloService } from "./services/zaloService.js";
 import { AIService } from "./services/aiService.js";
 import { EventDispatcher } from "./listener/eventDispatcher.js";
@@ -21,8 +21,10 @@ async function startBot() {
 
     // 2. Khởi tạo các Service và Dispatcher
     const zaloService = new ZaloService(api);
+    setZaloService(zaloService);
     const aiService = new AIService();
     const dispatcher = new EventDispatcher();
+    dispatcher.setOwnId(api.getOwnId());
 
     // 3. Khởi tạo các bộ xử lý (Handlers)
     const messageHandler = new MessageHandler(zaloService, aiService);

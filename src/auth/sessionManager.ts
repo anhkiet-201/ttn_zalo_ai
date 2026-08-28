@@ -13,6 +13,12 @@ import fsSync from "node:fs";
 import path from "node:path";
 import http from "node:http";
 import { config } from "../config/index.js";
+import { renderChatPage } from "../server/chatUi.js";
+import { ChatHistoryRepository } from "../database/repositories/chatHistoryRepository.js";
+import { CandidateRepository } from "../database/repositories/candidateRepository.js";
+import { ZaloService } from "../services/zaloService.js";
+import { ThreadType } from "../types/zalo.types.js";
+import { chatBroadcaster } from "../server/chatBroadcaster.js";
 
 /**
  * Trích xuất kích thước và metadata ảnh cho zca-js v2+
@@ -67,6 +73,14 @@ let loggedInAccount: {
 } | null = null;
 
 let logoutCallback: (() => Promise<void> | void) | null = null;
+let activeZaloService: ZaloService | null = null;
+
+/**
+ * Cung cấp tham chiếu ZaloService cho Web Server để gửi tin nhắn từ Web UI
+ */
+export function setZaloService(service: ZaloService): void {
+  activeZaloService = service;
+}
 
 /**
  * Đăng ký callback khi có sự kiện Đăng xuất từ Web Portal
@@ -87,14 +101,297 @@ export function setLoggedInAccount(ownId: string): void {
 }
 
 /**
- * Khởi động Web Server quản lý phiên và mã QR
+ * Khởi động Web Server quản lý phiên, mã QR và giao diện Web Chat
  */
 export function startQrWebServer(port: number = config.qrPort): void {
   if (qrServer) return;
 
   qrServer = http.createServer(async (req, res) => {
-    // API GET: Trả về trạng thái phiên đăng nhập & mã QR
-    if (req.url === "/api/status" || req.url === "/api/qr") {
+    const parsedUrl = new URL(req.url || "/", `http://localhost:${port}`);
+    const pathname = parsedUrl.pathname;
+
+    // 1. Giao diện Web Chat (/chat?thread=...)
+    if (pathname === "/chat") {
+      const threadId = parsedUrl.searchParams.get("thread") || "";
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      res.end(renderChatPage(threadId));
+      return;
+    }
+
+    // 2. Server-Sent Events (SSE) Stream thời gian thực cho tin nhắn
+    if (pathname === "/api/chat/events") {
+      const threadId = parsedUrl.searchParams.get("thread") || "";
+      res.writeHead(200, {
+        "Content-Type": "text/event-stream; charset=utf-8",
+        "Cache-Control": "no-cache, no-transform",
+        Connection: "keep-alive",
+        "Access-Control-Allow-Origin": "*",
+      });
+
+      // Gửi event chào ban đầu
+      res.write(`: connected\n\n`);
+
+      const unsubscribe = chatBroadcaster.onThreadMessage(threadId, (record) => {
+        try {
+          res.write(`data: ${JSON.stringify(record)}\n\n`);
+        } catch {
+          // Bỏ qua nếu socket đã đóng
+        }
+      });
+
+      const keepAlive = setInterval(() => {
+        try {
+          res.write(`: ping\n\n`);
+        } catch {
+          // ignore
+        }
+      }, 15000);
+
+      req.on("close", () => {
+        unsubscribe();
+        clearInterval(keepAlive);
+      });
+      return;
+    }
+
+    // 3. API GET: Lấy toàn bộ lịch sử chat và thông tin ứng viên của thread
+    if (pathname === "/api/chat/history") {
+      const threadId = parsedUrl.searchParams.get("thread");
+      if (!threadId) {
+        res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" });
+        res.end(JSON.stringify({ success: false, error: "Thiếu tham số thread" }));
+        return;
+      }
+
+      try {
+        const chatHistoryRepo = new ChatHistoryRepository();
+        const candidateRepo = new CandidateRepository();
+
+        const messages = chatHistoryRepo.getRecentHistory(threadId, 100);
+        const candidate = candidateRepo.getLatestCandidate(threadId);
+
+        let threadName = "";
+        let isGroup = false;
+        if (activeZaloService) {
+          try {
+            isGroup = await activeZaloService.isGroupThread(threadId);
+            if (isGroup) {
+              threadName = await activeZaloService.getGroupName(threadId);
+            } else {
+              threadName = await activeZaloService.getUserName(threadId);
+            }
+          } catch {
+            // Bỏ qua
+          }
+        }
+
+        // Fallback tên hiển thị nếu API chưa trả về
+        if (!threadName) {
+          if (candidate?.fullName || candidate?.senderName) {
+            threadName = candidate.fullName || candidate.senderName;
+          } else if (messages && messages.length > 0) {
+            const userMsg = messages.find(
+              (m) =>
+                m.role === "user" &&
+                m.senderName &&
+                m.senderName !== "Unknown" &&
+                m.senderName !== "Ứng viên" &&
+                m.senderName !== "Thành viên nhóm"
+            );
+            if (userMsg?.senderName) {
+              threadName = userMsg.senderName;
+            }
+          }
+        }
+
+        if (!threadName) {
+          threadName = isGroup ? `Nhóm ${threadId}` : `Người dùng ${threadId}`;
+        }
+
+        res.writeHead(200, {
+          "Content-Type": "application/json; charset=utf-8",
+          "Cache-Control": "no-cache, no-store, must-revalidate",
+        });
+        res.end(
+          JSON.stringify({
+            success: true,
+            threadId,
+            threadName,
+            isGroup,
+            candidate,
+            messages,
+            history: messages,
+          })
+        );
+      } catch (err) {
+        console.error("❌ [API Chat History] Lỗi khi lấy dữ liệu:", err);
+        res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
+        res.end(JSON.stringify({ success: false, error: String(err) }));
+      }
+      return;
+    }
+
+    // 4. API POST: Gửi tin nhắn trực tiếp từ Web Chat tới Zalo của thread
+    if (req.method === "POST" && pathname === "/api/chat/send") {
+      let body = "";
+      req.on("data", (chunk) => {
+        body += chunk;
+      });
+      req.on("end", async () => {
+        try {
+          const payload = JSON.parse(body || "{}");
+          const { threadId, message, type } = payload;
+
+          if (!threadId || !message) {
+            res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" });
+            res.end(
+              JSON.stringify({
+                success: false,
+                error: "Thiếu tham số threadId hoặc message",
+              })
+            );
+            return;
+          }
+
+          if (!activeZaloService) {
+            res.writeHead(503, { "Content-Type": "application/json; charset=utf-8" });
+            res.end(
+              JSON.stringify({
+                success: false,
+                error: "Dịch vụ Zalo Bot chưa sẵn sàng hoặc chưa hoàn tất đăng nhập",
+              })
+            );
+            return;
+          }
+
+          // Gửi tin nhắn tự động phân biệt ThreadType và fallback
+          const sendType = type !== undefined ? type : undefined;
+          await activeZaloService.sendMessageAuto(threadId, message, sendType);
+
+          // Lưu tin nhắn vào SQLite database để đồng bộ lịch sử và kích hoạt broadcast Realtime
+          const chatHistoryRepo = new ChatHistoryRepository();
+          chatHistoryRepo.addMessage({
+            threadId,
+            senderId: loggedInAccount?.id || "admin",
+            senderName: "Admin",
+            role: "model",
+            content: message,
+            timestamp: Date.now(),
+          });
+
+          console.log(`📤 [Web Chat] Đã gửi tin nhắn trực tiếp tới thread [${threadId}]: "${message}"`);
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(
+            JSON.stringify({
+              success: true,
+              message: "Đã gửi tin nhắn thành công",
+            })
+          );
+        } catch (err) {
+          console.error("❌ [Web Chat] Lỗi khi gửi tin nhắn:", err);
+          res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ success: false, error: String(err) }));
+        }
+      });
+      return;
+    }
+
+    // 3.1. API POST: Gửi hình ảnh trực tiếp tới thread Zalo qua Web Chat
+    if (req.method === "POST" && pathname === "/api/chat/send-image") {
+      let body = "";
+      req.on("data", (chunk) => {
+        body += chunk;
+        if (body.length > 30 * 1024 * 1024) {
+          // Max 30MB
+          req.destroy();
+        }
+      });
+      req.on("end", async () => {
+        try {
+          const { threadId, imageBase64, filename } = JSON.parse(body || "{}");
+          if (!threadId || !imageBase64) {
+            res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" });
+            res.end(JSON.stringify({ success: false, error: "Thiếu threadId hoặc imageBase64" }));
+            return;
+          }
+
+          if (!activeZaloService) {
+            res.writeHead(503, { "Content-Type": "application/json; charset=utf-8" });
+            res.end(JSON.stringify({ success: false, error: "Zalo client chưa sẵn sàng hoặc chưa đăng nhập." }));
+            return;
+          }
+
+          // Ghi buffer tạm thời ra thư mục uploads
+          const uploadDir = path.resolve("./data/uploads");
+          if (!fsSync.existsSync(uploadDir)) {
+            fsSync.mkdirSync(uploadDir, { recursive: true });
+          }
+
+          const rawExt = (filename && path.extname(filename).toLowerCase()) || ".png";
+          const validExts = [".jpg", ".jpeg", ".png", ".webp"];
+          const safeExt = validExts.includes(rawExt) ? rawExt : ".png";
+          const tempFileName = `upload_${Date.now()}_${Math.random().toString(36).slice(2, 8)}${safeExt}`;
+          const tempFilePath = path.join(uploadDir, tempFileName);
+
+          // Loại bỏ tiền tố data:image/...;base64, nếu có
+          const cleanBase64 = imageBase64.includes(",")
+            ? imageBase64.split(",")[1]
+            : imageBase64;
+          await fs.writeFile(tempFilePath, Buffer.from(cleanBase64.trim(), "base64"));
+
+          // Gửi qua Zalo API
+          let sendResult: any = null;
+          try {
+            sendResult = await activeZaloService.sendAttachmentAuto(threadId, tempFilePath);
+          } catch (sendErr) {
+            console.error("⚠️ Lỗi gửi attachment qua Zalo API:", sendErr);
+            res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
+            res.end(JSON.stringify({ success: false, error: "Zalo API từ chối gửi ảnh: " + String(sendErr) }));
+            return;
+          }
+
+          // Lấy URL ảnh nếu có từ kết quả Zalo API
+          let remoteUrl = "";
+          if (Array.isArray(sendResult) && sendResult[0]?.normalUrl) {
+            remoteUrl = sendResult[0].normalUrl;
+          } else if (sendResult?.normalUrl) {
+            remoteUrl = sendResult.normalUrl;
+          }
+          const finalImageUrl = remoteUrl || `data:image/png;base64,${cleanBase64}`;
+
+          // Lưu vào cơ sở dữ liệu SQLite
+          const chatHistoryRepo = new ChatHistoryRepository();
+          chatHistoryRepo.addMessage({
+            threadId,
+            senderId: loggedInAccount?.id || "admin",
+            senderName: "Admin (Tôi)",
+            role: "model",
+            content: "",
+            hasImage: true,
+            imageUrls: [finalImageUrl],
+            timestamp: Date.now(),
+          });
+
+          console.log(`🖼️ [Web Chat] Đã gửi hình ảnh đính kèm tới thread [${threadId}]`);
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(
+            JSON.stringify({
+              success: true,
+              message: "Đã gửi ảnh thành công",
+              imageUrl: finalImageUrl,
+            })
+          );
+        } catch (err) {
+          console.error("❌ [Web Chat] Lỗi khi xử lý gửi ảnh:", err);
+          res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify({ success: false, error: String(err) }));
+        }
+      });
+      return;
+    }
+
+    // 4. API GET: Trả về trạng thái phiên đăng nhập & mã QR
+    if (pathname === "/api/status" || pathname === "/api/qr") {
       res.writeHead(200, {
         "Content-Type": "application/json; charset=utf-8",
         "Cache-Control": "no-cache, no-store, must-revalidate",
@@ -111,8 +408,8 @@ export function startQrWebServer(port: number = config.qrPort): void {
       return;
     }
 
-    // API POST: Xử lý Đăng xuất (Logout)
-    if (req.method === "POST" && req.url === "/api/logout") {
+    // 5. API POST: Xử lý Đăng xuất (Logout)
+    if (req.method === "POST" && pathname === "/api/logout") {
       try {
         if (fsSync.existsSync(config.sessionFilePath)) {
           await fs.unlink(config.sessionFilePath);
@@ -149,7 +446,7 @@ export function startQrWebServer(port: number = config.qrPort): void {
       return;
     }
 
-    // Trang Web Portal UI
+    // 6. Trang Web Portal Dashboard UI
     const html = `
       <!DOCTYPE html>
       <html lang="vi">
@@ -236,6 +533,10 @@ export function startQrWebServer(port: number = config.qrPort): void {
                 <span class="info-value">${config.geminiModel}</span>
               </div>
             </div>
+
+            <a href="/chat" style="display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; padding: 12px 20px; background: #0068ff; color: white; border-radius: 12px; font-size: 15px; font-weight: 600; text-decoration: none; margin-bottom: 12px; transition: background 0.2s;">
+              💬 Mở giao diện Chat Trực Tiếp (/chat)
+            </a>
 
             <button id="btnLogout" class="btn-logout" onclick="handleLogout()">
               🚪 Đăng xuất tài khoản

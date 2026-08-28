@@ -1,7 +1,7 @@
 import { type ParsedMessage, ThreadType, Reactions } from "../types/zalo.types.js";
 import { type ZaloService } from "../services/zaloService.js";
 import { type AIService, type CCCDAnalysisResult } from "../services/aiService.js";
-import { CandidateRepository, type CandidateRecord } from "../database/index.js";
+import { CandidateRepository, ChatHistoryRepository, type CandidateRecord } from "../database/index.js";
 import { HRNotifier } from "../services/hrNotifier.js";
 import { ToolExecutor } from "../services/toolExecutor.js";
 import { MessageBatcher, type MessageBatch } from "./messageBatcher.js";
@@ -16,6 +16,7 @@ import { config } from "../config/index.js";
  */
 export class MessageHandler {
   private readonly candidateRepo: CandidateRepository;
+  private readonly chatHistoryRepo: ChatHistoryRepository;
   private readonly hrNotifier: HRNotifier;
   private readonly userContextManager: UserContextManager;
   private readonly toolExecutor: ToolExecutor;
@@ -32,6 +33,7 @@ export class MessageHandler {
     userContextManager?: UserContextManager
   ) {
     this.candidateRepo = candidateRepo || new CandidateRepository();
+    this.chatHistoryRepo = new ChatHistoryRepository();
     this.hrNotifier = hrNotifier || new HRNotifier(this.zaloService);
     this.userContextManager =
       userContextManager || UserContextManager.getInstance();
@@ -54,9 +56,36 @@ export class MessageHandler {
    * Phương thức xử lý chính cho tất cả tin nhắn (gửi đến & gửi đi)
    */
   public async handle(parsedMessage: ParsedMessage): Promise<void> {
+    // 0. Tự động lưu tin nhắn vào SQLite và kích hoạt Realtime SSE Stream tới Web Chat
+    if (parsedMessage.text || parsedMessage.hasImage) {
+      try {
+        this.chatHistoryRepo.addMessage({
+          threadId: parsedMessage.threadId,
+          senderId: parsedMessage.senderId,
+          senderName:
+            parsedMessage.senderName ||
+            (parsedMessage.isSelf
+              ? "Admin (Tôi)"
+              : parsedMessage.isGroup
+              ? "Thành viên nhóm"
+              : "Ứng viên"),
+          role: parsedMessage.isSelf ? "model" : "user",
+          content:
+            parsedMessage.text ||
+            (parsedMessage.hasImage ? "[Hình ảnh đính kèm]" : ""),
+          hasImage: parsedMessage.hasImage,
+          imageUrls: parsedMessage.imageUrls,
+          timestamp: parsedMessage.timestamp || Date.now(),
+        });
+      } catch (err) {
+        console.warn("⚠️ Không thể lưu tin nhắn vào chat_messages:", err);
+      }
+    }
+
     if (parsedMessage.isSelf) {
-      // 1. Xử lý tin nhắn do chính tài khoản Bot gửi đi (Outgoing Message)
+      // 1. Xử lý tin nhắn do chính tài khoản Bot / Thiết bị khác cùng tài khoản gửi đi (Outgoing Message)
       await this.handleOutgoingMessage(parsedMessage);
+      return;
     } else if (
       parsedMessage.threadId === config.hrRecipientId ||
       parsedMessage.senderId === config.hrRecipientId
@@ -131,10 +160,19 @@ export class MessageHandler {
         const candidates = this.candidateRepo.getRecentCandidates(5);
 
         if (candidates.length === 0) {
+          const emptyMsg = "📋 Hiện tại chưa có ứng viên nào đăng ký trong cơ sở dữ liệu.";
           await this.zaloService.replyMessage(
             parsedMessage.raw,
-            "📋 Hiện tại chưa có ứng viên nào đăng ký trong cơ sở dữ liệu."
+            emptyMsg
           );
+          this.chatHistoryRepo.addMessage({
+            threadId: parsedMessage.threadId,
+            senderId: "bot",
+            senderName: "TTN HR Assistant (Bot)",
+            role: "model",
+            content: emptyMsg,
+            timestamp: Date.now(),
+          });
           console.log(
             `📤 [HR Admin] Đã reply danh sách ứng viên (trống) tới [${parsedMessage.threadId}]`
           );
@@ -148,10 +186,19 @@ export class MessageHandler {
           report += `   • Lịch hẹn: ${c.interviewDate || "Chưa có"} | Trạng thái: ${c.status}\n\n`;
         });
 
+        const replyContent = report.trim();
         await this.zaloService.replyMessage(
           parsedMessage.raw,
-          report.trim()
+          replyContent
         );
+        this.chatHistoryRepo.addMessage({
+          threadId: parsedMessage.threadId,
+          senderId: "bot",
+          senderName: "TTN HR Assistant (Bot)",
+          role: "model",
+          content: replyContent,
+          timestamp: Date.now(),
+        });
         console.log(
           `📤 [HR Admin] Đã reply danh sách ${candidates.length} ứng viên tới [${parsedMessage.threadId}]`
         );

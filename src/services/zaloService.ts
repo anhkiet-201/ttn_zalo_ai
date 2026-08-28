@@ -9,6 +9,7 @@ import {
   type ForwardMessagePayload,
   type ForwardMessageResponse,
 } from "zca-js";
+import { SQLiteDatabase } from "../database/sqliteDb.js";
 
 /**
  * Tách một chuỗi văn bản dài thành nhiều đoạn ngắn (mặc định <= 1500 ký tự)
@@ -99,8 +100,109 @@ export class ZaloService {
       }
       return await this.api.sendMessage(content, threadId, type);
     } catch (error) {
-      console.error(`❌ Lỗi khi gửi tin nhắn tới ${threadId}:`, error);
+      console.error(`❌ Lỗi khi gửi tin nhắn tới ${threadId} (type=${type}):`, error);
       throw error;
+    }
+  }
+
+  private groupCheckCache = new Map<string, boolean>();
+
+  /**
+   * Kiểm tra xem threadId có phải là Nhóm Zalo (Group) hay không
+   */
+  public async isGroupThread(threadId: string): Promise<boolean> {
+    if (this.groupCheckCache.has(threadId)) {
+      return this.groupCheckCache.get(threadId)!;
+    }
+
+    try {
+      const gInfo = (await this.api.getGroupInfo(threadId)) as any;
+      if (gInfo && gInfo.gridInfoMap && gInfo.gridInfoMap[threadId]) {
+        this.groupCheckCache.set(threadId, true);
+        return true;
+      }
+    } catch {
+      // Không phải nhóm
+    }
+
+    this.groupCheckCache.set(threadId, false);
+    return false;
+  }
+
+  /**
+   * Gửi tin nhắn thông minh tự động phát hiện ThreadType và fallback
+   * Đảm bảo gửi tin nhắn thành công cho cả tin nhắn 1-1 và tin nhắn Nhóm mà không bị lỗi tham số.
+   */
+  public async sendMessageAuto(
+    threadId: string,
+    content: string | MessageContent,
+    preferredType?: ThreadType
+  ): Promise<SendMessageResponse> {
+    let primaryType = preferredType;
+
+    // Tự động kiểm tra loại thread qua Zalo API và SQLite nếu chưa chỉ định
+    if (primaryType === undefined) {
+      const isGroup = await this.isGroupThread(threadId);
+      primaryType = isGroup ? ThreadType.Group : ThreadType.User;
+    }
+
+    const secondaryType =
+      primaryType === ThreadType.User ? ThreadType.Group : ThreadType.User;
+
+    try {
+      return await this.sendMessage(threadId, content, primaryType);
+    } catch (err) {
+      console.warn(
+        `⚠️ [SendMessageAuto] Gửi với ThreadType=${primaryType} thất bại tới [${threadId}], đang tự động fallback sang ThreadType=${secondaryType}:`,
+        err
+      );
+      return await this.sendMessage(threadId, content, secondaryType);
+    }
+  }
+
+  /**
+   * Tự động gửi hình ảnh/tập tin đính kèm tới thread với cơ chế fallback thông minh
+   */
+  public async sendAttachmentAuto(
+    threadId: string,
+    sources: string | string[],
+    caption: string = "",
+    preferredType?: ThreadType
+  ): Promise<any> {
+    let primaryType = preferredType;
+
+    if (primaryType === undefined) {
+      const isGroup = await this.isGroupThread(threadId);
+      primaryType = isGroup ? ThreadType.Group : ThreadType.User;
+    }
+
+    const secondaryType =
+      primaryType === ThreadType.User ? ThreadType.Group : ThreadType.User;
+
+    const sourceList = Array.isArray(sources) ? sources : [sources];
+
+    try {
+      return await this.api.sendMessage(
+        {
+          msg: caption,
+          attachments: sourceList,
+        },
+        threadId,
+        primaryType
+      );
+    } catch (err) {
+      console.warn(
+        `⚠️ [SendAttachmentAuto] Gửi ảnh với ThreadType=${primaryType} thất bại tới [${threadId}], đang tự động fallback sang ThreadType=${secondaryType}:`,
+        err
+      );
+      return await this.api.sendMessage(
+        {
+          msg: caption,
+          attachments: sourceList,
+        },
+        threadId,
+        secondaryType
+      );
     }
   }
 
@@ -243,6 +345,32 @@ export class ZaloService {
     }
 
     return groupId;
+  }
+
+  /**
+   * Lấy tên hiển thị của người dùng (Zalo cá nhân 1-1 kèm in-memory cache)
+   */
+  public async getUserName(userId: string): Promise<string> {
+    const cacheKey = `user_${userId}`;
+    const cached = this.groupNameCache.get(cacheKey);
+    if (cached) return cached;
+
+    try {
+      const info: any = await this.api.getUserInfo(userId);
+      const profile =
+        info?.changed_profiles?.[userId] ||
+        info?.unchanged_profiles?.[userId] ||
+        info?.[userId];
+      const name = profile?.displayName || profile?.zaloName || profile?.username;
+      if (name) {
+        this.groupNameCache.set(cacheKey, name);
+        return name;
+      }
+    } catch (error) {
+      console.warn(`⚠️ Không thể lấy tên user [${userId}]:`, error);
+    }
+
+    return "";
   }
 
   /**

@@ -56,12 +56,20 @@ export function extractBestImageUrl(obj: Record<string, unknown>): string | null
  * EventDispatcher: Nhận và định tuyến các sự kiện từ Zalo Listener tới các Handler
  */
 export class EventDispatcher {
+  private ownId: string = "";
   private messageHandlers: MessageHandlerCallback[] = [];
   private groupEventHandlers: GroupEventHandlerCallback[] = [];
   private friendEventHandlers: FriendEventHandlerCallback[] = [];
   private reactionHandlers: ReactionHandlerCallback[] = [];
   private undoHandlers: UndoHandlerCallback[] = [];
   private typingHandlers: TypingHandlerCallback[] = [];
+
+  /**
+   * Cập nhật ID của tài khoản đang đăng nhập để nhận diện chính xác tin nhắn gửi từ thiết bị khác
+   */
+  public setOwnId(id: string): void {
+    this.ownId = id;
+  }
 
   /**
    * Đăng ký xử lý tin nhắn
@@ -107,16 +115,44 @@ export class EventDispatcher {
 
   /**
    * Chuẩn hoá đối tượng Message thô thành ParsedMessage dễ thao tác
+   * Đồng bộ chính xác tin nhắn gửi từ điện thoại, máy tính và các thiết bị khác cùng tài khoản.
    */
   public parseMessage(
     rawMessage: Message,
     prefix: string = config.botPrefix
   ): ParsedMessage {
     const isGroup = rawMessage.type === ThreadType.Group;
-    const isSelf = rawMessage.isSelf ?? false;
-    const threadId = rawMessage.threadId;
-    const senderId = rawMessage.data.uidFrom;
-    const senderName = rawMessage.data.dName || "Unknown";
+    const uidFrom = String(rawMessage.data?.uidFrom ?? "");
+    const idTo = String(rawMessage.data?.idTo ?? "");
+
+    // Nhận diện tin nhắn do chính tài khoản này gửi đi từ bất kỳ thiết bị nào (Mobile App, PC, Web, Bot)
+    const isSelf =
+      rawMessage.isSelf === true ||
+      uidFrom === "0" ||
+      (this.ownId !== "" && uidFrom === this.ownId);
+
+    let threadId = rawMessage.threadId;
+    if (!isGroup) {
+      if (isSelf) {
+        // Chat 1-1 tự gửi từ điện thoại/PC: idTo là ID người nhận (ứng viên)
+        threadId =
+          idTo && idTo !== "0" && idTo !== this.ownId
+            ? idTo
+            : rawMessage.threadId || idTo;
+      } else {
+        // Chat 1-1 nhận từ ứng viên: uidFrom là ID người gửi (ứng viên)
+        threadId =
+          uidFrom && uidFrom !== "0" && uidFrom !== this.ownId
+            ? uidFrom
+            : rawMessage.threadId;
+      }
+    } else {
+      // Chat nhóm: threadId luôn là ID của nhóm
+      threadId = idTo && idTo !== "0" ? idTo : rawMessage.threadId;
+    }
+
+    const senderId = isSelf ? this.ownId || uidFrom || "0" : uidFrom;
+    const senderName = isSelf ? "Admin (Tôi)" : rawMessage.data.dName || "Unknown";
 
     // Trích xuất nội dung văn bản và hình ảnh đính kèm
     let text = "";
@@ -156,9 +192,9 @@ export class EventDispatcher {
     const isPhoto = rawMessage.data.msgType === "chat.photo";
     const hasImage = isPhoto || imageUrls.length > 0;
 
-    // Nếu tin nhắn chỉ gửi ảnh mà không có chữ, gán chú thích mô tả
+    // Nếu tin nhắn chỉ gửi ảnh mà không có chữ, giữ text rỗng hoặc theo mô tả ảnh
     if (hasImage && !text) {
-      text = imageDescription || "[Người dùng gửi một hình ảnh]";
+      text = imageDescription || "";
     }
 
     const trimmedText = text.trim();
