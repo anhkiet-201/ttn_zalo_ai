@@ -87,4 +87,6 @@ export const config: BotConfig = {
     : ["mai pv", "mai nv"],
   hrRecipientId: process.env.HR_RECIPIENT_ID || "",
   chatHistoryLimit: Number(process.env.CHAT_HISTORY_LIMIT) || 20,
+  erpBaseUrl: process.env.ERP_BASE_URL || "https://erp.vieclamhr.com",
+  erpApiKey: process.env.ERP_API_KEY || "ttn_live_PLMxxxx",
 };

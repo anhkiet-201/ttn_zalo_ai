@@ -53,6 +53,8 @@ export interface BotConfig {
   groupIgnoreKeywords: string[];
   hrRecipientId: string;
   chatHistoryLimit: number;
+  erpBaseUrl: string;
+  erpApiKey: string;
 }
 
 /**
