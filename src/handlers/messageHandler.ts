@@ -662,24 +662,45 @@ export class MessageHandler {
 
   /**
    * Tách câu trả lời thành danh sách các tin nhắn ngắn riêng biệt
+   * Chuẩn hóa và loại bỏ hoàn toàn các ký tự thừa như [, ], (, ) xung quanh dấu phân cách |||
    */
   private splitMessages(text: string): string[] {
-    if (text.includes("|||")) {
-      return text
+    if (!text || !text.trim()) return [];
+
+    // 1. Chuẩn hóa tất cả các biến thể [|||], (|||), {|||}, |||| thành |||
+    const normalized = text
+      .replace(/\[\s*\|{2,}\s*\]/g, "|||")
+      .replace(/\(\s*\|{2,}\s*\)/g, "|||")
+      .replace(/\{\s*\|{2,}\s*\}/g, "|||")
+      .replace(/\|{2,}/g, "|||");
+
+    const cleanSnippet = (s: string): string => {
+      let res = s.trim();
+      // Bóc tách các dấu đóng/mở ngoặc đơn lẻ còn sót lại ở đầu hoặc cuối tin nhắn
+      res = res
+        .replace(/^[\]\)\}\>\s]+/, "")
+        .replace(/[\[\(\{\<\s]+$/, "")
+        .trim();
+      return res;
+    };
+
+    if (normalized.includes("|||")) {
+      return normalized
         .split("|||")
-        .map((s) => s.trim())
+        .map(cleanSnippet)
         .filter((s) => s.length > 0);
     }
 
-    const parts = text
+    const parts = normalized
       .split(/\n\s*\n/)
-      .map((s) => s.trim())
+      .map(cleanSnippet)
       .filter((s) => s.length > 0);
 
     if (parts.length > 1) {
       return parts;
     }
 
-    return [text.trim()];
+    const single = cleanSnippet(normalized);
+    return single ? [single] : [];
   }
 }
