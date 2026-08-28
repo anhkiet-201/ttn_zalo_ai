@@ -1,4 +1,4 @@
-import { authenticateZalo } from "./auth/sessionManager.js";
+import { authenticateZalo, onLogout } from "./auth/sessionManager.js";
 import { ZaloService } from "./services/zaloService.js";
 import { AIService } from "./services/aiService.js";
 import { EventDispatcher } from "./listener/eventDispatcher.js";
@@ -9,16 +9,12 @@ import { ReactionHandler } from "./handlers/reactionHandler.js";
 import { FriendHandler } from "./handlers/friendHandler.js";
 import { config } from "./config/index.js";
 
-/**
- * Hàm khởi động chính của ứng dụng Zalo AI Bot
- */
-async function main() {
-  console.log("==================================================");
-  console.log("🚀 KHỞI ĐỘNG ZALO BOT - AI GEMINI AUTO-REPLY SYSTEM");
-  console.log("📦 Dựa trên thư viện: zca-js v2.x & @google/genai");
-  console.log(`🤖 Model AI: ${config.geminiModel}`);
-  console.log("==================================================");
+let currentListener: MessageListener | null = null;
 
+/**
+ * Hàm khởi động và quản lý vòng đời của Zalo Bot
+ */
+async function startBot() {
   try {
     // 1. Xác thực và đăng nhập Zalo (Session / QR)
     const api = await authenticateZalo();
@@ -58,23 +54,44 @@ async function main() {
     });
 
     // 5. Khởi tạo và kích hoạt Message Listener
-    const messageListener = new MessageListener(api, dispatcher);
-    messageListener.start();
-
-    // 6. Xử lý tắt ứng dụng một cách an toàn (Graceful Shutdown)
-    const handleShutdown = (signal: string) => {
-      console.log(`\n🛑 Nhận tín hiệu ${signal}. Đang tiến hành dừng Bot...`);
-      messageListener.stop();
-      process.exit(0);
-    };
-
-    process.on("SIGINT", () => handleShutdown("SIGINT"));
-    process.on("SIGTERM", () => handleShutdown("SIGTERM"));
+    currentListener = new MessageListener(api, dispatcher);
+    currentListener.start();
   } catch (error) {
-    console.error("❌ Lỗi nghiêm trọng khi khởi động Zalo Bot:", error);
-    process.exit(1);
+    console.error("❌ Lỗi khi khởi động Zalo Bot:", error);
   }
 }
 
+/**
+ * Đăng ký callback khi người dùng bấm Đăng xuất từ Web Portal
+ */
+onLogout(async () => {
+  if (currentListener) {
+    console.log("🛑 Đang dừng Message Listener cũ...");
+    currentListener.stop();
+    currentListener = null;
+  }
+  console.log("🔄 Đang khởi tạo lại phiên đăng nhập Zalo mới...");
+  await startBot();
+});
+
+// Xử lý tắt ứng dụng một cách an toàn (Graceful Shutdown)
+const handleShutdown = (signal: string) => {
+  console.log(`\n🛑 Nhận tín hiệu ${signal}. Đang tiến hành dừng Bot...`);
+  if (currentListener) {
+    currentListener.stop();
+  }
+  process.exit(0);
+};
+
+process.on("SIGINT", () => handleShutdown("SIGINT"));
+process.on("SIGTERM", () => handleShutdown("SIGTERM"));
+
 // Bắt đầu chạy
-main();
+console.log("==================================================");
+console.log("🚀 KHỞI ĐỘNG ZALO BOT - AI GEMINI AUTO-REPLY SYSTEM");
+console.log("📦 Dựa trên thư viện: zca-js v2.x & @google/genai");
+console.log(`🤖 Model AI: ${config.geminiModel}`);
+console.log("==================================================");
+
+startBot();
+

@@ -70,7 +70,7 @@ export const config: BotConfig = {
   userAgent:
     process.env.ZALO_USER_AGENT ||
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
-  qrPort: Number(process.env.QR_PORT) || 3000,
+  qrPort: Number(process.env.QR_PORT) || 5000,
   credentials: getCredentialsFromEnv(),
   geminiApiKey: process.env.GEMINI_API_KEY,
   geminiModel: process.env.GEMINI_MODEL || "gemini-2.5-flash",
