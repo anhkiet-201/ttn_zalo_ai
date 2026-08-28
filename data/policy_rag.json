@@ -1,0 +1,28 @@
+[
+  {
+    "id": "policy_01",
+    "title": "Quy định về chế độ BHXH",
+    "details": {
+      "official_employee": "Được tham gia đầy đủ BHXH theo quy định của công ty.",
+      "seasonal_employee": "Sẽ được công ty đóng bảo hiểm sau khi làm việc đủ 14 ngày công.",
+      "contribution_rate": {
+        "company": "17.5%",
+        "employee": "8%"
+      },
+      "luat_ap_dung": "Luật Bảo hiểm xã hội 2024 và Nghị định 158/2025/NĐ-CP",
+      "cac_loai_hinh_bhxh": [
+        "BHXH bắt buộc: 5 chế độ (ốm đau, thai sản, hưu trí, tử tuất, tai nạn lao động - bệnh nghề nghiệp).",
+        "BHXH tự nguyện: 4 chế độ (trợ cấp thai sản, hưu trí, tử tuất, tai nạn lao động).",
+        "Trợ cấp hưu trí xã hội: Áp dụng cho người từ đủ 75 tuổi trở lên không có lương hưu.",
+        "Bảo hiểm hưu trí bổ sung: Tự nguyện nhằm gia tăng mức hưởng hưu trí."
+      ],
+      "dieu_kien_huong_luong_huu": "Thời gian đóng BHXH tối thiểu được 15 năm.",
+      "muc_dong_bhxh_bat_buoc": {
+        "nguoi_lao_dong": "8% (vào quỹ Hưu trí & Tử tuất)",
+        "nguoi_su_dung_lao_dong": "17.5% (14% Hưu trí & Tử tuất, 3% Ốm đau & Thai sản, 0.5% Tai nạn lao động)",
+        "tong_cong": "25.5%"
+      },
+      "nghi_huu_truoc_tuoi": "Bị suy giảm khả năng lao động từ 61% trở lên và tuổi đời thấp hơn tối đa 5-10 tuổi so với bình thường."
+    }
+  }
+]
