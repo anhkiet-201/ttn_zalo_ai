@@ -64,6 +64,38 @@ export function extractBestImageUrl(obj: Record<string, unknown>): string | null
 }
 
 /**
+ * Trích xuất TẤT CẢ các URL hình ảnh từ một object hoặc mảng attachments/album
+ */
+export function extractAllImageUrls(obj: unknown): string[] {
+  const urls: string[] = [];
+  if (!obj) return urls;
+
+  if (Array.isArray(obj)) {
+    for (const item of obj) {
+      urls.push(...extractAllImageUrls(item));
+    }
+    return urls;
+  }
+
+  if (typeof obj === "object" && obj !== null) {
+    const record = obj as Record<string, unknown>;
+    const best = extractBestImageUrl(record);
+    if (best) urls.push(best);
+
+    const listKeys = ["attachments", "photos", "images", "items", "list", "grid", "media", "subImages", "elements"];
+    for (const key of listKeys) {
+      if (Array.isArray(record[key])) {
+        urls.push(...extractAllImageUrls(record[key]));
+      }
+    }
+  } else if (typeof obj === "string" && isValidHttpUrl(obj)) {
+    urls.push(obj.trim());
+  }
+
+  return urls;
+}
+
+/**
  * EventDispatcher: Nhận và định tuyến các sự kiện từ Zalo Listener tới các Handler
  */
 export class EventDispatcher {
@@ -176,8 +208,7 @@ export class EventDispatcher {
       if (contentStr.startsWith("{") && contentStr.endsWith("}")) {
         try {
           const parsed = JSON.parse(contentStr);
-          const bestImg = extractBestImageUrl(parsed);
-          if (bestImg) rawImageUrls.push(bestImg);
+          rawImageUrls.push(...extractAllImageUrls(parsed));
           if (parsed.description) imageDescription = parsed.description;
           if (parsed.title) text = parsed.title;
         } catch {
@@ -191,10 +222,18 @@ export class EventDispatcher {
       typeof rawMessage.data.content === "object"
     ) {
       const attach = rawMessage.data.content as Record<string, unknown>;
-      const bestImg = extractBestImageUrl(attach);
-      if (bestImg) rawImageUrls.push(bestImg);
+      rawImageUrls.push(...extractAllImageUrls(attach));
       if (typeof attach.description === "string") imageDescription = attach.description;
       if (typeof attach.title === "string") text = attach.title;
+    }
+
+    // Kiểm tra thêm params & paramsExt từ Zalo
+    const rawData = rawMessage.data as any;
+    if (rawData?.params) {
+      rawImageUrls.push(...extractAllImageUrls(rawData.params));
+    }
+    if (rawData?.paramsExt) {
+      rawImageUrls.push(...extractAllImageUrls(rawData.paramsExt));
     }
 
     // Lọc trùng lặp URL và chỉ giữ các URL hợp lệ

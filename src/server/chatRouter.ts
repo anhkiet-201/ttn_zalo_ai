@@ -9,7 +9,7 @@ const __dirname = path.dirname(__filename);
 const defaultPublicDir = path.join(__dirname, "public");
 import { renderChatPage } from "./chatUi.js";
 import { chatBroadcaster } from "./chatBroadcaster.js";
-import { ChatHistoryRepository, CandidateRepository, ThreadMetadataRepository, type ThreadFilter } from "../database/index.js";
+import { ChatHistoryRepository, CandidateRepository, ThreadMetadataRepository, type ThreadFilter, type ChatMessageRecord } from "../database/index.js";
 import { UserContextManager } from "../services/userContextManager.js";
 import { type ZaloService } from "../services/zaloService.js";
 
@@ -32,21 +32,29 @@ export async function handleChatRoute(
 ): Promise<boolean> {
   // 1. Phục vụ Static Files (/static/...)
   if (pathname.startsWith("/static/")) {
-    const fileName = path.basename(pathname);
+    const relativePath = pathname.replace(/^\/static\//, "");
     const publicDir = fsSync.existsSync(defaultPublicDir)
       ? defaultPublicDir
       : path.resolve("./src/server/public");
-    const filePath = path.join(publicDir, fileName);
+    const filePath = path.normalize(path.join(publicDir, relativePath));
 
-    if (fsSync.existsSync(filePath)) {
+    if (!filePath.startsWith(publicDir)) {
+      res.writeHead(403, { "Content-Type": "text/plain; charset=utf-8" });
+      res.end("Forbidden");
+      return true;
+    }
+
+    if (fsSync.existsSync(filePath) && fsSync.statSync(filePath).isFile()) {
       try {
         const content = await fs.readFile(filePath);
-        const ext = path.extname(fileName).toLowerCase();
+        const ext = path.extname(filePath).toLowerCase();
         const contentType =
           ext === ".css"
             ? "text/css; charset=utf-8"
             : ext === ".js"
             ? "application/javascript; charset=utf-8"
+            : ext === ".svg"
+            ? "image/svg+xml"
             : "text/plain; charset=utf-8";
 
         res.writeHead(200, {
@@ -73,9 +81,8 @@ export async function handleChatRoute(
     return true;
   }
 
-  // 3. Server-Sent Events (SSE) Stream thời gian thực cho tin nhắn
+  // 3. Server-Sent Events (SSE) Stream thời gian thực cho tin nhắn & threads
   if (pathname === "/api/chat/events") {
-    const threadId = parsedUrl.searchParams.get("thread") || "";
     res.writeHead(200, {
       "Content-Type": "text/event-stream; charset=utf-8",
       "Cache-Control": "no-cache, no-transform",
@@ -85,17 +92,22 @@ export async function handleChatRoute(
 
     res.write(`: connected\n\n`);
 
-    const unsubscribeMessage = chatBroadcaster.onThreadMessage(threadId, (record) => {
+    // Lắng nghe tất cả tin nhắn mới trong hệ thống
+    const onMessage = (record: ChatMessageRecord) => {
       try {
-        res.write(`data: ${JSON.stringify(record)}\n\n`);
+        res.write(`data: ${JSON.stringify({ type: "new_message", data: record })}\n\n`);
       } catch {}
-    });
+    };
 
-    const unsubscribeRename = chatBroadcaster.onThreadRename(threadId, (data) => {
+    // Lắng nghe sự kiện đổi tên thread
+    const onRename = (data: { threadId: string; newName: string }) => {
       try {
-        res.write(`data: ${JSON.stringify(data)}\n\n`);
+        res.write(`data: ${JSON.stringify({ type: "thread_renamed", data })}\n\n`);
       } catch {}
-    });
+    };
+
+    chatBroadcaster.on("message", onMessage);
+    chatBroadcaster.on("thread_renamed", onRename);
 
     const keepAlive = setInterval(() => {
       try {
@@ -104,8 +116,8 @@ export async function handleChatRoute(
     }, 15000);
 
     req.on("close", () => {
-      unsubscribeMessage();
-      unsubscribeRename();
+      chatBroadcaster.off("message", onMessage);
+      chatBroadcaster.off("thread_renamed", onRename);
       clearInterval(keepAlive);
     });
     return true;
@@ -359,19 +371,30 @@ export async function handleChatRoute(
     return true;
   }
 
-  // 7. API POST: Gửi ảnh đính kèm
+  // 7. API POST: Gửi ảnh đính kèm (hỗ trợ cả 1 ảnh và nhiều ảnh cùng lúc)
   if (req.method === "POST" && pathname === "/api/chat/send-image") {
     let body = "";
     req.on("data", (chunk) => {
       body += chunk;
-      if (body.length > 30 * 1024 * 1024) req.destroy();
+      if (body.length > 50 * 1024 * 1024) req.destroy();
     });
     req.on("end", async () => {
       try {
-        const { threadId, imageBase64, filename } = JSON.parse(body || "{}");
-        if (!threadId || !imageBase64) {
+        const payload = JSON.parse(body || "{}");
+        const { threadId, imageBase64, imageData, images, content } = payload;
+        
+        const rawImages: string[] = [];
+        if (Array.isArray(images) && images.length > 0) {
+          rawImages.push(...images);
+        } else if (imageBase64) {
+          rawImages.push(imageBase64);
+        } else if (imageData) {
+          rawImages.push(imageData);
+        }
+
+        if (!threadId || rawImages.length === 0) {
           res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" });
-          res.end(JSON.stringify({ success: false, error: "Thiếu threadId hoặc imageBase64" }));
+          res.end(JSON.stringify({ success: false, error: "Thiếu threadId hoặc hình ảnh" }));
           return;
         }
 
@@ -386,32 +409,30 @@ export async function handleChatRoute(
           fsSync.mkdirSync(uploadDir, { recursive: true });
         }
 
-        const rawExt = (filename && path.extname(filename).toLowerCase()) || ".png";
-        const validExts = [".jpg", ".jpeg", ".png", ".webp"];
-        const safeExt = validExts.includes(rawExt) ? rawExt : ".png";
-        const tempFileName = `upload_${Date.now()}_${Math.random().toString(36).slice(2, 8)}${safeExt}`;
-        const tempFilePath = path.join(uploadDir, tempFileName);
+        const finalImageUrls: string[] = [];
 
-        const cleanBase64 = imageBase64.includes(",") ? imageBase64.split(",")[1] : imageBase64;
-        await fs.writeFile(tempFilePath, Buffer.from(cleanBase64.trim(), "base64"));
+        for (let i = 0; i < rawImages.length; i++) {
+          const rawBase64 = rawImages[i];
+          const cleanBase64 = rawBase64.includes(",") ? rawBase64.split(",")[1] : rawBase64;
+          const tempFileName = `upload_${Date.now()}_${i}_${Math.random().toString(36).slice(2, 8)}.png`;
+          const tempFilePath = path.join(uploadDir, tempFileName);
 
-        let sendResult: any = null;
-        try {
-          sendResult = await activeZaloService.sendAttachmentAuto(threadId, tempFilePath);
-        } catch (sendErr) {
-          console.error("⚠️ Lỗi gửi attachment:", sendErr);
-          res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
-          res.end(JSON.stringify({ success: false, error: "Zalo API từ chối gửi ảnh: " + String(sendErr) }));
-          return;
+          await fs.writeFile(tempFilePath, Buffer.from(cleanBase64.trim(), "base64"));
+
+          try {
+            const sendResult: any = await activeZaloService.sendAttachmentAuto(threadId, tempFilePath);
+            let remoteUrl = "";
+            if (Array.isArray(sendResult) && sendResult[0]?.normalUrl) {
+              remoteUrl = sendResult[0].normalUrl;
+            } else if (sendResult?.normalUrl) {
+              remoteUrl = sendResult.normalUrl;
+            }
+            finalImageUrls.push(remoteUrl || `data:image/png;base64,${cleanBase64}`);
+          } catch (sendErr) {
+            console.error(`⚠️ Lỗi gửi ảnh thứ ${i + 1}:`, sendErr);
+            finalImageUrls.push(`data:image/png;base64,${cleanBase64}`);
+          }
         }
-
-        let remoteUrl = "";
-        if (Array.isArray(sendResult) && sendResult[0]?.normalUrl) {
-          remoteUrl = sendResult[0].normalUrl;
-        } else if (sendResult?.normalUrl) {
-          remoteUrl = sendResult.normalUrl;
-        }
-        const finalImageUrl = remoteUrl || `data:image/png;base64,${cleanBase64}`;
 
         const chatHistoryRepo = new ChatHistoryRepository();
         chatHistoryRepo.addMessage({
@@ -419,15 +440,19 @@ export async function handleChatRoute(
           senderId: loggedInAccount?.id || "admin",
           senderName: "Admin (Tôi)",
           role: "model",
-          content: "",
+          content: content || "",
           hasImage: true,
-          imageUrls: [finalImageUrl],
+          imageUrls: finalImageUrls,
           timestamp: Date.now(),
         });
 
-        console.log(`🖼️ [Web Chat] Đã gửi hình ảnh đính kèm tới [${threadId}]`);
+        console.log(`🖼️ [Web Chat] Đã gửi ${finalImageUrls.length} hình ảnh tới [${threadId}]`);
         res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
-        res.end(JSON.stringify({ success: true, message: "Đã gửi ảnh thành công", imageUrl: finalImageUrl }));
+        res.end(JSON.stringify({
+          success: true,
+          message: `Đã gửi ${finalImageUrls.length} ảnh thành công`,
+          imageUrls: finalImageUrls,
+        }));
       } catch (err) {
         console.error("❌ [Web Chat] Lỗi gửi ảnh:", err);
         res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });

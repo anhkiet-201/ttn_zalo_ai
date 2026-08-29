@@ -54,22 +54,32 @@ export class ChatHistoryRepository {
     // Chống duplicate: kiểm tra xem tin nhắn cùng thread, cùng role và nội dung/ảnh đã tồn tại chưa
     try {
       let existing: { id: string } | undefined = undefined;
-      if (record.hasImage) {
-        // Đối với tin nhắn có ảnh, chống trùng lặp trong vòng 30 giây
+      if (record.hasImage && record.imageUrls && record.imageUrls.length > 0) {
+        // Chỉ chống trùng lặp khi CHÍNH XÁC CÙNG URL ẢNH được gửi lại trong vòng 5 giây
         const checkImageStmt = this.db.connection.prepare(`
           SELECT id FROM chat_messages 
-          WHERE thread_id = ? AND role = ? AND has_image = 1 AND abs(timestamp - ?) < 30000 
+          WHERE thread_id = ? AND role = ? AND has_image = 1 AND image_urls = ? AND abs(timestamp - ?) < 5000 
           LIMIT 1
         `);
-        existing = checkImageStmt.get(record.threadId, record.role, record.timestamp) as { id: string } | undefined;
+        existing = checkImageStmt.get(
+          record.threadId,
+          record.role,
+          JSON.stringify(record.imageUrls),
+          record.timestamp
+        ) as { id: string } | undefined;
       } else if (record.content && record.content.trim()) {
-        // Đối với tin nhắn chữ, chống trùng lặp cùng nội dung trong vòng 30 giây
+        // Đối với tin nhắn chữ, chống trùng lặp cùng nội dung trong vòng 5 giây
         const checkTextStmt = this.db.connection.prepare(`
           SELECT id FROM chat_messages 
-          WHERE thread_id = ? AND role = ? AND TRIM(content) = ? AND abs(timestamp - ?) < 30000 
+          WHERE thread_id = ? AND role = ? AND TRIM(content) = ? AND abs(timestamp - ?) < 5000 
           LIMIT 1
         `);
-        existing = checkTextStmt.get(record.threadId, record.role, record.content.trim(), record.timestamp) as { id: string } | undefined;
+        existing = checkTextStmt.get(
+          record.threadId,
+          record.role,
+          record.content.trim(),
+          record.timestamp
+        ) as { id: string } | undefined;
       }
 
       if (existing) {
