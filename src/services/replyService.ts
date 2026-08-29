@@ -201,10 +201,8 @@ export class ReplyService {
       while (response.functionCalls && response.functionCalls.length > 0 && turns < 3) {
         turns++;
         const functionCalls = response.functionCalls;
-        console.log(
-          `🛠️ [ReplyService Tool Call]: AI đưa ra quyết định gọi ${functionCalls.length} tool:`,
-          JSON.stringify(functionCalls, null, 2)
-        );
+        const callsSummary = functionCalls.map(c => `${c.name}(${JSON.stringify(c.args)})`).join(", ");
+        console.log(`🛠️ [Tool Call] ${callsSummary}`);
 
         const modelContent = response.candidates?.[0]?.content;
         if (modelContent) {

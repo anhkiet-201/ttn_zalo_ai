@@ -15,11 +15,9 @@ export async function downloadImageAsBase64(
   try {
     const parsedUrl = new URL(trimmedUrl);
     if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
-      console.warn(`⚠️ [ImageHelper] Bỏ qua URL không hợp lệ (sai protocol): ${trimmedUrl}`);
       return null;
     }
   } catch {
-    console.warn(`⚠️ [ImageHelper] URL hình ảnh sai định dạng: ${trimmedUrl}`);
     return null;
   }
 
@@ -36,7 +34,6 @@ export async function downloadImageAsBase64(
       });
 
       if (!res.ok) {
-        console.warn(`⚠️ [ImageHelper] Không thể tải ảnh (HTTP ${res.status}): ${trimmedUrl}`);
         if (attempt < retryCount) {
           await new Promise((r) => setTimeout(r, 1000));
           continue;
@@ -51,15 +48,11 @@ export async function downloadImageAsBase64(
       const isImage =
         mimeType.startsWith("image/") || mimeType === "application/octet-stream";
       if (!isImage && mimeType) {
-        console.warn(
-          `⚠️ [ImageHelper] URL không phải là hình ảnh (Content-Type: ${mimeType}): ${trimmedUrl}`
-        );
         return null;
       }
 
       const buffer = await res.arrayBuffer();
       if (buffer.byteLength === 0) {
-        console.warn(`⚠️ [ImageHelper] Ảnh tải về bị rỗng (0 bytes): ${trimmedUrl}`);
         return null;
       }
 
@@ -67,21 +60,10 @@ export async function downloadImageAsBase64(
         mimeType: mimeType.startsWith("image/") ? mimeType : "image/jpeg",
         data: Buffer.from(buffer).toString("base64"),
       };
-    } catch (error: any) {
+    } catch {
       if (attempt < retryCount) {
-        console.warn(
-          `🔄 [ImageHelper] Thử lại tải ảnh lần ${attempt + 1} (${trimmedUrl})...`
-        );
         await new Promise((r) => setTimeout(r, 1000));
         continue;
-      }
-
-      if (error?.name === "TimeoutError") {
-        console.warn(
-          `⏱️ [ImageHelper] Tải ảnh bị quá thời gian (Timeout 60s): ${trimmedUrl}`
-        );
-      } else {
-        console.warn(`⚠️ [ImageHelper] Không thể tải ảnh từ URL: ${trimmedUrl}`, error);
       }
       return null;
     }

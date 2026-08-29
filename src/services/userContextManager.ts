@@ -315,7 +315,6 @@ export class UserContextManager {
    * Flush toàn bộ dữ liệu từ RAM Cache xuống SQLite DB
    */
   public flushAll(): void {
-    console.log(`💾 [UserContext] Đang đồng bộ toàn bộ RAM Cache xuống SQLite DB...`);
     for (const context of this.cache.values()) {
       try {
         this.userContextRepo.save(context);
@@ -323,6 +322,5 @@ export class UserContextManager {
         console.error(`❌ Lỗi đồng bộ user context [${context.id}]:`, err);
       }
     }
-    console.log(`✅ [UserContext] Đồng bộ hoàn tất.`);
   }
 }

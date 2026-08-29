@@ -85,10 +85,8 @@ export class GroupAnalysisService {
       while (response.functionCalls && response.functionCalls.length > 0 && turns < 5) {
         turns++;
         const functionCalls = response.functionCalls;
-        console.log(
-          `🛠️ [GroupAnalysis Tool] Gemini gọi ${functionCalls.length} tool(s):`,
-          JSON.stringify(functionCalls.map((c) => ({ name: c.name, args: c.args })), null, 2)
-        );
+        const callsSummary = functionCalls.map((c) => `${c.name}(${JSON.stringify(c.args)})`).join(", ");
+        console.log(`🛠️ [Group RAG Tool] ${callsSummary}`);
 
         const modelContent = response.candidates?.[0]?.content;
         if (modelContent) {
@@ -224,10 +222,8 @@ export class GroupAnalysisService {
       while (response.functionCalls && response.functionCalls.length > 0 && turns < 5) {
         turns++;
         const functionCalls = response.functionCalls;
-        console.log(
-          `🛠️ [HR RAG Tool] Gemini gọi ${functionCalls.length} tool(s):`,
-          JSON.stringify(functionCalls.map((c) => ({ name: c.name, args: c.args })), null, 2)
-        );
+        const callsSummary = functionCalls.map((c) => `${c.name}(${JSON.stringify(c.args)})`).join(", ");
+        console.log(`🛠️ [HR RAG Tool] ${callsSummary}`);
 
         const modelContent = response.candidates?.[0]?.content;
         if (modelContent) {

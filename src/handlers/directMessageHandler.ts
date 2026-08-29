@@ -174,11 +174,10 @@ export class DirectMessageHandler {
     const formattedText = textLines.join("\n");
     if (!formattedText && allImageUrls.length === 0) return;
 
-    console.log(`\n🚀 [Batch DM] ${batch.messages.length} tin nhắn từ [${batch.threadId}]:\n${formattedText}`);
+    console.log(`📥 [DM: "${batch.senderName}"] ${formattedText.length > 100 ? formattedText.slice(0, 100) + "..." : formattedText}`);
 
     // 6. Gọi AI generateReply — context hoàn toàn riêng theo threadId (không share)
     try {
-      console.log("🤔 [Gemini AI] Đang tạo phản hồi...");
       const aiReply = await this.aiService.generateReply(
         batch.threadId,
         batch.senderName,
@@ -202,11 +201,10 @@ export class DirectMessageHandler {
       );
 
       if (!aiReply?.trim()) {
-        console.log(`⏸️ [Gemini AI] Không có phản hồi hợp lệ → bỏ qua.`);
         return;
       }
 
-      console.log(`🤖 [Gemini AI Phản hồi]:\n${aiReply}`);
+      console.log(`📤 [AI Reply ➔ ${batch.senderName}] "${aiReply.length > 120 ? aiReply.slice(0, 120) + "..." : aiReply}"`);
 
       // 7. Tách và gửi lần lượt các phần tin nhắn
       const messageParts = this.splitMessages(aiReply);

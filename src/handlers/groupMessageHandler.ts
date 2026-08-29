@@ -39,31 +39,22 @@ export class GroupMessageHandler {
     // Bỏ qua sticker / voice / reaction (text rỗng)
     if (!parsedMessage.text) return;
 
-    // Lọc từ khóa nội bộ hoặc tin nhắn quá ngắn
+    // Lọc từ khóa nội bộ hoặc tin nhắn quá ngắn (bỏ qua im lặng)
     const lowerText = parsedMessage.text.toLowerCase().trim();
     const matchedKeyword = config.groupIgnoreKeywords.find((kw) => lowerText.includes(kw));
     if (matchedKeyword || lowerText.length < 25) {
-      const reason = matchedKeyword
-        ? `từ khóa "${matchedKeyword}"`
-        : `độ dài ngắn (${lowerText.length} < 25 ký tự)`;
-      console.log(`🚫 [Nhóm-Skip] Bỏ qua ${reason} từ ${senderInfo} trong nhóm [${groupInfo}]`);
       return;
     }
 
-    // Kiểm tra chế độ Manual (-M) của nhóm
+    // Kiểm tra chế độ Manual (-M) của nhóm (bỏ qua im lặng)
     const isGroupManual = this.threadMetaRepo.isManual(groupInfo);
     const groupName = await this.zaloService.getGroupName(groupInfo);
 
     if (isGroupManual || groupName.startsWith("-M") || groupName.startsWith("-m")) {
-      console.log(`🛑 [Nhóm Thủ Công (-M)] Bỏ qua phân tích AI cho Nhóm [${groupName}]`);
       return;
     }
 
-    console.log(`\n📥 [NHÓM CHAT 👥] Nhóm: "${groupName}" [${groupInfo}] | ${senderInfo}`);
-    console.log(`💬 Nội dung: "${parsedMessage.text}"`);
-    if (parsedMessage.hasQuote && parsedMessage.quoteText) {
-      console.log(`   ↪️ Đang Reply trong nhóm: "${parsedMessage.quoteText}"`);
-    }
+    console.log(`👥 [Nhóm: "${groupName}"] ${senderInfo}: "${parsedMessage.text.length > 80 ? parsedMessage.text.slice(0, 80) + "..." : parsedMessage.text}"`);
 
     this.groupBatcher.enqueue(parsedMessage, groupName);
   }
@@ -75,7 +66,7 @@ export class GroupMessageHandler {
    */
   private async processGroupBatch(batch: GroupMessageBatch): Promise<void> {
     console.log(
-      `\n🚀 [Nhóm-RAG] Phân tích ${batch.messages.length} tin nhắn từ nhóm: "${batch.groupName}" [${batch.threadId}]`
+      `🚀 [Nhóm-RAG] Đang phân tích ${batch.messages.length} tin nhắn từ nhóm: "${batch.groupName}"`
     );
 
     const hasUpdated = await this.aiService.analyzeGroupBatch(
@@ -87,7 +78,6 @@ export class GroupMessageHandler {
 
     // Nếu RAG được cập nhật thành công → thả tim xác nhận
     if (hasUpdated) {
-      console.log(`❤️ [Nhóm-Tim] Thả tim xác nhận vào các tin nhắn cập nhật RAG...`);
       for (const msg of batch.messages) {
         if (msg.rawMessage) {
           try {

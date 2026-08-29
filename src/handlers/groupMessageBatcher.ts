@@ -66,11 +66,6 @@ export class GroupMessageBatcher {
       clearTimeout(batch.timer);
     }
 
-    const waitSec = Math.round(this.debounceMs / 1000);
-    console.log(
-      `⏳ [Nhóm-Batch ${waitSec}s] Gom ${batch.messages.length} tin nhắn từ nhóm [${threadId}]. Chờ tin nhắn tiếp theo...`
-    );
-
     batch.timer = setTimeout(async () => {
       const currentBatch = this.batches.get(threadId);
       if (currentBatch && currentBatch.messages.length > 0) {

@@ -129,7 +129,6 @@ export class RAGService {
             if (ragFile === "job_rag") {
               this.cachedJobRag = null;
             }
-            console.log(`🔄 [RAGService] Phát hiện thay đổi tại ${ragFile}.json → Invalidate cache.`);
           }
         });
         this.watchers.push(watcher);

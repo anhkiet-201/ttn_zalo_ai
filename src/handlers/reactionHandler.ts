@@ -11,13 +11,6 @@ export class ReactionHandler {
    * Phương thức xử lý sự kiện cảm xúc
    */
   public async handle(reaction: Reaction): Promise<void> {
-    const threadTypeStr = reaction.isGroup ? "👥 NHÓM" : "👤 CÁ NHÂN";
-    const sender = reaction.data.dName || reaction.data.uidFrom;
-    const icon = reaction.data.content?.rIcon || "Cảm xúc";
-    const msgId = reaction.data.msgId;
-
-    console.log(
-      `\n💖 [CẢM XÚC - ${threadTypeStr}] Người dùng ${sender} đã thả [${icon}] vào tin nhắn ID: ${msgId} tại luồng [${reaction.threadId}]`
-    );
+    // Silent handle reaction events to prevent terminal spam
   }
 }
