@@ -7,6 +7,7 @@ import { ReplyService } from "./replyService.js";
 import { GroupAnalysisService } from "./groupAnalysisService.js";
 import { type HRNotifier } from "./hrNotifier.js";
 import { type GroupQueuedMessage } from "../handlers/groupMessageBatcher.js";
+import { type ZaloService } from "./zaloService.js";
 import {
   type CCCDAnalysisResult,
   type GenerateReplyOptions,
@@ -41,7 +42,11 @@ export class AIService {
   private readonly replyService: ReplyService;
   private readonly groupAnalysisService: GroupAnalysisService;
 
-  constructor(ragService?: RAGService, chatHistoryRepo?: ChatHistoryRepository) {
+  constructor(
+    ragService?: RAGService,
+    chatHistoryRepo?: ChatHistoryRepository,
+    zaloService?: ZaloService
+  ) {
     this.ragService = ragService || RAGService.getInstance();
     this.chatHistoryRepo = chatHistoryRepo || new ChatHistoryRepository();
 
@@ -56,8 +61,17 @@ export class AIService {
 
     // Dependency Injection cho các sub-services chuyên biệt
     this.cccdService = new CCCDService(this.ai);
-    this.replyService = new ReplyService(this.ai, this.ragService, this.chatHistoryRepo);
+    this.replyService = new ReplyService(
+      this.ai,
+      this.ragService,
+      this.chatHistoryRepo,
+      zaloService
+    );
     this.groupAnalysisService = new GroupAnalysisService(this.ai);
+  }
+
+  public setZaloService(service: ZaloService): void {
+    this.replyService.setZaloService(service);
   }
 
   public get rag(): RAGService {

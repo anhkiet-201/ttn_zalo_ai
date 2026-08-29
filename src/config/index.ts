@@ -33,32 +33,6 @@ function getCredentialsFromEnv(): Credentials | undefined {
   }
 }
 
-/**
- * Đọc nội dung System Instruction từ file Markdown hoặc biến môi trường
- */
-export function getSystemInstruction(): string {
-  const instructionPath = path.resolve(
-    process.cwd(),
-    process.env.GEMINI_SYSTEM_INSTRUCTION_PATH || "./system_instruction.md"
-  );
-
-  if (fs.existsSync(instructionPath)) {
-    try {
-      const content = fs.readFileSync(instructionPath, "utf-8").trim();
-      if (content) {
-        return content;
-      }
-    } catch (error) {
-      console.warn(`⚠️ Không thể đọc file instruction (${instructionPath}):`, error);
-    }
-  }
-
-  return (
-    process.env.GEMINI_SYSTEM_INSTRUCTION ||
-    "Bạn là một trợ lý AI thông minh, thân thiện trên Zalo. Hãy trả lời ngắn gọn, lịch sự, tự nhiên, súc tích và đúng trọng tâm bằng tiếng Việt."
-  );
-}
-
 export const config: BotConfig = {
   selfListen: process.env.SELF_LISTEN !== "false", // Mặc định là true để bắt cả tin nhắn gửi đến và gửi đi
   checkUpdate: process.env.CHECK_UPDATE !== "false",
@@ -74,7 +48,6 @@ export const config: BotConfig = {
   credentials: getCredentialsFromEnv(),
   geminiApiKey: process.env.GEMINI_API_KEY,
   geminiModel: process.env.GEMINI_MODEL || "gemini-2.5-flash",
-  geminiSystemInstruction: getSystemInstruction(),
   messageDebounceSeconds: Number(process.env.MESSAGE_DEBOUNCE_SECONDS) || 30,
   minDebounceSeconds: Number(process.env.MIN_DEBOUNCE_SECONDS) || 10,
   maxDebounceSeconds:

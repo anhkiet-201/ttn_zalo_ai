@@ -89,6 +89,12 @@ export function splitTextIntoChunks(
   return chunks;
 }
 
+export interface BotProfile {
+  displayName: string;
+  gender: "female" | "male";
+  age: number;
+}
+
 /**
  * Service đóng gói các thao tác gọi API Zalo thuận tiện và an toàn
  */
@@ -111,6 +117,67 @@ export class ZaloService {
    */
   public getOwnId(): string {
     return this.api.getOwnId();
+  }
+
+  /**
+   * Lấy toàn bộ thông tin Profile của tài khoản Zalo đang đăng nhập (Tên hiển thị, Giới tính, Tuổi)
+   */
+  public async getBotProfile(): Promise<BotProfile> {
+    try {
+      const ownId = this.api.getOwnId();
+      if (!ownId) {
+        return {
+          displayName: "",
+          gender: "female",
+          age: 22,
+        };
+      }
+
+      const info: any = await this.api.getUserInfo(ownId);
+      const profile =
+        info?.changed_profiles?.[ownId] ||
+        info?.unchanged_profiles?.[ownId] ||
+        info?.[ownId];
+
+      const displayName =
+        profile?.displayName ||
+        profile?.zaloName ||
+        profile?.username ||
+        "";
+
+      // Phân tích giới tính: Zalo 0 = Nữ, 1 = Nam
+      let gender: "female" | "male" = "female";
+      if (
+        profile?.gender === 1 ||
+        String(profile?.gender).toLowerCase() === "male" ||
+        profile?.gender === "1"
+      ) {
+        gender = "male";
+      }
+
+      // Tính tuổi từ sdob / dob nếu có trong profile Zalo
+      let age = 22;
+      const dobStr = profile?.sdob || profile?.dob || profile?.birthdate;
+      if (dobStr) {
+        const match = String(dobStr).match(/(\d{4})/);
+        if (match) {
+          const birthYear = parseInt(match[1], 10);
+          const currentYear = new Date().getFullYear();
+          if (birthYear > 1960 && birthYear < currentYear) {
+            age = currentYear - birthYear;
+          }
+        }
+      }
+
+      return { displayName, gender, age };
+    } catch (error) {
+      console.warn("⚠️ Không thể lấy thông tin Bot Profile từ Zalo API:", error);
+      return {
+        displayName: "",
+        gender: "female",
+        age: 22,
+      };
+    }
   }
 
   /**

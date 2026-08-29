@@ -25,7 +25,7 @@ async function startBot() {
     // 2. Khởi tạo các Service và Dispatcher
     const zaloService = new ZaloService(api);
     setZaloService(zaloService);
-    const aiService = new AIService();
+    const aiService = new AIService(undefined, undefined, zaloService);
     const dispatcher = new EventDispatcher();
     dispatcher.setOwnId(api.getOwnId());
 

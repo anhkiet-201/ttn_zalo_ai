@@ -1,5 +1,6 @@
 import { GoogleGenAI, type Content, type Part } from "@google/genai";
-import { config, getSystemInstruction } from "../config/index.js";
+import { config } from "../config/index.js";
+import { buildSystemInstruction } from "../prompts/index.js";
 import { type RAGService } from "./ragService.js";
 import { type ChatHistoryRepository } from "../database/index.js";
 import { downloadImageAsBase64 } from "./imageHelper.js";
@@ -9,6 +10,8 @@ import {
   type ChatMessagePart,
   recruitmentTools,
 } from "../types/ai.types.js";
+
+import { type ZaloService, type BotProfile } from "./zaloService.js";
 
 /**
  * ReplyService: Chuyên trách tạo phản hồi hội thoại bằng Gemini AI cho ứng viên (1-1) và nhóm chat.
@@ -21,8 +24,13 @@ export class ReplyService {
   constructor(
     private readonly ai: GoogleGenAI | null,
     private readonly ragService: RAGService,
-    private readonly chatHistoryRepo: ChatHistoryRepository
+    private readonly chatHistoryRepo: ChatHistoryRepository,
+    private zaloService?: ZaloService
   ) {}
+
+  public setZaloService(service: ZaloService): void {
+    this.zaloService = service;
+  }
 
   /**
    * Định dạng thời gian theo chuẩn tiếng Việt (vd: "Thứ Năm, 27/08/2026 16:39:05")
@@ -179,8 +187,20 @@ export class ReplyService {
         parts: userParts,
       };
 
-      // 4. System Instruction chuẩn: Thời gian thực + Hướng dẫn nhân cách + User Context + RAG
-      let fullSystemInstruction = `[${timeContext}]\n\n${getSystemInstruction()}`;
+      // 4. System Instruction chuẩn: Thời gian thực + Hướng dẫn nhân cách (từ Zalo Session) + User Context + RAG
+      const botProfile: BotProfile = (await this.zaloService?.getBotProfile()) || {
+        displayName: "",
+        gender: "female",
+        age: 22,
+      };
+
+      const systemInstruction = buildSystemInstruction({
+        displayName: botProfile.displayName,
+        gender: botProfile.gender,
+        age: botProfile.age,
+      });
+
+      let fullSystemInstruction = `[${timeContext}]\n\n${systemInstruction}`;
       if (userContextText) {
         fullSystemInstruction += `\n\n${userContextText}`;
       }
