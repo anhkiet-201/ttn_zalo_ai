@@ -91,25 +91,48 @@ export class HRNotifier {
   /**
    * Chuyển tiếp toàn bộ hồ sơ ứng viên (kèm ảnh CCCD thực tế nếu có) sang tài khoản HR
    */
-  public async notifyCandidateRegistration(candidate: CandidateRecord): Promise<void> {
+  public async notifyCandidateRegistration(
+    candidate: CandidateRecord,
+    notes?: string
+  ): Promise<void> {
     const interviewTime = candidate.interviewDate || "Sáng mai lúc 7h30 tại cổng công ty";
-    const cccdReport = `🔔 [HỒ SƠ ỨNG VIÊN ĐĂNG KÝ NHẬN VIỆC]
-🏭 Công ty ứng tuyển: ${candidate.targetCompany?.toUpperCase() || "CHƯA RÕ"}
-⏰ THỜI GIAN HẸN: ${interviewTime.toUpperCase()}
-👤 Người gửi: ${candidate.senderName} (ID: ${candidate.senderId})
-📞 Số điện thoại: ${candidate.phoneNumber || "Chưa cung cấp"}
-📅 Thời gian gửi hồ sơ: ${new Date().toLocaleString("vi-VN")}
+    const company = candidate.targetCompany?.toUpperCase() || "CHƯA RÕ";
+    const fullName = candidate.fullName || candidate.senderName || "Chưa rõ";
+    const phone = candidate.phoneNumber || "Chưa cung cấp";
+    const timeNow = new Date().toLocaleString("vi-VN");
 
-📋 THÔNG TIN TRÍCH XUẤT CCCD:
-• Họ và tên: ${candidate.fullName || "Chưa rõ"}
-• Số CCCD: ${candidate.idNumber || "Chưa rõ"}
-• Ngày sinh: ${candidate.dob || "Chưa rõ"}
-• Giới tính: ${candidate.gender || "Chưa rõ"}`;
+    const cccdLines: string[] = [
+      `• Họ và tên: ${fullName.toUpperCase()}`,
+      `• Số CCCD: ${candidate.idNumber || "Chưa rõ"}`,
+      `• Ngày sinh: ${candidate.dob || "Chưa rõ"}${candidate.gender ? ` (${candidate.gender})` : ""}`,
+    ];
+
+    if (candidate.homeTown) {
+      cccdLines.push(`• Quê quán: ${candidate.homeTown}`);
+    }
+    if (candidate.residence) {
+      cccdLines.push(`• Thường trú: ${candidate.residence}`);
+    }
+    if (candidate.expiryDate) {
+      cccdLines.push(`• Hạn CCCD: ${candidate.expiryDate}`);
+    }
+
+    const cccdReport = `🟢 [HỒ SƠ ỨNG VIÊN ĐĂNG KÝ NHẬN VIỆC]
+━━━━━━━━━━━━━━━━━━━━
+🏭 CÔNG TY: ${company}
+⏰ LỊCH HẸN: ${interviewTime.toUpperCase()}
+📞 SỐ ĐIỆN THOẠI: ${phone}
+👤 Zalo gửi: ${candidate.senderName} (ID: ${candidate.senderId})
+
+📋 THÔNG TIN TRÍCH XUẤT TỪ CCCD:
+${cccdLines.join("\n")}
+${notes ? `\n📝 Ghi chú: ${notes}` : ""}
+⏱️ Thời gian gửi: ${timeNow}`;
 
     try {
       await this.sendMessageWithAttachments(cccdReport, candidate.imageUrls);
       console.log(
-        `📤 [Chuyển tiếp CCCD] Đã gửi ${candidate.imageUrls?.length || 0} ảnh CCCD đính kèm + thông tin công ty [${candidate.targetCompany}] của [${candidate.fullName || candidate.senderName}] tới HR (${this.hrRecipientId}) thành công!`
+        `📤 [Chuyển tiếp CCCD] Đã gửi ${candidate.imageUrls?.length || 0} ảnh CCCD đính kèm + thông tin công ty [${company}] của [${fullName}] tới HR (${this.hrRecipientId}) thành công!`
       );
       // Nghỉ 500ms để đảm bảo các tin nhắn chuyển tiếp đa ứng viên được gửi tuần tự
       await new Promise((r) => setTimeout(r, 500));
@@ -129,15 +152,25 @@ export class HRNotifier {
     oldCompany: string;
     newCompany: string;
     interviewDate: string;
+    reason?: string;
   }): Promise<void> {
-    const { candidate, oldCompany, newCompany, interviewDate } = params;
-    const changeReport = `🔔 [CẬP NHẬT: ỨNG VIÊN ĐỔI CÔNG TY ỨNG TUYỂN]
-👤 Ứng viên: ${candidate.fullName || candidate.senderName} (ID: ${candidate.senderId})
-🔄 ĐỔI CÔNG TY: ${String(oldCompany).toUpperCase()} ➔ ${newCompany.toUpperCase()}
-⏰ THỜI GIAN HẸN: ${interviewDate.toUpperCase()}
-📞 Số điện thoại: ${candidate.phoneNumber || "Chưa cung cấp"}
-📋 Số CCCD: ${candidate.idNumber || "Đã lưu trong hệ thống"}
-📅 Thời gian đổi: ${new Date().toLocaleString("vi-VN")}`;
+    const { candidate, oldCompany, newCompany, interviewDate, reason } = params;
+    const fullName = (candidate.fullName || candidate.senderName || "Chưa rõ").toUpperCase();
+    const phone = candidate.phoneNumber || "Chưa cung cấp";
+    const idNumber = candidate.idNumber || "Đã lưu trong hệ thống";
+    const timeNow = new Date().toLocaleString("vi-VN");
+
+    const changeReport = `🟡 [CẬP NHẬT: ỨNG VIÊN ĐỔI CÔNG TY]
+━━━━━━━━━━━━━━━━━━━━
+👤 Ứng viên: ${fullName} (ID: ${candidate.senderId})
+📞 Điện thoại: ${phone} | CCCD: ${idNumber}
+
+🔄 THAY ĐỔI CÔNG TY:
+   [CŨ]: ${String(oldCompany).toUpperCase()}
+   ➔ [MỚI]: ${newCompany.toUpperCase()}
+⏰ LỊCH HẸN MỚI: ${interviewDate.toUpperCase()}
+${reason ? `📝 Lý do đổi: ${reason}\n` : ""}
+⏱️ Thời gian đổi: ${timeNow}`;
 
     try {
       await this.sendMessageWithAttachments(changeReport, candidate.imageUrls);
@@ -156,15 +189,23 @@ export class HRNotifier {
     candidate: CandidateRecord;
     targetCompany: string;
     newDate: string;
+    reason?: string;
   }): Promise<void> {
-    const { candidate, targetCompany, newDate } = params;
-    const rescheduleReport = `🔔 [CẬP NHẬT: ỨNG VIÊN DỜI LỊCH NHẬN VIỆC]
-👤 Ứng viên: ${candidate.fullName || candidate.senderName} (ID: ${candidate.senderId})
-🏢 CÔNG TY: ${String(targetCompany).toUpperCase()}
+    const { candidate, targetCompany, newDate, reason } = params;
+    const fullName = (candidate.fullName || candidate.senderName || "Chưa rõ").toUpperCase();
+    const phone = candidate.phoneNumber || "Chưa cung cấp";
+    const idNumber = candidate.idNumber || "Đã lưu trong hệ thống";
+    const timeNow = new Date().toLocaleString("vi-VN");
+
+    const rescheduleReport = `🟠 [CẬP NHẬT: ỨNG VIÊN DỜI LỊCH HẸN]
+━━━━━━━━━━━━━━━━━━━━
+👤 Ứng viên: ${fullName} (ID: ${candidate.senderId})
+🏢 Công ty: ${String(targetCompany).toUpperCase()}
+📞 Điện thoại: ${phone} | CCCD: ${idNumber}
+
 ⏰ THỜI GIAN HẸN MỚI: ${newDate.toUpperCase()}
-📞 Số điện thoại: ${candidate.phoneNumber || "Chưa cung cấp"}
-📋 Số CCCD: ${candidate.idNumber || "Đã lưu trong hệ thống"}
-📅 Thời gian báo: ${new Date().toLocaleString("vi-VN")}`;
+${reason ? `📝 Lý do dời lịch: ${reason}\n` : ""}
+⏱️ Thời gian báo: ${timeNow}`;
 
     try {
       await this.sendMessageWithAttachments(rescheduleReport, candidate.imageUrls);
@@ -184,12 +225,15 @@ export class HRNotifier {
     senderName: string;
     error: string;
   }): Promise<void> {
-    const errorReport = `⚠️ [CẢNH BÁO HỆ THỐNG: LỖI KẾT NỐI GEMINI AI]
+    const timeNow = new Date().toLocaleString("vi-VN");
+    const errorReport = `🚨 [CẢNH BÁO: SỰ CỐ KẾT NỐI GEMINI AI]
+━━━━━━━━━━━━━━━━━━━━
 👤 Luồng chat: ${params.senderName} (Thread ID: ${params.threadId})
-⏱️ Thời gian: ${new Date().toLocaleString("vi-VN")}
+⏱️ Thời gian: ${timeNow}
 ❌ Chi tiết lỗi: ${params.error}
 
-👉 Hệ thống đã TỰ ĐỘNG DỪNG và KHÔNG GỬI phản hồi tới ứng viên. Vui lòng kiểm tra API Key hoặc hỗ trợ thủ công!`;
+👉 TRẠNG THÁI: Bot đã TỰ ĐỘNG DỪNG và KHÔNG gửi phản hồi sai lệch tới ứng viên.
+🛠️ HÀNH ĐỘNG: Vui lòng kiểm tra API Key hoặc vào Web Chat để nhắn tin hỗ trợ thủ công!`;
 
     try {
       await this.zaloService.sendMessage(
@@ -221,44 +265,53 @@ export class HRNotifier {
   }): Promise<void> {
     const { groupName, action, targetFile, targetId, title, reason, message, updatedFields, newEntry } = params;
     const actionText = action === "create_new" ? "TẠO MỚI ENTRY" : "CẬP NHẬT ENTRY";
+    const dataObj = updatedFields || newEntry || {};
+    const timeNow = new Date().toLocaleString("vi-VN");
 
     const detailLines: string[] = [];
-    if (updatedFields) {
-      if (updatedFields.vacancies !== undefined) {
-        detailLines.push(`• Chỉ tiêu tuyển: ${updatedFields.vacancies === 0 ? "TẠM NGƯNG TUYỂN" : `${updatedFields.vacancies} người`}`);
-      }
-      if (updatedFields.interview_schedule) {
-        detailLines.push(`• Lịch hẹn: ${updatedFields.interview_schedule}`);
-      }
-      if (updatedFields.map_url) {
-        detailLines.push(`• Link Maps: ${updatedFields.map_url}`);
-      }
-      if (updatedFields.location) {
-        detailLines.push(`• Địa điểm: ${updatedFields.location}`);
-      }
-    } else if (newEntry) {
-      if (newEntry.vacancies !== undefined) {
-        detailLines.push(`• Chỉ tiêu tuyển: ${newEntry.vacancies} người`);
-      }
-      if (newEntry.interview_schedule) {
-        detailLines.push(`• Lịch hẹn: ${newEntry.interview_schedule}`);
-      }
-      if (newEntry.map_url) {
-        detailLines.push(`• Link Maps: ${newEntry.map_url}`);
-      }
-      if (newEntry.location) {
-        detailLines.push(`• Địa điểm: ${newEntry.location}`);
+
+    // 1. Trạng thái / Chỉ tiêu
+    if (dataObj.vacancies !== undefined) {
+      if (dataObj.vacancies === 0) {
+        detailLines.push(`• Trạng thái / Chỉ tiêu: 🔴 TẠM NGƯNG TUYỂN`);
+      } else {
+        detailLines.push(`• Trạng thái / Chỉ tiêu: 🟢 Đang tuyển ${dataObj.vacancies} người`);
       }
     }
 
-    const report = `📢 [TỰ ĐỘNG CẬP NHẬT RAG TỪ NHÓM]
+    // 2. Lịch hẹn
+    if (dataObj.interview_schedule) {
+      detailLines.push(`• Lịch hẹn nhận việc: ${dataObj.interview_schedule}`);
+    }
+
+    // 3. Vị trí / Ngành nghề
+    if (dataObj.job_type) {
+      detailLines.push(`• Vị trí / Ngành nghề: ${dataObj.job_type}`);
+    }
+
+    // 4. Địa chỉ
+    if (dataObj.location) {
+      detailLines.push(`• Địa điểm: ${dataObj.location}`);
+    }
+
+    // 5. Link Google Maps
+    if (dataObj.map_url) {
+      detailLines.push(`• Link Google Maps: ${dataObj.map_url}`);
+    }
+
+    // 6. Tên gọi khác
+    if (Array.isArray(dataObj.aliases) && dataObj.aliases.length > 0) {
+      detailLines.push(`• Tên gọi khác: ${dataObj.aliases.join(", ")}`);
+    }
+
+    const report = `📢 [TỰ ĐỘNG CẬP NHẬT DỮ LIỆU TỪ NHÓM]
+━━━━━━━━━━━━━━━━━━━━
 👥 Nhóm nguồn: ${groupName}
-🔄 Thao tác: ${actionText}
-📁 File: ${targetFile} ${targetId ? `(ID: ${targetId})` : ""}
-🏷️ Tiêu đề: ${title || "Chưa rõ"}
-📝 Lý do: ${reason || message || "Phân tích tự động từ tin nhắn nhóm"}
-${detailLines.length > 0 ? `\n📊 Chi tiết cập nhật:\n${detailLines.join("\n")}\n` : ""}
-⏱️ Thời gian: ${new Date().toLocaleString("vi-VN")}`;
+🔄 Thao tác: ${actionText} (${targetFile} · ${targetId ? `ID: ${targetId}` : "Mới"})
+🏷️ Đối tượng: ${(title || "Chưa rõ").toUpperCase()}
+${detailLines.length > 0 ? `\n📊 CHI TIẾT CẬP NHẬT:\n${detailLines.join("\n")}\n` : ""}
+📝 Ghi chú/Lý do: ${reason || message || "Phân tích tự động từ tin nhắn nhóm"}
+⏱️ Thời gian: ${timeNow}`;
 
     try {
       await this.zaloService.sendMessage(

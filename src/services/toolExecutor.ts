@@ -205,7 +205,10 @@ export class ToolExecutor {
     );
 
     // 4. Chuyển tiếp thông tin + toàn bộ ảnh CCCD 2 mặt sang tài khoản HR
-    await this.hrNotifier.notifyCandidateRegistration(candidateData);
+    await this.hrNotifier.notifyCandidateRegistration(
+      candidateData,
+      args.notes ? String(args.notes).trim() : undefined
+    );
     this.candidateRepo.markAsForwarded(candidateData.id!);
 
     return {
@@ -299,6 +302,7 @@ export class ToolExecutor {
       oldCompany: String(oldCompany),
       newCompany,
       interviewDate,
+      reason: args.reason ? String(args.reason).trim() : undefined,
     });
 
     return {
@@ -381,6 +385,7 @@ export class ToolExecutor {
       candidate: candidateData,
       targetCompany: String(targetCompany),
       newDate,
+      reason: args.reason ? String(args.reason).trim() : undefined,
     });
 
     return {
