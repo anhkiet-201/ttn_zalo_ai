@@ -15,7 +15,7 @@ export function renderChatPage(initialThreadId: string = "", initialOwnId: strin
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/chat.css?v=3">
+  <link rel="stylesheet" href="/static/chat.css?v=8">
   <script>
     window.__INITIAL_THREAD_ID__ = ${safeThreadId};
     window.__LOGGED_IN_ID__ = ${safeOwnId};
@@ -23,7 +23,7 @@ export function renderChatPage(initialThreadId: string = "", initialOwnId: strin
 </head>
 <body>
   <div id="root"></div>
-  <script type="module" src="/static/app.js?v=3"></script>
+  <script type="module" src="/static/app.js?v=8"></script>
 </body>
 </html>`;
 }

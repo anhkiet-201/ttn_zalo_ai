@@ -6,386 +6,16 @@ import {
   type Undo,
   type Typing,
   ThreadType,
-  type TAttachmentContent,
 } from "zca-js";
-import { type ParsedMessage } from "../types/zalo.types.js";
+import { type ParsedMessage, type MediaType, type MediaItem } from "../types/zalo.types.js";
 import { config } from "../config/index.js";
 
-export type MessageHandlerCallback = (
-  parsedMessage: ParsedMessage
-) => Promise<void> | void;
-export type GroupEventHandlerCallback = (
-  event: GroupEvent
-) => Promise<void> | void;
-export type FriendEventHandlerCallback = (
-  event: FriendEvent
-) => Promise<void> | void;
-export type ReactionHandlerCallback = (
-  reaction: Reaction
-) => Promise<void> | void;
+export type MessageHandlerCallback = (parsedMessage: ParsedMessage) => Promise<void> | void;
+export type GroupEventHandlerCallback = (event: GroupEvent) => Promise<void> | void;
+export type FriendEventHandlerCallback = (event: FriendEvent) => Promise<void> | void;
+export type ReactionHandlerCallback = (reaction: Reaction) => Promise<void> | void;
 export type UndoHandlerCallback = (undo: Undo) => Promise<void> | void;
 export type TypingHandlerCallback = (typing: Typing) => Promise<void> | void;
-
-/**
- * Kiểm tra xem một chuỗi có phải là URL HTTP/HTTPS hợp lệ hay không
- */
-export function isValidHttpUrl(urlString: unknown): boolean {
-  if (!urlString || typeof urlString !== "string") return false;
-  try {
-    const url = new URL(urlString.trim());
-    return url.protocol === "http:" || url.protocol === "https:";
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Kiểm tra xem một URL có phải là file âm thanh (Audio/Voice) hay không
- */
-export function isAudioUrl(urlString: unknown): boolean {
-  if (!urlString || typeof urlString !== "string") return false;
-  const lower = urlString.toLowerCase().split("?")[0];
-  return (
-    lower.endsWith(".m4a") ||
-    lower.endsWith(".aac") ||
-    lower.endsWith(".mp3") ||
-    lower.endsWith(".wav") ||
-    lower.endsWith(".amr") ||
-    lower.endsWith(".ogg") ||
-    lower.endsWith(".opus") ||
-    lower.includes("/voice/") ||
-    lower.includes("voicemsg") ||
-    lower.includes("audiomsg")
-  );
-}
-
-/**
- * Kiểm tra xem một URL có phải là nhãn dán / sticker của Zalo hay không
- */
-export function isStickerUrl(urlString: unknown): boolean {
-  if (!urlString || typeof urlString !== "string") return false;
-  const lower = urlString.toLowerCase();
-  return (
-    lower.includes("/emoticon/sticker") ||
-    lower.includes("stickers.zaloapp.com") ||
-    lower.includes("/sticker/")
-  );
-}
-
-/**
- * Trích xuất URL hình ảnh có chất lượng tốt nhất từ object attachment (ưu tiên hdUrl > url > normalUrl > href > thumb)
- */
-export function extractBestImageUrl(obj: Record<string, unknown>): string | null {
-  // Nếu object là voice/audio/sticker message, bỏ qua hoàn toàn không trích xuất thành ảnh
-  if (
-    obj.voiceUrl ||
-    obj.m4aUrl ||
-    obj.audioUrl ||
-    obj.msgType === "chat.voice" ||
-    obj.msgType === "chat.audio" ||
-    obj.msgType === "chat.sticker" ||
-    obj.containType === 36 ||
-    obj.stickerId ||
-    obj.stickerCateId ||
-    obj.spriteUrl ||
-    obj.cateId ||
-    obj.catId
-  ) {
-    return null;
-  }
-
-  const candidates = [
-    obj.hdUrl,
-    obj.hd_url,
-    obj.highQualityUrl,
-    obj.high_quality_url,
-    obj.url,
-    obj.normalUrl,
-    obj.normal_url,
-    obj.originUrl,
-    obj.origin_url,
-    obj.origUrl,
-    obj.rawUrl,
-    obj.photoUrl,
-    obj.photo_url,
-    obj.imageUrl,
-    obj.image_url,
-    obj.href,
-    obj.downloadUrl,
-    obj.download_url,
-    obj.fullUrl,
-    obj.full_url,
-    obj.previewUrl,
-    obj.preview_url,
-    obj.thumb,
-    obj.thumbUrl,
-    obj.thumb_url,
-    obj.thumbnail,
-    obj.thumbnailUrl,
-    obj.thumbnail_url,
-    obj.webUrl,
-  ];
-
-  for (const candidate of candidates) {
-    if (
-      isValidHttpUrl(candidate) &&
-      !isAudioUrl(candidate) &&
-      !isStickerUrl(candidate)
-    ) {
-      return (candidate as string).trim();
-    }
-  }
-  return null;
-}
-
-/**
- * Trích xuất TẤT CẢ các URL hình ảnh từ một object hoặc mảng attachments/album
- */
-export function extractAllImageUrls(obj: unknown): string[] {
-  const urls: string[] = [];
-  if (!obj) return urls;
-
-  if (Array.isArray(obj)) {
-    for (const item of obj) {
-      urls.push(...extractAllImageUrls(item));
-    }
-    return Array.from(new Set(urls.filter((u) => isValidHttpUrl(u) && !isAudioUrl(u) && !isStickerUrl(u))));
-  }
-
-  if (typeof obj === "object" && obj !== null) {
-    const record = obj as Record<string, unknown>;
-
-    // Nếu đây là sticker, bỏ qua hoàn toàn không trích xuất thành ảnh
-    if (
-      record.msgType === "chat.sticker" ||
-      record.containType === 36 ||
-      record.stickerId ||
-      record.stickerCateId ||
-      record.cateId ||
-      record.catId ||
-      record.spriteUrl
-    ) {
-      return urls;
-    }
-
-    const best = extractBestImageUrl(record);
-    if (best && !isAudioUrl(best) && !isStickerUrl(best)) {
-      urls.push(best);
-    }
-
-    const listKeys = [
-      "attachments",
-      "photos",
-      "images",
-      "items",
-      "list",
-      "grid",
-      "media",
-      "subImages",
-      "sub_images",
-      "elements",
-      "album",
-      "files",
-      "attach",
-      "data",
-      "rows",
-      "cards",
-    ];
-    for (const key of listKeys) {
-      if (Array.isArray(record[key])) {
-        urls.push(...extractAllImageUrls(record[key]));
-      } else if (record[key] && typeof record[key] === "object") {
-        urls.push(...extractAllImageUrls(record[key]));
-      }
-    }
-  } else if (typeof obj === "string") {
-    const trimmed = obj.trim();
-    if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
-      try {
-        const parsed = JSON.parse(trimmed);
-        urls.push(...extractAllImageUrls(parsed));
-      } catch {
-        if (isValidHttpUrl(trimmed) && !isAudioUrl(trimmed) && !isStickerUrl(trimmed)) {
-          urls.push(trimmed);
-        }
-      }
-    } else if (isValidHttpUrl(trimmed) && !isAudioUrl(trimmed) && !isStickerUrl(trimmed)) {
-      urls.push(trimmed);
-    }
-  }
-
-  return Array.from(new Set(urls.filter((u) => isValidHttpUrl(u) && !isAudioUrl(u) && !isStickerUrl(u))));
-}
-
-/**
- * Trích xuất URL âm thanh (Voice Message) và thời lượng từ payload Zalo
- */
-export function extractVoiceInfo(data: any, msgType?: string): { voiceUrl?: string; duration?: number } {
-  if (!data) return {};
-
-  // Nếu đây là tin nhắn ảnh hoặc sticker, tuyệt đối không trích xuất voice
-  if (msgType === "chat.photo" || msgType === "chat.sticker" || msgType === "chat.recommended") {
-    return {};
-  }
-
-  let voiceUrl: string | undefined = undefined;
-  let duration: number | undefined = undefined;
-
-  // Nếu data là chuỗi JSON
-  let target = data;
-  if (typeof data === "string" && data.trim().startsWith("{") && data.trim().endsWith("}")) {
-    try {
-      target = JSON.parse(data.trim());
-    } catch {
-      target = data;
-    }
-  }
-
-  if (typeof target === "object" && target !== null) {
-    // 1. Kiểm tra các trường chuyên dụng cho voice/audio
-    const explicitVoiceKeys = [
-      "voiceUrl",
-      "voice_url",
-      "m4aUrl",
-      "m4a_url",
-      "audioUrl",
-      "audio_url",
-    ];
-
-    for (const key of explicitVoiceKeys) {
-      if (typeof target[key] === "string" && isValidHttpUrl(target[key])) {
-        voiceUrl = target[key].trim();
-        break;
-      }
-    }
-
-    // 2. Nếu chưa có voiceUrl và msgType là tin nhắn thoại rõ ràng
-    const isExplicitVoiceMsg =
-      msgType === "chat.voice" ||
-      msgType === "chat.audio" ||
-      target.msgType === "chat.voice" ||
-      target.msgType === "chat.audio" ||
-      target.type === "chat.voice" ||
-      target.type === "voice";
-
-    if (!voiceUrl) {
-      const genericKeys = ["href", "url", "directUrl", "src", "link"];
-      for (const key of genericKeys) {
-        if (typeof target[key] === "string" && isValidHttpUrl(target[key])) {
-          const val = target[key].trim();
-          // Chỉ nhận nếu URL là định dạng audio hoặc tin nhắn được Zalo định danh là chat.voice
-          if (isAudioUrl(val) || isExplicitVoiceMsg) {
-            voiceUrl = val;
-            break;
-          }
-        }
-      }
-    }
-
-    if (typeof target.duration === "number") {
-      duration = target.duration;
-    } else if (typeof target.duration === "string" && !isNaN(Number(target.duration))) {
-      duration = Number(target.duration);
-    }
-  } else if (typeof target === "string" && isValidHttpUrl(target) && isAudioUrl(target)) {
-    voiceUrl = target.trim();
-  }
-
-  return { voiceUrl, duration };
-}
-
-/**
- * Trích xuất thông tin Nhãn dán / Sticker (Sticker ID, Category, URL, Description) từ payload Zalo
- */
-export function extractStickerInfo(
-  content: any,
-  params: any,
-  paramsExt: any,
-  msgType: string
-): {
-  isSticker: boolean;
-  stickerId?: string;
-  stickerCateId?: string;
-  stickerUrl?: string;
-  stickerText?: string;
-} {
-  let isSticker =
-    msgType === "chat.sticker" ||
-    msgType.includes("sticker") ||
-    paramsExt?.containType === 36 ||
-    params?.type === "chat.sticker";
-
-  let target = content;
-  if (typeof content === "string" && content.trim().startsWith("{") && content.trim().endsWith("}")) {
-    try {
-      target = JSON.parse(content.trim());
-    } catch {
-      target = content;
-    }
-  }
-
-  const sources = [
-    typeof target === "object" && target !== null ? target : {},
-    typeof params === "object" && params !== null ? params : {},
-    typeof paramsExt === "object" && paramsExt !== null ? paramsExt : {},
-  ];
-
-  let stickerId: string | undefined = undefined;
-  let stickerCateId: string | undefined = undefined;
-  let stickerUrl: string | undefined = undefined;
-  let stickerText: string | undefined = undefined;
-
-  for (const src of sources) {
-    if (!stickerId && (src.eid || src.id || src.stickerId || src.sticker_id)) {
-      stickerId = String(src.eid || src.id || src.stickerId || src.sticker_id);
-    }
-    if (!stickerCateId && (src.cateId || src.cate_id || src.catId || src.categoryId)) {
-      stickerCateId = String(src.cateId || src.cate_id || src.catId || src.categoryId);
-    }
-    if (!stickerUrl) {
-      const urlCandidates = [src.stickerUrl, src.spriteUrl, src.url, src.webUrl, src.hdUrl, src.thumb, src.href];
-      for (const u of urlCandidates) {
-        if (typeof u === "string" && isValidHttpUrl(u) && !isAudioUrl(u)) {
-          stickerUrl = u.trim();
-          break;
-        }
-      }
-    }
-    if (!stickerText) {
-      const textCandidates = [src.text, src.description, src.caption, src.title, src.alt, src.stickerText];
-      for (const t of textCandidates) {
-        if (
-          typeof t === "string" &&
-          t.trim() &&
-          t.trim() !== "[Sticker]" &&
-          t.trim() !== "[Nhãn dán]" &&
-          t.trim() !== "[🏷️ Sticker]" &&
-          t.trim() !== "[🏷️ Nhãn dán / Sticker]" &&
-          t.trim() !== "Nhãn dán biểu cảm"
-        ) {
-          stickerText = t.trim();
-          break;
-        }
-      }
-    }
-  }
-
-  // Nếu có stickerId mà chưa có URL, tạo URL Zalo Sticker CDN tiêu chuẩn hỗ trợ ảnh PNG sắc nét
-  if (stickerId) {
-    isSticker = true;
-    if (!stickerUrl) {
-      stickerUrl = `https://zalo-api.zadn.vn/api/emoticon/sticker/webpc?eid=${stickerId}&size=130`;
-    }
-  }
-
-  return {
-    isSticker,
-    stickerId,
-    stickerCateId,
-    stickerUrl,
-    stickerText,
-  };
-}
 
 /**
  * EventDispatcher: Nhận và định tuyến các sự kiện từ Zalo Listener tới các Handler
@@ -399,58 +29,36 @@ export class EventDispatcher {
   private undoHandlers: UndoHandlerCallback[] = [];
   private typingHandlers: TypingHandlerCallback[] = [];
 
-  /**
-   * Cập nhật ID của tài khoản đang đăng nhập để nhận diện chính xác tin nhắn gửi từ thiết bị khác
-   */
   public setOwnId(id: string): void {
     this.ownId = id;
   }
 
-  /**
-   * Đăng ký xử lý tin nhắn
-   */
   public onMessage(handler: MessageHandlerCallback): void {
     this.messageHandlers.push(handler);
   }
 
-  /**
-   * Đăng ký xử lý sự kiện nhóm
-   */
   public onGroupEvent(handler: GroupEventHandlerCallback): void {
     this.groupEventHandlers.push(handler);
   }
 
-  /**
-   * Đăng ký xử lý sự kiện kết bạn
-   */
   public onFriendEvent(handler: FriendEventHandlerCallback): void {
     this.friendEventHandlers.push(handler);
   }
 
-  /**
-   * Đăng ký xử lý cảm xúc tin nhắn
-   */
   public onReaction(handler: ReactionHandlerCallback): void {
     this.reactionHandlers.push(handler);
   }
 
-  /**
-   * Đăng ký xử lý sự kiện thu hồi tin nhắn
-   */
   public onUndo(handler: UndoHandlerCallback): void {
     this.undoHandlers.push(handler);
   }
 
-  /**
-   * Đăng ký xử lý sự kiện đang gõ phím
-   */
   public onTyping(handler: TypingHandlerCallback): void {
     this.typingHandlers.push(handler);
   }
 
   /**
-   * Chuẩn hoá đối tượng Message thô thành ParsedMessage dễ thao tác
-   * Đồng bộ chính xác tin nhắn gửi từ điện thoại, máy tính và các thiết bị khác cùng tài khoản.
+   * Chuẩn hoá Message thô từ Zalo SDK thành ParsedMessage
    */
   public parseMessage(
     rawMessage: Message,
@@ -460,7 +68,6 @@ export class EventDispatcher {
     const uidFrom = String(rawMessage.data?.uidFrom ?? "");
     const idTo = String(rawMessage.data?.idTo ?? "");
 
-    // Nhận diện tin nhắn do chính tài khoản này gửi đi từ bất kỳ thiết bị nào (Mobile App, PC, Web, Bot)
     const isSelf =
       rawMessage.isSelf === true ||
       uidFrom === "0" ||
@@ -469,140 +76,270 @@ export class EventDispatcher {
     let threadId = rawMessage.threadId;
     if (!isGroup) {
       if (isSelf) {
-        // Chat 1-1 tự gửi từ điện thoại/PC: idTo là ID người nhận (ứng viên)
-        threadId =
-          idTo && idTo !== "0" && idTo !== this.ownId
-            ? idTo
-            : rawMessage.threadId || idTo;
+        threadId = idTo && idTo !== "0" && idTo !== this.ownId ? idTo : rawMessage.threadId || idTo;
       } else {
-        // Chat 1-1 nhận từ ứng viên: uidFrom là ID người gửi (ứng viên)
-        threadId =
-          uidFrom && uidFrom !== "0" && uidFrom !== this.ownId
-            ? uidFrom
-            : rawMessage.threadId;
+        threadId = uidFrom && uidFrom !== "0" && uidFrom !== this.ownId ? uidFrom : rawMessage.threadId;
       }
     } else {
-      // Chat nhóm: threadId luôn là ID của nhóm
       threadId = idTo && idTo !== "0" ? idTo : rawMessage.threadId;
     }
 
     const senderId = isSelf ? this.ownId || uidFrom || "0" : uidFrom;
     const senderName = isSelf ? "Admin (Tôi)" : rawMessage.data.dName || "Unknown";
 
-    // Trích xuất nội dung văn bản và hình ảnh đính kèm
-    let text = "";
-    const rawImageUrls: string[] = [];
-    let imageDescription = "";
-
-    if (typeof rawMessage.data.content === "string") {
-      const contentStr = rawMessage.data.content.trim();
-      // Kiểm tra nếu nội dung là chuỗi JSON chứa thông tin ảnh/tệp
-      if (contentStr.startsWith("{") && contentStr.endsWith("}")) {
-        try {
-          const parsed = JSON.parse(contentStr);
-          rawImageUrls.push(...extractAllImageUrls(parsed));
-          if (parsed.description) imageDescription = parsed.description;
-          if (parsed.title) text = parsed.title;
-        } catch {
-          text = contentStr;
-        }
-      } else {
-        text = contentStr;
-      }
-    } else if (
-      rawMessage.data.content &&
-      typeof rawMessage.data.content === "object"
-    ) {
-      const attach = rawMessage.data.content as Record<string, unknown>;
-      rawImageUrls.push(...extractAllImageUrls(attach));
-      if (typeof attach.description === "string") imageDescription = attach.description;
-      if (typeof attach.title === "string") text = attach.title;
-    }
-
-    // Kiểm tra thêm params & paramsExt từ Zalo
-    const rawData = rawMessage.data as any;
-    if (rawData?.params) {
-      rawImageUrls.push(...extractAllImageUrls(rawData.params));
-    }
-    if (rawData?.paramsExt) {
-      rawImageUrls.push(...extractAllImageUrls(rawData.paramsExt));
-    }
-
     const msgType = String(rawMessage.data?.msgType || "");
-    const isPhoto = msgType === "chat.photo";
+    const rawData = rawMessage.data as any;
+    const content = rawMessage.data?.content;
 
-    // Trích xuất thông tin Voice / Audio nếu có (bảo vệ tuyệt đối: nếu là photo thì không trích xuất voice)
-    let voiceUrl: string | undefined = undefined;
-    let voiceDuration: number | undefined = undefined;
+    let mediaType: MediaType = null;
+    let mediaUrls: MediaItem[] | undefined = undefined;
+    let text = "";
 
-    if (!isPhoto) {
-      const voiceFromContent = extractVoiceInfo(rawMessage.data.content, msgType);
-      if (voiceFromContent.voiceUrl) {
-        voiceUrl = voiceFromContent.voiceUrl;
-        voiceDuration = voiceFromContent.duration;
-      }
+    // ── PHÂN LOẠI TƯỜNG MINH THEO MSGTYPE CỦA ZALO ─────────────────────────
+    switch (msgType) {
+      case "chat.photo":
+      case "chat.image": {
+        let photoUrl: string | undefined = undefined;
+        let photoDesc: string | undefined = undefined;
+        const photoItems: MediaItem[] = [];
 
-      if (!voiceUrl && rawData?.params) {
-        const voiceFromParams = extractVoiceInfo(rawData.params, msgType);
-        if (voiceFromParams.voiceUrl) {
-          voiceUrl = voiceFromParams.voiceUrl;
-          voiceDuration = voiceFromParams.duration;
+        // 1. Phân tích content nếu là string
+        if (typeof content === "string" && content.trim()) {
+          try {
+            const parsed = JSON.parse(content);
+            if (Array.isArray(parsed)) {
+              for (const item of parsed) {
+                const u = item?.hdUrl || item?.normalUrl || item?.rawUrl || item?.url || item?.href || item?.thumb;
+                const d = item?.description || item?.title;
+                if (u) photoItems.push({ url: u, description: d || undefined });
+              }
+            } else if (typeof parsed === "object" && parsed) {
+              const rawList = parsed.photos || parsed.images || parsed.urls;
+              if (Array.isArray(rawList)) {
+                for (const item of rawList) {
+                  const u = typeof item === "string" ? item : item?.hdUrl || item?.normalUrl || item?.rawUrl || item?.url || item?.href || item?.thumb;
+                  const d = typeof item === "object" ? item?.description || item?.title : undefined;
+                  if (u) photoItems.push({ url: u, description: d || undefined });
+                }
+              } else {
+                photoUrl = parsed.hdUrl || parsed.normalUrl || parsed.rawUrl || parsed.url || parsed.href || parsed.thumb;
+                photoDesc = parsed.description || parsed.title;
+              }
+            }
+          } catch {
+            if (content.startsWith("http")) photoUrl = content.trim();
+            else text = content;
+          }
         }
-      }
-
-      if (!voiceUrl && rawData?.paramsExt) {
-        const voiceFromParamsExt = extractVoiceInfo(rawData.paramsExt, msgType);
-        if (voiceFromParamsExt.voiceUrl) {
-          voiceUrl = voiceFromParamsExt.voiceUrl;
-          voiceDuration = voiceFromParamsExt.duration;
+        // 2. Phân tích content nếu là object (chuẩn TAttachmentContent của zca-js)
+        else if (content && typeof content === "object") {
+          const attach = content as any;
+          if (Array.isArray(attach)) {
+            for (const item of attach) {
+              const u = item?.hdUrl || item?.normalUrl || item?.rawUrl || item?.url || item?.href || item?.thumb;
+              const d = item?.description || item?.title;
+              if (u) photoItems.push({ url: u, description: d || undefined });
+            }
+          } else {
+            const rawList = attach.photos || attach.images || attach.urls;
+            if (Array.isArray(rawList)) {
+              for (const item of rawList) {
+                const u = typeof item === "string" ? item : item?.hdUrl || item?.normalUrl || item?.rawUrl || item?.url || item?.href || item?.thumb;
+                const d = typeof item === "object" ? item?.description || item?.title : undefined;
+                if (u) photoItems.push({ url: u, description: d || undefined });
+              }
+            } else {
+              photoUrl = attach.hdUrl || attach.normalUrl || attach.rawUrl || attach.url || attach.href || attach.thumb;
+              photoDesc = attach.description || attach.title;
+              if (attach.params) {
+                let p = attach.params;
+                if (typeof p === "string" && p.trim()) {
+                  try { p = JSON.parse(p); } catch {}
+                }
+                if (typeof p === "object" && p) {
+                  photoUrl = photoUrl || p.hdUrl || p.normalUrl || p.rawUrl || p.url || p.href || p.thumb;
+                  photoDesc = photoDesc || p.description || p.title;
+                }
+              }
+            }
+          }
         }
+
+        // 3. Thử quét rawData.params
+        if (!photoUrl && photoItems.length === 0 && rawData?.params) {
+          let p = rawData.params;
+          if (typeof p === "string" && p.trim()) {
+            try { p = JSON.parse(p); } catch {
+              if (p.startsWith("http")) photoUrl = p.trim();
+            }
+          }
+          if (typeof p === "object" && p) {
+            photoUrl = p.hdUrl || p.normalUrl || p.rawUrl || p.url || p.href || p.thumb;
+            photoDesc = photoDesc || p.description || p.title;
+          }
+        }
+
+        if (!photoUrl && photoItems.length === 0) {
+          photoUrl = rawData?.hdUrl || rawData?.normalUrl || rawData?.rawUrl || rawData?.url || rawData?.href || rawData?.thumb;
+        }
+
+        mediaType = "photo";
+        if (photoItems.length > 0) {
+          mediaUrls = photoItems;
+          text = photoDesc || photoItems[0]?.description || text;
+        } else if (photoUrl) {
+          mediaUrls = [{ url: photoUrl, description: photoDesc || undefined }];
+          text = photoDesc || text;
+        }
+        break;
       }
-    }
 
-    const isVoice = !isPhoto && (msgType === "chat.voice" || msgType === "chat.audio" || Boolean(voiceUrl));
-    const hasVoice = !isPhoto && Boolean(voiceUrl);
+      case "chat.sticker": {
+        let stickerData: any = null;
+        if (typeof content === "string" && content.trim()) {
+          try { stickerData = JSON.parse(content); } catch {}
+        } else if (content && typeof content === "object") {
+          stickerData = content;
+        }
 
-    // Trích xuất thông tin Sticker / Nhãn dán
-    const stickerInfo = extractStickerInfo(
-      rawMessage.data.content,
-      rawData?.params,
-      rawData?.paramsExt,
-      msgType
-    );
-    const isSticker = stickerInfo.isSticker;
-    const hasSticker = stickerInfo.isSticker;
-    const stickerId = stickerInfo.stickerId;
-    const stickerCateId = stickerInfo.stickerCateId;
-    const stickerUrl = stickerInfo.stickerUrl;
-    const stickerText = stickerInfo.stickerText;
+        if (!stickerData && rawData?.paramsExt) {
+          if (typeof rawData.paramsExt === "string" && rawData.paramsExt.trim()) {
+            try { stickerData = JSON.parse(rawData.paramsExt); } catch {}
+          } else if (typeof rawData.paramsExt === "object") {
+            stickerData = rawData.paramsExt;
+          }
+        }
 
-    // Lọc trùng lặp URL và chỉ giữ các URL hình ảnh hợp lệ (loại bỏ voiceUrl, stickerUrl và file âm thanh)
-    const validImageUrls = isVoice || isSticker
-      ? []
-      : Array.from(new Set(rawImageUrls)).filter((u) => isValidHttpUrl(u) && !isAudioUrl(u) && u !== voiceUrl && u !== stickerUrl);
+        if (!stickerData && rawData?.params) {
+          if (typeof rawData.params === "string" && rawData.params.trim()) {
+            try { stickerData = JSON.parse(rawData.params); } catch {}
+          } else if (typeof rawData.params === "object") {
+            stickerData = rawData.params;
+          }
+        }
 
-    const hasImage = !isVoice && !isSticker && (isPhoto || validImageUrls.length > 0);
-    const imageUrls = validImageUrls;
+        const id = stickerData?.id ? String(stickerData.id) : stickerData?.stickerId ? String(stickerData.stickerId) : undefined;
+        const url = stickerData?.spriteUrl || stickerData?.url || (id ? `https://zalo-api.zadn.vn/api/emoticon/sticker/webpc?eid=${id}&size=130` : undefined);
+        const description = stickerData?.text || stickerData?.description || undefined;
 
-    // Nếu là sticker:
-    if (isSticker) {
-      if (stickerText) {
-        text = `[🏷️ Sticker]: "${stickerText}"`;
-      } else if (!text || text === "[Sticker]") {
-        text = "[🏷️ Sticker]";
+        mediaType = "sticker";
+        if (url) {
+          mediaUrls = [{ url, id, description }];
+        }
+        text = ""; // Sticker không có text
+        break;
       }
-    }
 
-    // Nếu tin nhắn chỉ gửi ảnh mà không có chữ, giữ text rỗng hoặc theo mô tả ảnh
-    if (hasImage && !isSticker && !text) {
-      text = imageDescription || "";
+      case "chat.voice":
+      case "chat.audio": {
+        let voiceUrl: string | undefined = undefined;
+        let voiceDuration: number | undefined = undefined;
+
+        // 1. Phân tích content nếu là string
+        if (typeof content === "string" && content.trim()) {
+          try {
+            const parsedContent = JSON.parse(content);
+            if (typeof parsedContent === "object" && parsedContent) {
+              voiceUrl = parsedContent.voiceUrl || parsedContent.m4aUrl || parsedContent.url || parsedContent.href || parsedContent.audioUrl;
+              voiceDuration = Number(parsedContent.duration || parsedContent.voiceDuration) || undefined;
+            }
+          } catch {
+            if (content.startsWith("http")) {
+              voiceUrl = content.trim();
+            }
+          }
+        }
+        // 2. Phân tích content nếu là object (chuẩn TAttachmentContent của zca-js)
+        else if (content && typeof content === "object") {
+          const attach = content as any;
+          voiceUrl = attach.voiceUrl || attach.m4aUrl || attach.url || attach.href || attach.audioUrl;
+          voiceDuration = Number(attach.duration || attach.voiceDuration) || undefined;
+
+          if (attach.params) {
+            let p = attach.params;
+            if (typeof p === "string" && p.trim()) {
+              try { p = JSON.parse(p); } catch {}
+            }
+            if (typeof p === "object" && p) {
+              voiceUrl = voiceUrl || p.voiceUrl || p.m4aUrl || p.url || p.href || p.audioUrl;
+              voiceDuration = voiceDuration || Number(p.duration || p.voiceDuration) || undefined;
+            }
+          }
+        }
+
+        // 3. Phân tích rawData.params nếu voiceUrl chưa có
+        if (!voiceUrl && rawData?.params) {
+          let p = rawData.params;
+          if (typeof p === "string" && p.trim()) {
+            try { p = JSON.parse(p); } catch {
+              if (p.startsWith("http")) voiceUrl = p.trim();
+            }
+          }
+          if (typeof p === "object" && p) {
+            voiceUrl = voiceUrl || p.voiceUrl || p.m4aUrl || p.url || p.href || p.audioUrl;
+            voiceDuration = voiceDuration || Number(p.duration || p.voiceDuration) || undefined;
+          }
+        }
+
+        // 4. Phân tích rawData.paramsExt nếu voiceUrl chưa có
+        if (!voiceUrl && rawData?.paramsExt) {
+          let p = rawData.paramsExt;
+          if (typeof p === "string" && p.trim()) {
+            try { p = JSON.parse(p); } catch {}
+          }
+          if (typeof p === "object" && p) {
+            voiceUrl = voiceUrl || p.voiceUrl || p.m4aUrl || p.url || p.href || p.audioUrl;
+            voiceDuration = voiceDuration || Number(p.duration || p.voiceDuration) || undefined;
+          }
+        }
+
+        // 5. Quét trực tiếp các trường trên rawData
+        if (!voiceUrl) {
+          voiceUrl = rawData?.voiceUrl || rawData?.m4aUrl || rawData?.url || rawData?.href || rawData?.audioUrl;
+          if (!voiceDuration) {
+            voiceDuration = Number(rawData?.duration || rawData?.voiceDuration) || undefined;
+          }
+        }
+
+        mediaType = "voice";
+        if (voiceUrl) {
+          mediaUrls = [{ url: voiceUrl, duration: voiceDuration }];
+        }
+        text = ""; // Voice không có text
+        break;
+      }
+
+      default: {
+        if (rawData?.paramsExt?.containType === 36) {
+          const stickerData: any = rawData.paramsExt;
+          const id = stickerData.id ? String(stickerData.id) : undefined;
+          const url = stickerData.spriteUrl || stickerData.url || (id ? `https://zalo-api.zadn.vn/api/emoticon/sticker/webpc?eid=${id}&size=130` : undefined);
+          const description = stickerData.description || stickerData.text || undefined;
+
+          mediaType = "sticker";
+          if (url) {
+            mediaUrls = [{ url, id, description }];
+          }
+          text = "";
+          break;
+        }
+
+        mediaType = null;
+        mediaUrls = undefined;
+        if (typeof content === "string") {
+          text = content;
+        } else if (content && typeof content === "object") {
+          const attach = content as any;
+          text = attach.text || attach.msg || attach.title || "";
+        }
+        break;
+      }
     }
 
     const trimmedText = text.trim();
     let command: string | undefined;
     const args: string[] = [];
 
-    // Kiểm tra xem tin nhắn có phải là Command không
     if (trimmedText.startsWith(prefix)) {
       const parts = trimmedText.slice(prefix.length).trim().split(/\s+/);
       if (parts.length > 0 && parts[0]) {
@@ -611,7 +348,6 @@ export class EventDispatcher {
       }
     }
 
-    // Kiểm tra thông tin tin nhắn được Reply/Quote
     const rawQuote = rawMessage.data.quote as any;
     const hasQuote = Boolean(rawQuote);
     let quoteText: string | undefined = undefined;
@@ -624,7 +360,6 @@ export class EventDispatcher {
       quoteSenderId = rawQuote.ownerId ? String(rawQuote.ownerId) : undefined;
       quoteMsgType = rawQuote.msgType ? String(rawQuote.msgType) : undefined;
 
-      // Nhận diện tên người gửi tin nhắn gốc được quote
       if ((this.ownId && quoteSenderId === this.ownId) || quoteSenderId === "admin") {
         quoteSenderName = "Bot";
       } else if (rawQuote.fromDName || rawQuote.dName) {
@@ -633,7 +368,6 @@ export class EventDispatcher {
         quoteSenderName = isGroup ? `Thành viên (${quoteSenderId})` : "Ứng viên";
       }
 
-      // Nếu tin nhắn gốc là ảnh/sticker/voice mà msg rỗng
       if (!quoteText) {
         if (quoteMsgType === "chat.photo" || rawQuote.attach) {
           quoteText = "[Hình ảnh]";
@@ -657,6 +391,8 @@ export class EventDispatcher {
       isSelf,
       text: trimmedText,
       timestamp: Number(rawMessage.data.ts) || Date.now(),
+      mediaType,
+      mediaUrls,
       hasQuote,
       quoteText,
       quoteSenderName,
@@ -670,28 +406,11 @@ export class EventDispatcher {
       } : undefined,
       command,
       args,
-      hasImage,
-      imageUrls: imageUrls.length > 0 ? imageUrls : undefined,
-      hasVoice,
-      voiceUrl,
-      voiceUrls: voiceUrl ? [voiceUrl] : undefined,
-      voiceDuration,
-      hasSticker,
-      isSticker,
-      stickerId,
-      stickerCateId,
-      stickerUrl,
-      stickerText,
     };
   }
 
-  /**
-   * Kích hoạt xử lý sự kiện Tin Nhắn
-   */
   public async dispatchMessage(rawMessage: Message): Promise<void> {
     const parsed = this.parseMessage(rawMessage);
-
-    // Chạy qua tất cả các message handler đã đăng ký
     for (const handler of this.messageHandlers) {
       try {
         await handler(parsed);
@@ -701,9 +420,6 @@ export class EventDispatcher {
     }
   }
 
-  /**
-   * Kích hoạt xử lý sự kiện Nhóm
-   */
   public async dispatchGroupEvent(event: GroupEvent): Promise<void> {
     for (const handler of this.groupEventHandlers) {
       try {
@@ -714,9 +430,6 @@ export class EventDispatcher {
     }
   }
 
-  /**
-   * Kích hoạt xử lý sự kiện Bạn Bè
-   */
   public async dispatchFriendEvent(event: FriendEvent): Promise<void> {
     for (const handler of this.friendEventHandlers) {
       try {
@@ -727,9 +440,6 @@ export class EventDispatcher {
     }
   }
 
-  /**
-   * Kích hoạt xử lý sự kiện Cảm Xúc
-   */
   public async dispatchReaction(reaction: Reaction): Promise<void> {
     for (const handler of this.reactionHandlers) {
       try {
@@ -740,9 +450,6 @@ export class EventDispatcher {
     }
   }
 
-  /**
-   * Kích hoạt xử lý sự kiện Thu Hồi Tin Nhắn
-   */
   public async dispatchUndo(undo: Undo): Promise<void> {
     for (const handler of this.undoHandlers) {
       try {
@@ -753,9 +460,6 @@ export class EventDispatcher {
     }
   }
 
-  /**
-   * Kích hoạt xử lý sự kiện Đang Gõ
-   */
   public async dispatchTyping(typing: Typing): Promise<void> {
     for (const handler of this.typingHandlers) {
       try {

@@ -29,13 +29,101 @@ const WAVEFORM_HEIGHTS = [
 ];
 
 /**
+ * ZaloImageItem: Hiển thị ảnh Zalo CDN với delay 500ms trước khi load lần đầu.
+ * Giảm thiểu retry do CDN propagation delay cho ảnh vừa upload.
+ * Nếu vẫn lỗi: retry tối đa 5 lần với delay tăng dần 1s, 2s, 3s, 4s, 5s.
+ */
+function ZaloImageItem({ src, className, alt, onClick }) {
+  const [activeSrc, setActiveSrc] = useState(null); // null = đang chờ delay ban đầu
+  const [retryCount, setRetryCount] = useState(0);
+  const [hasError, setHasError] = useState(false);
+  const timerRef = useRef(null);
+  const MAX_RETRIES = 5;
+
+  useEffect(() => {
+    // Reset state khi src thay đổi
+    setActiveSrc(null);
+    setRetryCount(0);
+    setHasError(false);
+
+    // Delay 500ms trước khi bắt đầu load để CDN có thời gian sẵn sàng
+    timerRef.current = setTimeout(() => setActiveSrc(src), 500);
+
+    return () => { if (timerRef.current) clearTimeout(timerRef.current); };
+  }, [src]);
+
+  const handleError = () => {
+    if (retryCount >= MAX_RETRIES) {
+      setHasError(true);
+      return;
+    }
+    const nextRetry = retryCount + 1;
+    const delay = nextRetry * 1000; // 1s, 2s, 3s, 4s, 5s
+    setActiveSrc(null); // Trở về trạng thái loading trong thời gian retry
+    timerRef.current = setTimeout(() => {
+      setRetryCount(nextRetry);
+      setActiveSrc(`${src.split('?')[0]}?_t=${Date.now()}`);
+    }, delay);
+  };
+
+  // Skeleton shimmer khi đang chờ (delay ban đầu hoặc giữa các lần retry)
+  if (!activeSrc && !hasError) {
+    return html`
+      <div
+        className=${`${className} zalo-img-skeleton`}
+        style=${{ background: 'linear-gradient(90deg, rgba(255,255,255,0.04) 25%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0.04) 75%)',
+                   backgroundSize: '200% 100%',
+                   animation: 'shimmer 1.2s infinite',
+                   borderRadius: '8px', minHeight: '80px' }}
+      />
+    `;
+  }
+
+  if (hasError) {
+    return html`
+      <div
+        className=${`${className} zalo-img-error`}
+        onClick=${onClick}
+        style=${{ display: 'flex', alignItems: 'center', justifyContent: 'center',
+                   background: 'rgba(255,255,255,0.05)', borderRadius: '8px',
+                   cursor: 'pointer', minHeight: '80px', fontSize: '12px',
+                   color: 'rgba(255,255,255,0.4)', flexDirection: 'column', gap: '4px' }}
+      >
+        <span>🖼️</span>
+        <span>Nhấn để xem</span>
+      </div>
+    `;
+  }
+
+  return html`
+    <img
+      src=${activeSrc}
+      className=${className}
+      alt=${alt || 'Ảnh Zalo'}
+      loading="lazy"
+      onError=${handleError}
+      onClick=${onClick}
+    />
+  `;
+}
+
+
+/**
  * ZaloVoicePlayer: Trình phát tin nhắn thoại chuẩn phong cách Zalo PC & Mobile
  */
 export function ZaloVoicePlayer({ message, isOutgoing }) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
+
+  const voiceItem = (Array.isArray(message.mediaUrls) && message.mediaUrls[0]) || {};
+  const rawVoiceUrl = voiceItem.url || message.voiceUrl || '';
+  const voiceUrl = rawVoiceUrl.startsWith('http')
+    ? `/api/chat/media-proxy?url=${encodeURIComponent(rawVoiceUrl)}`
+    : rawVoiceUrl;
+  const rawDuration = voiceItem.duration || message.voiceDuration || 0;
+
   const [duration, setDuration] = useState(
-    message.voiceDuration ? Math.round(message.voiceDuration / 1000) : 0
+    rawDuration ? Math.round(rawDuration / 1000) : 0
   );
   const [showStt, setShowStt] = useState(true);
   const audioRef = useRef(null);
@@ -57,7 +145,7 @@ export function ZaloVoicePlayer({ message, isOutgoing }) {
   const togglePlay = (e) => {
     e.stopPropagation();
     const audio = audioRef.current;
-    if (!audio) return;
+    if (!audio || !voiceUrl) return;
 
     if (audio.paused) {
       if (currentlyPlayingAudio && currentlyPlayingAudio !== audio) {
@@ -73,7 +161,7 @@ export function ZaloVoicePlayer({ message, isOutgoing }) {
   const handleSeek = (e) => {
     e.stopPropagation();
     const audio = audioRef.current;
-    if (!audio) return;
+    if (!audio || !voiceUrl) return;
     const waveformEl = e.currentTarget;
     const rect = waveformEl.getBoundingClientRect();
     const clickX = e.clientX - rect.left;
@@ -161,25 +249,27 @@ export function ZaloVoicePlayer({ message, isOutgoing }) {
         </div>
       `}
 
-      <!-- Audio Element ngầm -->
-      <audio
-        ref=${audioRef}
-        src=${message.voiceUrl}
-        preload="metadata"
-        onPlay=${() => setIsPlaying(true)}
-        onPause=${() => setIsPlaying(false)}
-        onEnded=${() => {
-          setIsPlaying(false);
-          setCurrentTime(0);
-          if (currentlyPlayingAudio === audioRef.current) currentlyPlayingAudio = null;
-        }}
-        onTimeUpdate=${(e) => setCurrentTime(e.target.currentTime)}
-        onLoadedMetadata=${(e) => {
-          if (e.target.duration && !isNaN(e.target.duration)) {
-            setDuration(e.target.duration);
-          }
-        }}
-      ></audio>
+      <!-- Audio Element ngầm (chỉ gán src nếu voiceUrl hợp lệ) -->
+      ${voiceUrl && html`
+        <audio
+          ref=${audioRef}
+          src=${voiceUrl}
+          preload="metadata"
+          onPlay=${() => setIsPlaying(true)}
+          onPause=${() => setIsPlaying(false)}
+          onEnded=${() => {
+            setIsPlaying(false);
+            setCurrentTime(0);
+            if (currentlyPlayingAudio === audioRef.current) currentlyPlayingAudio = null;
+          }}
+          onTimeUpdate=${(e) => setCurrentTime(e.target.currentTime)}
+          onLoadedMetadata=${(e) => {
+            if (e.target.duration && !isNaN(e.target.duration)) {
+              setDuration(e.target.duration);
+            }
+          }}
+        ></audio>
+      `}
     </div>
   `;
 }
@@ -191,7 +281,9 @@ export function ZaloSticker({ message, isOutgoing }) {
   const [loaded, setLoaded] = useState(false);
   const [hasError, setHasError] = useState(false);
 
-  let caption = message.stickerText || '';
+  const stickerItem = (Array.isArray(message.mediaUrls) && message.mediaUrls[0]) || {};
+  let caption = stickerItem.description || message.stickerText || '';
+
   if (!caption && message.content) {
     if (message.content.startsWith('[🏷️ Nhãn dán / Sticker]:')) {
       caption = message.content.replace('[🏷️ Nhãn dán / Sticker]:', '').trim().replace(/^["\s]+|["\s]+$/g, '');
@@ -206,7 +298,11 @@ export function ZaloSticker({ message, isOutgoing }) {
     caption = '';
   }
 
-  const stickerUrl = message.stickerUrl || (message.stickerId ? `https://zalo-api.zadn.vn/api/emoticon/sticker/webpc?eid=${message.stickerId}&size=130` : '');
+  const stickerId = stickerItem.id || message.stickerId;
+  const stickerUrl =
+    stickerItem.url ||
+    message.stickerUrl ||
+    (stickerId ? `https://zalo-api.zadn.vn/api/emoticon/sticker/webpc?eid=${stickerId}&size=130` : '');
 
   if (!stickerUrl || hasError) {
     return html`
@@ -242,40 +338,6 @@ export function ZaloSticker({ message, isOutgoing }) {
   `;
 }
 
-/**
- * SmartImage: Placeholder Shimmer Loading & Spinner mảnh tinh tế
- */
-export function SmartImage({ src, alt, className, onClick }) {
-  const [loaded, setLoaded] = useState(false);
-  const [hasError, setHasError] = useState(false);
-
-  return html`
-    <div className="smart-image-wrapper" onClick=${onClick}>
-      ${!loaded && !hasError && html`
-        <div className="image-shimmer-placeholder">
-          <div className="shimmer-spinner"></div>
-          <span className="shimmer-text">Đang tải...</span>
-        </div>
-      `}
-
-      ${hasError ? html`
-        <div className="image-error-placeholder">
-          <span>Không thể tải ảnh</span>
-        </div>
-      ` : html`
-        <img
-          src=${src}
-          alt=${alt || 'Ảnh Zalo'}
-          className=${`${className} ${loaded ? 'is-loaded' : 'is-loading'}`}
-          onLoad=${() => setLoaded(true)}
-          onError=${() => setHasError(true)}
-          loading="lazy"
-        />
-      `}
-    </div>
-  `;
-}
-
 function isValidVoiceUrl(url) {
   if (!url || typeof url !== 'string') return false;
   const lower = url.toLowerCase().split('?')[0];
@@ -301,39 +363,39 @@ export function MessageBubble({ message, ownId, isGroup, onImageClick }) {
 
   const avatarLetter = (message.senderName || 'U').trim().charAt(0).toUpperCase();
 
-  const images = Array.isArray(message.imageUrls) ? message.imageUrls.filter(Boolean) : [];
+  // Xác định mediaType tường minh
+  const mediaType =
+    message.mediaType !== undefined && message.mediaType !== null
+      ? message.mediaType
+      : message.hasSticker || message.stickerUrl || message.stickerId
+      ? 'sticker'
+      : message.hasVoice || message.voiceUrl
+      ? 'voice'
+      : message.hasImage || (Array.isArray(message.imageUrls) && message.imageUrls.length > 0)
+      ? 'photo'
+      : null;
 
-  const hasVoice = Boolean(
-    message.hasVoice &&
-    isValidVoiceUrl(message.voiceUrl) &&
-    images.length === 0
-  );
+  const mediaItems =
+    Array.isArray(message.mediaUrls) && message.mediaUrls.length > 0
+      ? message.mediaUrls
+      : Array.isArray(message.imageUrls)
+      ? message.imageUrls.map((u) => typeof u === 'string' ? { url: u } : u)
+      : [];
 
-  const hasSticker = Boolean(
-    !hasVoice &&
-    (message.hasSticker ||
-      message.stickerUrl ||
-      message.stickerId ||
-      (message.content && (
-        message.content === '[Sticker]' ||
-        message.content === '[Nhãn dán]' ||
-        message.content.includes('[Sticker]') ||
-        message.content.startsWith('[🏷️ Nhãn dán / Sticker]:') ||
-        message.content.startsWith('[🏷️ Sticker]:') ||
-        message.content.startsWith('[Nhãn dán]:')
-      )))
-  );
+  const imageUrls =
+    mediaType === 'photo'
+      ? mediaItems.length > 0
+        ? mediaItems.map((m) => (typeof m === 'string' ? m : m?.url)).filter(Boolean)
+        : Array.isArray(message.imageUrls)
+        ? message.imageUrls.map((u) => (typeof u === 'string' ? u : u?.url)).filter(Boolean)
+        : []
+      : [];
 
-  const hasImages = Boolean(
-    !hasVoice &&
-    !hasSticker &&
-    (message.hasImage || images.length > 0) &&
-    images.length > 0
-  );
+  const isSticker = mediaType === 'sticker';
+  const isVoice = mediaType === 'voice';
+  const isPhoto = mediaType === 'photo' && imageUrls.length > 0;
 
   const hasRealText = Boolean(
-    !hasVoice &&
-    !hasSticker &&
     message.content &&
       message.content.trim() &&
       message.content !== '[Hình ảnh đính kèm]' &&
@@ -341,21 +403,20 @@ export function MessageBubble({ message, ownId, isGroup, onImageClick }) {
       message.content !== '[Sticker]' &&
       message.content !== '[Nhãn dán]' &&
       message.content !== '[Tin nhắn thoại]' &&
-      !message.content.includes('[Sticker]') &&
       !message.content.startsWith('[🏷️ Nhãn dán / Sticker]:') &&
       !message.content.startsWith('[🏷️ Sticker]:') &&
       !message.content.startsWith('[Nhãn dán]:')
   );
 
-  const isPureImage = hasImages && !hasRealText && !message.hasQuote && !hasVoice && !hasSticker;
-  const isPureSticker = hasSticker && !hasVoice && !hasImages && !message.hasQuote;
+  const isPureImage = isPhoto && !hasRealText && !message.hasQuote;
+  const isPureSticker = isSticker && !message.hasQuote;
 
   const imageGridClass =
-    images.length === 1
+    imageUrls.length === 1
       ? 'grid-1'
-      : images.length === 2
+      : imageUrls.length === 2
       ? 'grid-2'
-      : images.length <= 4
+      : imageUrls.length <= 4
       ? 'grid-4'
       : 'grid-multi';
 
@@ -378,10 +439,10 @@ export function MessageBubble({ message, ownId, isGroup, onImageClick }) {
             <${ZaloSticker} message=${message} isOutgoing=${isOutgoing} />
           </div>
         ` : isPureImage ? html`
-          <!-- Album ảnh nhóm lại hiển thị trực tiếp chuẩn Zalo PC -->
+          <!-- Album ảnh thuần túy hiển thị trực tiếp chuẩn Zalo PC (KHÔNG CÓ KHUNG BUBBLE) -->
           <div className=${`msg-pure-images-container ${imageGridClass}`}>
-            ${images.map((url, idx) => html`
-              <${SmartImage}
+            ${imageUrls.map((url, idx) => html`
+              <${ZaloImageItem}
                 key=${idx}
                 src=${url}
                 className="pure-image-img"
@@ -391,7 +452,7 @@ export function MessageBubble({ message, ownId, isGroup, onImageClick }) {
             `)}
           </div>
         ` : html`
-          <!-- Bubble Tin Nhắn Zalo PC -->
+          <!-- Bubble Tin Nhắn Zalo PC cho tin nhắn văn bản và tin nhắn kèm ảnh có text -->
           <div className="msg-bubble">
             ${message.hasQuote && message.quoteText && html`
               <div className="msg-quote-card">
@@ -402,11 +463,11 @@ export function MessageBubble({ message, ownId, isGroup, onImageClick }) {
               </div>
             `}
 
-            ${hasVoice && html`
+            ${isVoice && html`
               <${ZaloVoicePlayer} message=${message} isOutgoing=${isOutgoing} />
             `}
 
-            ${hasSticker && html`
+            ${isSticker && html`
               <${ZaloSticker} message=${message} isOutgoing=${isOutgoing} />
             `}
 
@@ -416,10 +477,10 @@ export function MessageBubble({ message, ownId, isGroup, onImageClick }) {
               </div>
             `}
 
-            ${hasImages && html`
-              <div className=${`msg-images-grid ${imageGridClass}`} style=${{ marginTop: '6px' }}>
-                ${images.map((url, idx) => html`
-                  <${SmartImage}
+            ${isPhoto && html`
+              <div className=${`msg-images-grid ${imageGridClass}`} style=${hasRealText ? { marginTop: '8px' } : {}}>
+                ${imageUrls.map((url, idx) => html`
+                  <${ZaloImageItem}
                     key=${idx}
                     src=${url}
                     className="msg-image-thumb"
