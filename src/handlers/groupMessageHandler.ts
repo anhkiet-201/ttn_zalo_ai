@@ -38,18 +38,10 @@ export class GroupMessageHandler {
 
     // Bỏ qua tin nhắn không có text, không có ảnh/voice/sticker
     if (
-      !parsedMessage.text &&
-      !parsedMessage.mediaType &&
-      (!parsedMessage.mediaUrls || parsedMessage.mediaUrls.length === 0)
+      !parsedMessage.text
     ) {
       return;
     }
-
-    // Bỏ qua ảnh nhóm — không có nội dung text để AI phân tích nghiệp vụ RAG
-    if (parsedMessage.mediaType === "photo") {
-      return;
-    }
-
     // Lọc từ khóa nội bộ hoặc tin nhắn văn bản quá ngắn (bỏ qua im lặng)
     if (parsedMessage.text && parsedMessage.mediaType !== "sticker") {
       const lowerText = parsedMessage.text.toLowerCase().trim();
