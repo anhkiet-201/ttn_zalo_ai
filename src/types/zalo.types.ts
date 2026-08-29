@@ -45,6 +45,7 @@ export interface BotConfig {
   credentials?: Credentials;
   geminiApiKey?: string;
   geminiModel: string;
+  geminiFlashLiteModel?: string;
   geminiSystemInstruction?: string;
   messageDebounceSeconds: number;
   minDebounceSeconds: number;

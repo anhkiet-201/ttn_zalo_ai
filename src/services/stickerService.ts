@@ -79,7 +79,7 @@ Rules:
       ];
 
       const response = await this.ai.models.generateContent({
-        model: config.geminiModel || "gemini-2.5-flash",
+        model: config.geminiFlashLiteModel || "gemini-2.5-flash-lite",
         contents,
       });
 

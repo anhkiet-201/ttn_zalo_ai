@@ -48,6 +48,7 @@ export const config: BotConfig = {
   credentials: getCredentialsFromEnv(),
   geminiApiKey: process.env.GEMINI_API_KEY,
   geminiModel: process.env.GEMINI_MODEL || "gemini-2.5-flash",
+  geminiFlashLiteModel: process.env.GEMINI_FLASH_LITE_MODEL || "gemini-2.5-flash-lite",
   messageDebounceSeconds: Number(process.env.MESSAGE_DEBOUNCE_SECONDS) || 30,
   minDebounceSeconds: Number(process.env.MIN_DEBOUNCE_SECONDS) || 10,
   maxDebounceSeconds:
