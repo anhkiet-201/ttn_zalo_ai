@@ -1,15 +1,11 @@
 /* ==========================================================================
    ZALO PC NATIVE EXECUTIVE DESIGN SYSTEM
-   Thiết kế: Chuẩn Zalo PC Desktop (Phẳng, Tinh Tế, Icon Mảnh, iOS Switch)
+   Thiết kế: Chuẩn Zalo PC Desktop (Phẳng, Tinh Tế, 100% Nút Có Chức Năng, iOS Switch)
    ========================================================================== */
 
 :root {
-  /* Bảng màu chính Zalo PC */
-  --zalo-nav-bg: #0068ff;
-  --zalo-nav-hover: #0056d6;
-  --zalo-nav-active: #004ac0;
-
   --zalo-primary: #0068ff;
+  --zalo-primary-hover: #0056d6;
   --zalo-primary-light: #e5efff;
   --zalo-primary-border: #c8ddff;
 
@@ -58,120 +54,11 @@ body {
 }
 
 /* ==========================================================================
-   1. CỘT NAVIGATION BAR BÊN TRÁI (ZALO PC BLUE NAV BAR - 64px)
-   ========================================================================== */
-
-.zalo-nav-rail {
-  width: 64px;
-  background-color: var(--zalo-nav-bg);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: space-between;
-  padding: 16px 0;
-  flex-shrink: 0;
-  z-index: 30;
-}
-
-.nav-rail-top {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 16px;
-  width: 100%;
-}
-
-.nav-avatar-btn {
-  width: 42px;
-  height: 42px;
-  border-radius: 50%;
-  background: #ffffff;
-  color: var(--zalo-primary);
-  font-weight: 800;
-  font-size: 16px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
-  border: 2px solid rgba(255, 255, 255, 0.8);
-  position: relative;
-}
-
-.nav-avatar-online {
-  position: absolute;
-  bottom: 0;
-  right: 0;
-  width: 11px;
-  height: 11px;
-  background: #10b981;
-  border: 2px solid #ffffff;
-  border-radius: 50%;
-}
-
-.nav-item-btn {
-  width: 44px;
-  height: 44px;
-  border-radius: 12px;
-  border: none;
-  background: transparent;
-  color: rgba(255, 255, 255, 0.75);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  position: relative;
-}
-
-.nav-item-btn:hover {
-  background: rgba(255, 255, 255, 0.12);
-  color: #ffffff;
-}
-
-.nav-item-btn.active {
-  background: var(--zalo-nav-active);
-  color: #ffffff;
-}
-
-.nav-item-btn.active::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 10px;
-  bottom: 10px;
-  width: 3px;
-  background: #ffffff;
-  border-radius: 0 4px 4px 0;
-}
-
-.nav-badge-count {
-  position: absolute;
-  top: 4px;
-  right: 4px;
-  background: #ef4444;
-  color: #ffffff;
-  font-size: 10px;
-  font-weight: 700;
-  padding: 1px 5px;
-  border-radius: 10px;
-  border: 1.5px solid var(--zalo-nav-bg);
-}
-
-.nav-rail-bottom {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-}
-
-/* ==========================================================================
-   2. CỘT DANH SÁCH CUỘC TRÒ CHUYỆN (SIDEBAR - 340px)
+   1. CỘT DANH SÁCH CUỘC TRÒ CHUYỆN (SIDEBAR - 350px)
    ========================================================================== */
 
 .zalo-sidebar {
-  width: 340px;
+  width: 350px;
   height: 100%;
   background: var(--zalo-sidebar-bg);
   border-right: 1px solid var(--zalo-border);
@@ -186,7 +73,7 @@ body {
   border-bottom: 1px solid var(--zalo-border);
 }
 
-/* Search Bar Zalo PC */
+/* Search Bar */
 .sidebar-search-row {
   display: flex;
   align-items: center;
@@ -466,7 +353,7 @@ body {
 }
 
 /* ==========================================================================
-   3. KHUNG CHAT CHÍNH (MAIN CHAT AREA)
+   2. KHUNG CHAT CHÍNH (MAIN CHAT AREA)
    ========================================================================== */
 
 .zalo-chat-area {
@@ -581,12 +468,17 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 4px 10px 4px 6px;
+  padding: 4px 10px 4px 8px;
   background: #f8fafc;
   border: 1px solid var(--zalo-border);
   border-radius: 100px;
   cursor: pointer;
   user-select: none;
+  transition: all 0.15s ease;
+}
+
+.ios-mode-switch-wrapper:hover {
+  border-color: #cbd5e1;
 }
 
 .ios-switch-label {
@@ -639,7 +531,7 @@ body {
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
-/* Trạng thái BẬT AI (Zalo Blue / Green) */
+/* Trạng thái BẬT AI (Zalo Blue) */
 .ios-switch-control input:checked + .ios-switch-slider {
   background-color: var(--zalo-primary);
 }
@@ -690,7 +582,6 @@ body {
   border-radius: 4px;
 }
 
-/* Nút tải thêm tin nhắn cũ */
 .messages-load-more {
   display: flex;
   align-items: center;
@@ -714,7 +605,7 @@ body {
 }
 
 /* ==========================================================================
-   4. BUBBLE TIN NHẮN CHUẨN ZALO PC
+   3. BUBBLE TIN NHẮN CHUẨN ZALO PC
    ========================================================================== */
 
 .message-row {
@@ -807,7 +698,7 @@ body {
 }
 
 /* ==========================================================================
-   5. HIỂN THỊ HÌNH ẢNH & ALBUM (KHÔNG KHUNG BỌC NGOÀI, CHUẨN ZALO PC)
+   4. HIỂN THỊ HÌNH ẢNH & ALBUM (KHÔNG KHUNG BỌC NGOÀI, CHUẨN ZALO PC)
    ========================================================================== */
 
 .message-row.is-pure-image-row .msg-bubble {
@@ -899,7 +790,7 @@ body {
   display: block;
 }
 
-/* Album 2 ảnh (Như trong hình Zalo PC người dùng gửi) */
+/* Album 2 ảnh */
 .msg-pure-images-container.grid-2 {
   grid-template-columns: repeat(2, 1fr);
   max-width: 440px;
@@ -965,7 +856,7 @@ body {
 }
 
 /* ==========================================================================
-   6. KHUNG NHẬP LIỆU CHUẨN ZALO PC (INPUT TOOLBAR & TEXTAREA)
+   5. KHUNG NHẬP LIỆU CHUẨN ZALO PC (INPUT TOOLBAR & TEXTAREA)
    ========================================================================== */
 
 .chat-input-wrapper {
@@ -975,7 +866,6 @@ body {
   flex-direction: column;
 }
 
-/* Dải icon công cụ mảnh Zalo PC */
 .chat-input-toolbar {
   height: 38px;
   padding: 0 16px;
@@ -1043,7 +933,7 @@ body {
 }
 
 .btn-native-send:hover {
-  background: var(--zalo-nav-hover);
+  background: var(--zalo-primary-hover);
 }
 
 .btn-native-send:disabled {
@@ -1085,7 +975,7 @@ body {
 }
 
 /* ==========================================================================
-   7. WELCOME VIEW
+   6. WELCOME VIEW
    ========================================================================== */
 
 .chat-welcome-view {
@@ -1125,7 +1015,7 @@ body {
 }
 
 /* ==========================================================================
-   8. MODALS & LIGHTBOX
+   7. MODALS & LIGHTBOX
    ========================================================================== */
 
 .modal-backdrop {
@@ -1269,9 +1159,6 @@ body {
 }
 
 @media (max-width: 768px) {
-  .zalo-nav-rail {
-    display: none;
-  }
   .zalo-sidebar {
     width: 100vw;
   }

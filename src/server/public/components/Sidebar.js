@@ -41,47 +41,7 @@ export function Sidebar({
   hideOnMobile,
 }) {
   return html`
-    <!-- 1. CỘT NAVIGATION RAIL BÊN TRÁI (ZALO PC BLUE) -->
-    <aside className="zalo-nav-rail">
-      <div className="nav-rail-top">
-        <div className="nav-avatar-btn" title="Admin Bot">
-          <span>AI</span>
-          <div className="nav-avatar-online"></div>
-        </div>
-
-        <button className="nav-item-btn active" title="Tin nhắn">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-          </svg>
-        </button>
-
-        <button className="nav-item-btn" title="Danh bạ">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-            <circle cx="9" cy="7" r="4"></circle>
-            <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
-            <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
-          </svg>
-        </button>
-
-        <button className="nav-item-btn" title="Đám mây lưu trữ (Cloud)">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"></path>
-          </svg>
-        </button>
-      </div>
-
-      <div className="nav-rail-bottom">
-        <button className="nav-item-btn" title="Cài đặt">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="12" cy="12" r="3"></circle>
-            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
-          </svg>
-        </button>
-      </div>
-    </aside>
-
-    <!-- 2. CỘT DANH SÁCH CUỘC TRÒ CHUYỆN (SIDEBAR) -->
+    <!-- CỘT DANH SÁCH CUỘC TRÒ CHUYỆN (SIDEBAR) -->
     <aside className=${`zalo-sidebar ${hideOnMobile ? 'hide-mobile' : ''}`}>
       <div className="sidebar-header">
         <!-- Search row -->
@@ -96,7 +56,7 @@ export function Sidebar({
             <input
               type="text"
               className="sidebar-search-input"
-              placeholder="Tìm kiếm"
+              placeholder="Tìm kiếm cuộc trò chuyện..."
               value=${searchQuery}
               onChange=${(e) => onSearchChange(e.target.value)}
             />
