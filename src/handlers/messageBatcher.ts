@@ -102,15 +102,19 @@ export class MessageBatcher {
       `⏳ [Batching ngẫu nhiên ${waitSec}s] Đã gom ${batch.messages.length} tin nhắn từ [${threadId}]. Đang chờ tin nhắn tiếp theo...`
     );
 
+    // Capture batch reference vào closure để tránh race condition:
+    // Nếu enqueue() được gọi lại trước khi timer này fires, batch sẽ bị thay thế trong Map
+    // → phép so sánh identity (===) sẽ fail và timer cũ sẽ không xử lý nhầm batch mới
+    const capturedBatch = batch;
     batch.timer = setTimeout(async () => {
-      const currentBatch = this.messageBatches.get(threadId);
-      if (currentBatch && currentBatch.messages.length > 0) {
+      if (this.messageBatches.get(threadId) === capturedBatch) {
         this.messageBatches.delete(threadId);
-        await this.processor(currentBatch);
-      } else {
-        this.messageBatches.delete(threadId);
+        if (capturedBatch.messages.length > 0) {
+          await this.processor(capturedBatch);
+        }
       }
     }, debounceMs);
+
   }
 
   /**

@@ -98,22 +98,79 @@ function generateNextId(targetFile: RagTargetFile, data: Record<string, unknown>
 
 export class RAGService {
   private readonly baseDir: string;
+  private readonly dataDir: string;
+
+  // In-memory cache cho RAG context string và job data
+  private cachedContext: string | null = null;
+  private cachedJobRag: Record<string, unknown>[] | null = null;
+  private watchers: import("fs").FSWatcher[] = [];
+
+  private readonly RAG_FILES: RagTargetFile[] = ["job_rag", "policy_rag", "location_rag"];
 
   constructor(baseDir: string = process.cwd()) {
     this.baseDir = baseDir;
+    this.dataDir = path.join(baseDir, "data");
+    this.setupWatchers();
+  }
+
+  /**
+   * Theo dõi real-time các file RAG JSON bằng fs.watch.
+   * Mỗi khi file thay đổi, cache bị invalidate ngay lập tức.
+   */
+  private setupWatchers(): void {
+    for (const ragFile of this.RAG_FILES) {
+      const filePath = path.join(this.dataDir, `${ragFile}.json`);
+      if (!fs.existsSync(filePath)) continue;
+
+      try {
+        const watcher = fs.watch(filePath, (eventType) => {
+          if (eventType === "change" || eventType === "rename") {
+            this.cachedContext = null;
+            if (ragFile === "job_rag") {
+              this.cachedJobRag = null;
+            }
+            console.log(`🔄 [RAGService] Phát hiện thay đổi tại ${ragFile}.json → Invalidate cache.`);
+          }
+        });
+        this.watchers.push(watcher);
+      } catch (err) {
+        console.warn(`⚠️ [RAGService] Không thể theo dõi ${ragFile}.json:`, err);
+      }
+    }
+  }
+
+  /**
+   * Đóng tất cả fs.watch watchers khi service không còn cần thiết
+   */
+  public destroy(): void {
+    for (const watcher of this.watchers) {
+      watcher.close();
+    }
+    this.watchers = [];
   }
 
   public buildPromptContext(): string {
-    return loadRagContext(this.baseDir);
+    // Trả về từ cache nếu còn hợp lệ (chưa bị invalidate bởi fs.watch)
+    if (this.cachedContext !== null) {
+      return this.cachedContext;
+    }
+    const context = loadRagContext(this.baseDir);
+    this.cachedContext = context;
+    return context;
   }
 
   /**
    * Lấy trực tiếp danh sách công ty và thông tin tuyển dụng từ job_rag.json
    */
   public getJobRag(): Record<string, unknown>[] {
+    if (this.cachedJobRag !== null) {
+      return this.cachedJobRag;
+    }
     try {
-      const filePath = path.join(this.baseDir, "data", "job_rag.json");
-      return JSON.parse(fs.readFileSync(filePath, "utf-8"));
+      const filePath = path.join(this.dataDir, "job_rag.json");
+      const data = JSON.parse(fs.readFileSync(filePath, "utf-8"));
+      this.cachedJobRag = data;
+      return data;
     } catch (err) {
       console.error("❌ Lỗi đọc job_rag.json:", err);
       return [];
@@ -123,6 +180,7 @@ export class RAGService {
   /**
    * Thực thi lệnh cập nhật RAG khi Gemini fire tool call "update_rag".
    * Hỗ trợ cả 3 RAG file: job_rag, policy_rag, location_rag.
+   * Sau khi ghi file thành công, cache sẽ tự động được invalidate bởi fs.watch.
    */
   public executeRagUpdate(args: RagUpdateArgs): RagUpdateResult {
     const filePath = path.join(this.baseDir, "data", `${args.targetFile}.json`);
@@ -209,7 +267,7 @@ export class RAGService {
         if (existingIdx !== -1) {
           const existing = data[existingIdx] as Record<string, unknown>;
           const targetId = String(existing["id"]);
-          console.log(`🔄 [Smart Merge] Phát hiện "${newTitle}" đã có trong RAG (${targetId}) -> Chuyển sang update_existing`);
+          console.log(`🔄 [Smart Merge] Phát hiện "${newTitle}" đã có trong RAG (${targetId}) → Chuyển sang update_existing`);
           return this.executeRagUpdate({
             action: "update_existing",
             targetFile: args.targetFile,

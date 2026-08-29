@@ -53,7 +53,7 @@ export class ChatHistoryRepository {
   public addMessage(record: ChatMessageRecord): void {
     // Chống duplicate: kiểm tra xem tin nhắn cùng thread, cùng role và nội dung/ảnh đã tồn tại chưa
     try {
-      let existing: any = null;
+      let existing: { id: string } | undefined = undefined;
       if (record.hasImage) {
         // Đối với tin nhắn có ảnh, chống trùng lặp trong vòng 30 giây
         const checkImageStmt = this.db.connection.prepare(`
@@ -61,7 +61,7 @@ export class ChatHistoryRepository {
           WHERE thread_id = ? AND role = ? AND has_image = 1 AND abs(timestamp - ?) < 30000 
           LIMIT 1
         `);
-        existing = checkImageStmt.get(record.threadId, record.role, record.timestamp);
+        existing = checkImageStmt.get(record.threadId, record.role, record.timestamp) as { id: string } | undefined;
       } else if (record.content && record.content.trim()) {
         // Đối với tin nhắn chữ, chống trùng lặp cùng nội dung trong vòng 30 giây
         const checkTextStmt = this.db.connection.prepare(`
@@ -69,7 +69,7 @@ export class ChatHistoryRepository {
           WHERE thread_id = ? AND role = ? AND TRIM(content) = ? AND abs(timestamp - ?) < 30000 
           LIMIT 1
         `);
-        existing = checkTextStmt.get(record.threadId, record.role, record.content.trim(), record.timestamp);
+        existing = checkTextStmt.get(record.threadId, record.role, record.content.trim(), record.timestamp) as { id: string } | undefined;
       }
 
       if (existing) {
@@ -235,7 +235,7 @@ export class ChatHistoryRepository {
         m.timestamp as lastTimestamp,
         m.role as lastRole,
         COALESCE(tm.is_group, m.is_group) as isGroup,
-        COALESCE(tm.is_manual, CASE WHEN m.sender_name LIKE '-M%' OR m.sender_name LIKE '-m%' OR c.full_name LIKE '-M%' OR c.full_name LIKE '-m%' THEN 1 ELSE 0 END) as isManual,
+        COALESCE(tm.is_manual, CASE WHEN COALESCE(tm.custom_name, '') LIKE '-M%' OR COALESCE(tm.custom_name, '') LIKE '-m%' OR COALESCE(c.full_name, '') LIKE '-M%' OR COALESCE(c.full_name, '') LIKE '-m%' THEN 1 ELSE 0 END) as isManual,
         c.full_name as candidateName,
         c.target_company as targetCompany,
         c.phone_number as phoneNumber
@@ -245,12 +245,18 @@ export class ChatHistoryRepository {
         FROM chat_messages
         GROUP BY thread_id
       ) latest ON m.thread_id = latest.thread_id AND m.timestamp = latest.max_ts
+        AND m.id = (
+          SELECT id FROM chat_messages
+          WHERE thread_id = m.thread_id
+          ORDER BY timestamp DESC, id DESC
+          LIMIT 1
+        )
       LEFT JOIN candidates c ON m.thread_id = c.thread_id
       LEFT JOIN thread_metadata tm ON m.thread_id = tm.thread_id
       WHERE 1=1
     `;
 
-    const params: any[] = [];
+    const params: (string | number)[] = [];
 
     // 1. Điều kiện tìm kiếm (Search)
     if (search && search.trim()) {
@@ -273,23 +279,24 @@ export class ChatHistoryRepository {
       query += ` 
         AND COALESCE(tm.is_group, m.is_group) = 0 
         AND COALESCE(tm.is_manual, 0) = 0
-        AND (m.sender_name NOT LIKE '-M%' AND m.sender_name NOT LIKE '-m%')
-        AND (COALESCE(tm.custom_name, '') NOT LIKE '-M%' AND COALESCE(tm.custom_name, '') NOT LIKE '-m%')
+        AND COALESCE(tm.custom_name, '') NOT LIKE '-M%'
+        AND COALESCE(tm.custom_name, '') NOT LIKE '-m%'
+        AND COALESCE(c.full_name, '') NOT LIKE '-M%'
+        AND COALESCE(c.full_name, '') NOT LIKE '-m%'
       `;
     } else if (filter === "group") {
       query += ` 
         AND COALESCE(tm.is_group, m.is_group) = 1 
-        AND COALESCE(tm.is_manual, 0) = 0
-        AND (m.sender_name NOT LIKE '-M%' AND m.sender_name NOT LIKE '-m%')
-        AND (COALESCE(tm.custom_name, '') NOT LIKE '-M%' AND COALESCE(tm.custom_name, '') NOT LIKE '-m%')
       `;
     } else if (filter === "manual") {
       query += ` 
+        AND COALESCE(tm.is_group, m.is_group) = 0
         AND (
           COALESCE(tm.is_manual, 0) = 1 OR
-          m.sender_name LIKE '-M%' OR m.sender_name LIKE '-m%' OR
-          c.full_name LIKE '-M%' OR c.full_name LIKE '-m%' OR
-          COALESCE(tm.custom_name, '') LIKE '-M%' OR COALESCE(tm.custom_name, '') LIKE '-m%'
+          COALESCE(tm.custom_name, '') LIKE '-M%' OR
+          COALESCE(tm.custom_name, '') LIKE '-m%' OR
+          COALESCE(c.full_name, '') LIKE '-M%' OR
+          COALESCE(c.full_name, '') LIKE '-m%'
         )
       `;
     }
@@ -344,7 +351,7 @@ export class ChatHistoryRepository {
       LEFT JOIN thread_metadata tm ON m.thread_id = tm.thread_id
       WHERE 1=1
     `;
-    const params: any[] = [];
+    const params: (string | number)[] = [];
     if (search && search.trim()) {
       const searchTerm = `%${search.trim().toLowerCase()}%`;
       query += `
@@ -364,23 +371,24 @@ export class ChatHistoryRepository {
       query += ` 
         AND COALESCE(tm.is_group, m.is_group) = 0 
         AND COALESCE(tm.is_manual, 0) = 0
-        AND (m.sender_name NOT LIKE '-M%' AND m.sender_name NOT LIKE '-m%')
-        AND (COALESCE(tm.custom_name, '') NOT LIKE '-M%' AND COALESCE(tm.custom_name, '') NOT LIKE '-m%')
+        AND COALESCE(tm.custom_name, '') NOT LIKE '-M%'
+        AND COALESCE(tm.custom_name, '') NOT LIKE '-m%'
+        AND COALESCE(c.full_name, '') NOT LIKE '-M%'
+        AND COALESCE(c.full_name, '') NOT LIKE '-m%'
       `;
     } else if (filter === "group") {
       query += ` 
         AND COALESCE(tm.is_group, m.is_group) = 1 
-        AND COALESCE(tm.is_manual, 0) = 0
-        AND (m.sender_name NOT LIKE '-M%' AND m.sender_name NOT LIKE '-m%')
-        AND (COALESCE(tm.custom_name, '') NOT LIKE '-M%' AND COALESCE(tm.custom_name, '') NOT LIKE '-m%')
       `;
     } else if (filter === "manual") {
       query += ` 
+        AND COALESCE(tm.is_group, m.is_group) = 0
         AND (
           COALESCE(tm.is_manual, 0) = 1 OR
-          m.sender_name LIKE '-M%' OR m.sender_name LIKE '-m%' OR
-          c.full_name LIKE '-M%' OR c.full_name LIKE '-m%' OR
-          COALESCE(tm.custom_name, '') LIKE '-M%' OR COALESCE(tm.custom_name, '') LIKE '-m%'
+          COALESCE(tm.custom_name, '') LIKE '-M%' OR
+          COALESCE(tm.custom_name, '') LIKE '-m%' OR
+          COALESCE(c.full_name, '') LIKE '-M%' OR
+          COALESCE(c.full_name, '') LIKE '-m%'
         )
       `;
     }
@@ -463,9 +471,5 @@ export class ChatHistoryRepository {
       )
     `);
     stmt.run(threadId, threadId, keepCount);
-  }
-
-  public trimOldMessages(threadId: string, keepCount: number = config.chatHistoryLimit): void {
-    this.cleanupOldMessages(threadId, keepCount);
   }
 }

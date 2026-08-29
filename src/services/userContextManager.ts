@@ -16,7 +16,6 @@ export class UserContextManager {
 
   constructor(userContextRepo?: UserContextRepository) {
     this.userContextRepo = userContextRepo || new UserContextRepository();
-    this.setupGracefulShutdown();
   }
 
   /**
@@ -25,12 +24,15 @@ export class UserContextManager {
   public static getInstance(repo?: UserContextRepository): UserContextManager {
     if (!UserContextManager.instance) {
       UserContextManager.instance = new UserContextManager(repo);
+      // Chỉ đăng ký shutdown hook một lần duy nhất khi Singleton được khởi tạo lần đầu
+      UserContextManager.instance.setupGracefulShutdown();
     }
     return UserContextManager.instance;
   }
 
   /**
-   * Đăng ký hook tự động lưu toàn bộ cache RAM xuống SQLite khi tiến trình dừng
+   * Đăng ký hook tự động lưu toàn bộ cache RAM xuống SQLite khi tiến trình dừng.
+   * Chỉ được gọi đúng 1 lần từ getInstance() để tránh duplicate listeners.
    */
   private setupGracefulShutdown(): void {
     const handleExit = () => {
@@ -195,7 +197,8 @@ export class UserContextManager {
     if (!text) return;
 
     // Biểu thức chính quy tìm số điện thoại Việt Nam (10 số, đầu 03, 05, 07, 08, 09 hoặc +84)
-    const phoneRegex = /(?:\+84|0)(?:3[2-9]|5[6|8|9]|7[0|6-9]|8[1-9]|9[0-9])[0-9]{7}\b/g;
+    // Lưu ý: dùng [689] thay vì [6|8|9] vì | trong character class là ký tự literal, không phải alternation
+    const phoneRegex = /(?:\+84|0)(?:3[2-9]|5[689]|7[06-9]|8[1-9]|9[0-9])[0-9]{7}\b/g;
     const matches = text.match(phoneRegex);
 
     if (matches && matches.length > 0) {
