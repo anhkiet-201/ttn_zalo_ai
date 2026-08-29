@@ -7,29 +7,37 @@ const html = htm.bind(React.createElement);
 /**
  * Tự động nhóm các tin nhắn ảnh thuần túy gửi gần nhau (trong vòng 15 giây) thành 1 Album ảnh
  */
-function isStickerContent(content) {
-  if (!content || typeof content !== 'string') return false;
-  return (
-    content === '[Sticker]' ||
-    content === '[Nhãn dán]' ||
-    content.includes('[Sticker]') ||
-    content.startsWith('[🏷️ Nhãn dán / Sticker]:') ||
-    content.startsWith('[🏷️ Sticker]:') ||
-    content.startsWith('[Nhãn dán]:')
-  );
-}
-
 function isPureImageMessage(msg) {
-  if (!msg) return false;
-  const isVoice = Boolean(msg.hasVoice || msg.voiceUrl);
-  const isSticker = Boolean(msg.hasSticker || msg.stickerUrl || msg.stickerId || isStickerContent(msg.content));
-  if (isVoice || isSticker) return false;
+  if (!msg || msg.hasQuote) return false;
 
-  const hasImages = Boolean(
-    (msg.hasImage || (Array.isArray(msg.imageUrls) && msg.imageUrls.length > 0)) &&
-    Array.isArray(msg.imageUrls) &&
-    msg.imageUrls.length > 0
-  );
+  const mediaType =
+    msg.mediaType !== undefined && msg.mediaType !== null
+      ? msg.mediaType
+      : msg.hasSticker || msg.stickerUrl || msg.stickerId
+      ? 'sticker'
+      : msg.hasVoice || msg.voiceUrl
+      ? 'voice'
+      : msg.hasImage || (Array.isArray(msg.imageUrls) && msg.imageUrls.length > 0)
+      ? 'photo'
+      : null;
+
+  if (mediaType !== 'photo') return false;
+
+  const mediaItems =
+    Array.isArray(msg.mediaUrls) && msg.mediaUrls.length > 0
+      ? msg.mediaUrls
+      : Array.isArray(msg.imageUrls)
+      ? msg.imageUrls.map((u) => ({ url: u }))
+      : [];
+
+  const imageUrls =
+    mediaItems.length > 0
+      ? mediaItems.map((m) => m.url).filter(Boolean)
+      : Array.isArray(msg.imageUrls)
+      ? msg.imageUrls.filter(Boolean)
+      : [];
+
+  if (imageUrls.length === 0) return false;
 
   const hasRealText = Boolean(
     msg.content &&
@@ -39,10 +47,12 @@ function isPureImageMessage(msg) {
       msg.content !== '[Sticker]' &&
       msg.content !== '[Nhãn dán]' &&
       msg.content !== '[Tin nhắn thoại]' &&
-      !isStickerContent(msg.content)
+      !msg.content.startsWith('[🏷️ Nhãn dán / Sticker]:') &&
+      !msg.content.startsWith('[🏷️ Sticker]:') &&
+      !msg.content.startsWith('[Nhãn dán]:')
   );
 
-  return hasImages && !hasRealText && !msg.hasQuote;
+  return !hasRealText;
 }
 
 function groupConsecutiveImageMessages(messages) {
@@ -56,20 +66,25 @@ function groupConsecutiveImageMessages(messages) {
     const prev = grouped.length > 0 ? grouped[grouped.length - 1] : null;
     const prevIsPureImg = isPureImageMessage(prev);
 
-    // Điều kiện group: cả 2 đều là pure image, cùng người gửi/role, gửi cách nhau <= 15 giây (15000ms)
+    // Điều kiện group: cả 2 đều là pure image, cùng người gửi/role, gửi cách nhau <= 60 giây (60000ms)
     const sameSender = prev && (prev.senderId === msg.senderId || prev.role === msg.role);
-    const closeTime = prev && Math.abs(Number(msg.timestamp) - Number(prev.timestamp)) <= 15000;
+    const closeTime = prev && Math.abs(Number(msg.timestamp) - Number(prev.timestamp)) <= 60000;
 
     if (isPureImg && prevIsPureImg && sameSender && closeTime) {
       // Gộp các ảnh vào tin nhắn trước đó (loại bỏ URL trùng)
-      const combinedUrls = Array.from(new Set([...(prev.imageUrls || []), ...(msg.imageUrls || [])]));
+      const prevUrls = prev.mediaUrls?.map((m) => m.url) || prev.imageUrls || [];
+      const currUrls = msg.mediaUrls?.map((m) => m.url) || msg.imageUrls || [];
+      const combinedUrls = Array.from(new Set([...prevUrls, ...currUrls]));
       prev.imageUrls = combinedUrls;
+      prev.mediaUrls = combinedUrls.map((u) => ({ url: u }));
+      prev.hasImage = true;
       // Cập nhật timestamp về tin nhắn mới nhất
       prev.timestamp = Math.max(Number(prev.timestamp), Number(msg.timestamp));
     } else {
       grouped.push({
         ...msg,
         imageUrls: Array.isArray(msg.imageUrls) ? [...msg.imageUrls] : [],
+        mediaUrls: Array.isArray(msg.mediaUrls) ? [...msg.mediaUrls] : undefined,
       });
     }
   }

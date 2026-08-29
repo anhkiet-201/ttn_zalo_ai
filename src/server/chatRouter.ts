@@ -123,6 +123,55 @@ export async function handleChatRoute(
     return true;
   }
 
+  // 3.5. Media Proxy: Stream audio / media từ Zalo CDN an toàn cho trình duyệt
+  if (pathname === "/api/chat/media-proxy") {
+    const targetUrl = parsedUrl.searchParams.get("url");
+    if (!targetUrl || !targetUrl.startsWith("http")) {
+      res.writeHead(400, { "Content-Type": "text/plain; charset=utf-8" });
+      res.end("Bad Request: Invalid URL");
+      return true;
+    }
+
+    try {
+      const upstream = await fetch(targetUrl, {
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          Accept: "*/*",
+        },
+      });
+
+      if (!upstream.ok) {
+        res.writeHead(upstream.status, { "Content-Type": "text/plain" });
+        res.end(`Upstream error: ${upstream.statusText}`);
+        return true;
+      }
+
+      let defaultContentType = "image/jpeg";
+      if (targetUrl.includes(".m4a") || targetUrl.includes(".aac")) defaultContentType = "audio/m4a";
+      else if (targetUrl.includes(".mp3")) defaultContentType = "audio/mp3";
+      const contentType = upstream.headers.get("content-type") || defaultContentType;
+      const contentLength = upstream.headers.get("content-length");
+      const headers: Record<string, string> = {
+        "Content-Type": contentType,
+        "Cache-Control": "public, max-age=86400, immutable",
+        "Access-Control-Allow-Origin": "*",
+        "Accept-Ranges": "bytes",
+      };
+      if (contentLength) headers["Content-Length"] = contentLength;
+
+      res.writeHead(200, headers);
+      const arrayBuffer = await upstream.arrayBuffer();
+      res.end(Buffer.from(arrayBuffer));
+      return true;
+    } catch (err: any) {
+      console.warn("⚠️ [MediaProxy] Lỗi proxy:", err?.message || err);
+      res.writeHead(502, { "Content-Type": "text/plain" });
+      res.end("Bad Gateway");
+      return true;
+    }
+  }
+
   // 4. API GET: Danh sách cuộc trò chuyện phân trang
   if (pathname === "/api/chat/threads") {
     try {
@@ -192,7 +241,10 @@ export async function handleChatRoute(
             isGroup,
             isManual,
             lastContent: item.lastContent,
-            lastHasImage: item.lastHasImage,
+            lastMediaType: item.lastMediaType,
+            lastHasImage: item.lastMediaType === "photo",
+            lastHasVoice: item.lastMediaType === "voice",
+            lastHasSticker: item.lastMediaType === "sticker",
             lastTimestamp: item.lastTimestamp,
             lastRole: item.lastRole,
             candidateName: item.candidateName,
@@ -347,9 +399,12 @@ export async function handleChatRoute(
     req.on("end", async () => {
       try {
         const payload = JSON.parse(body || "{}");
-        const { threadId, message, type } = payload;
+        const threadId = payload.threadId;
+        const messageText = (payload.message || payload.content || "").trim();
+        const type = payload.type;
+        const isGroup = Boolean(payload.isGroup);
 
-        if (!threadId || !message) {
+        if (!threadId || !messageText) {
           res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" });
           res.end(JSON.stringify({ success: false, error: "Thiếu tham số threadId hoặc message" }));
           return;
@@ -361,8 +416,20 @@ export async function handleChatRoute(
           return;
         }
 
-        await activeZaloService.sendMessageAuto(threadId, message, type);
-        console.log(`📤 [Web Chat] Đã gửi tin nhắn tới [${threadId}]: "${message}"`);
+        await activeZaloService.sendMessageAuto(threadId, messageText, type);
+
+        const chatHistoryRepo = new ChatHistoryRepository();
+        chatHistoryRepo.addMessage({
+          threadId,
+          senderId: loggedInAccount?.id || (activeZaloService ? activeZaloService.getOwnId() : "admin"),
+          senderName: "Admin (Tôi)",
+          role: "model",
+          content: messageText,
+          isGroup,
+          timestamp: Date.now(),
+        });
+
+        console.log(`📤 [Web Chat] Đã gửi tin nhắn tới [${threadId}]: "${messageText}"`);
         res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
         res.end(JSON.stringify({ success: true, message: "Đã gửi tin nhắn thành công" }));
       } catch (err) {
@@ -412,7 +479,7 @@ export async function handleChatRoute(
           fsSync.mkdirSync(uploadDir, { recursive: true });
         }
 
-        const finalImageUrls: string[] = [];
+        const tempFilePaths: string[] = [];
 
         for (let i = 0; i < rawImages.length; i++) {
           const rawBase64 = rawImages[i];
@@ -421,40 +488,27 @@ export async function handleChatRoute(
           const tempFilePath = path.join(uploadDir, tempFileName);
 
           await fs.writeFile(tempFilePath, Buffer.from(cleanBase64.trim(), "base64"));
+          tempFilePaths.push(tempFilePath);
+        }
 
-          try {
-            const sendResult: any = await activeZaloService.sendAttachmentAuto(threadId, tempFilePath);
-            let remoteUrl = "";
-            if (Array.isArray(sendResult) && sendResult[0]?.normalUrl) {
-              remoteUrl = sendResult[0].normalUrl;
-            } else if (sendResult?.normalUrl) {
-              remoteUrl = sendResult.normalUrl;
-            }
-            finalImageUrls.push(remoteUrl || `data:image/png;base64,${cleanBase64}`);
-          } catch (sendErr) {
-            console.error(`⚠️ Lỗi gửi ảnh thứ ${i + 1}:`, sendErr);
-            finalImageUrls.push(`data:image/png;base64,${cleanBase64}`);
+        try {
+          // Gửi toàn bộ ảnh cùng lúc qua Zalo SDK để gom thành 1 Album duy nhất
+          await activeZaloService.sendAttachmentAuto(threadId, tempFilePaths, content || "");
+          console.log(`🖼️ [Web Chat] Đã gửi album ${tempFilePaths.length} hình ảnh tới [${threadId}]`);
+        } catch (sendErr) {
+          console.error("❌ [Web Chat] Lỗi gửi ảnh tới Zalo SDK:", sendErr);
+          throw sendErr;
+        } finally {
+          // Dọn dẹp tệp tạm bất đồng bộ
+          for (const p of tempFilePaths) {
+            fs.unlink(p).catch(() => {});
           }
         }
 
-        const chatHistoryRepo = new ChatHistoryRepository();
-        chatHistoryRepo.addMessage({
-          threadId,
-          senderId: loggedInAccount?.id || "admin",
-          senderName: "Admin (Tôi)",
-          role: "model",
-          content: content || "",
-          hasImage: true,
-          imageUrls: finalImageUrls,
-          timestamp: Date.now(),
-        });
-
-        console.log(`🖼️ [Web Chat] Đã gửi ${finalImageUrls.length} hình ảnh tới [${threadId}]`);
         res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
         res.end(JSON.stringify({
           success: true,
-          message: `Đã gửi ${finalImageUrls.length} ảnh thành công`,
-          imageUrls: finalImageUrls,
+          message: `Đã gửi ${rawImages.length} ảnh thành công`,
         }));
       } catch (err) {
         console.error("❌ [Web Chat] Lỗi gửi ảnh:", err);

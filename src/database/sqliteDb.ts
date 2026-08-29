@@ -60,16 +60,8 @@ export class SQLiteDatabase {
         sender_name TEXT DEFAULT '',
         role TEXT NOT NULL CHECK(role IN ('user', 'model')),
         content TEXT NOT NULL,
-        has_image INTEGER DEFAULT 0,
-        image_urls TEXT,
-        has_voice INTEGER DEFAULT 0,
-        voice_url TEXT,
-        voice_duration INTEGER DEFAULT 0,
-        has_sticker INTEGER DEFAULT 0,
-        sticker_id TEXT,
-        sticker_cate_id TEXT,
-        sticker_url TEXT,
-        sticker_text TEXT,
+        media_type TEXT DEFAULT NULL,
+        media_urls TEXT DEFAULT NULL,
         has_quote INTEGER DEFAULT 0,
         quote_text TEXT,
         quote_sender_name TEXT,
@@ -144,6 +136,12 @@ export class SQLiteDatabase {
         .all() as Array<{ name: string }>;
       const msgColNames = msgColumns.map((c) => c.name);
 
+      if (!msgColNames.includes("media_type")) {
+        this.db.exec("ALTER TABLE chat_messages ADD COLUMN media_type TEXT DEFAULT NULL");
+      }
+      if (!msgColNames.includes("media_urls")) {
+        this.db.exec("ALTER TABLE chat_messages ADD COLUMN media_urls TEXT DEFAULT NULL");
+      }
       if (!msgColNames.includes("has_quote")) {
         this.db.exec("ALTER TABLE chat_messages ADD COLUMN has_quote INTEGER DEFAULT 0");
       }
@@ -152,33 +150,6 @@ export class SQLiteDatabase {
       }
       if (!msgColNames.includes("quote_sender_name")) {
         this.db.exec("ALTER TABLE chat_messages ADD COLUMN quote_sender_name TEXT");
-      }
-      if (!msgColNames.includes("quote_sender_id")) {
-        this.db.exec("ALTER TABLE chat_messages ADD COLUMN quote_sender_id TEXT");
-      }
-      if (!msgColNames.includes("has_voice")) {
-        this.db.exec("ALTER TABLE chat_messages ADD COLUMN has_voice INTEGER DEFAULT 0");
-      }
-      if (!msgColNames.includes("voice_url")) {
-        this.db.exec("ALTER TABLE chat_messages ADD COLUMN voice_url TEXT");
-      }
-      if (!msgColNames.includes("voice_duration")) {
-        this.db.exec("ALTER TABLE chat_messages ADD COLUMN voice_duration INTEGER DEFAULT 0");
-      }
-      if (!msgColNames.includes("has_sticker")) {
-        this.db.exec("ALTER TABLE chat_messages ADD COLUMN has_sticker INTEGER DEFAULT 0");
-      }
-      if (!msgColNames.includes("sticker_id")) {
-        this.db.exec("ALTER TABLE chat_messages ADD COLUMN sticker_id TEXT");
-      }
-      if (!msgColNames.includes("sticker_cate_id")) {
-        this.db.exec("ALTER TABLE chat_messages ADD COLUMN sticker_cate_id TEXT");
-      }
-      if (!msgColNames.includes("sticker_url")) {
-        this.db.exec("ALTER TABLE chat_messages ADD COLUMN sticker_url TEXT");
-      }
-      if (!msgColNames.includes("sticker_text")) {
-        this.db.exec("ALTER TABLE chat_messages ADD COLUMN sticker_text TEXT");
       }
       if (!msgColNames.includes("is_group")) {
         this.db.exec("ALTER TABLE chat_messages ADD COLUMN is_group INTEGER DEFAULT 0");

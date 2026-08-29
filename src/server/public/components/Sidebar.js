@@ -133,9 +133,13 @@ export function Sidebar({
           const displayName = thread.threadName || (isGroup ? `Nhóm ${thread.threadId}` : `Khách ${thread.threadId.slice(-4)}`);
           const avatarChar = (displayName || 'U').trim().charAt(0).toUpperCase();
 
-          const snippet = thread.lastHasVoice
+          const isVoice = thread.lastMediaType === 'voice' || thread.lastHasVoice;
+          const isSticker = thread.lastMediaType === 'sticker' || thread.lastHasSticker;
+          const isPhoto = thread.lastMediaType === 'photo' || thread.lastHasImage;
+
+          const snippet = isVoice
             ? '🎙️ [Tin nhắn thoại]'
-            : thread.lastHasSticker
+            : isSticker
             ? '🏷️ [Nhãn dán]'
             : thread.lastContent
             ? (thread.lastContent.startsWith('[🎙️ Tin nhắn thoại]:')
@@ -145,7 +149,7 @@ export function Sidebar({
                 : thread.lastContent.startsWith('[🏷️ Sticker]:')
                 ? '🏷️ ' + thread.lastContent.replace('[🏷️ Sticker]:', '').trim().replace(/^["\s]+|["\s]+$/g, '')
                 : thread.lastContent)
-            : thread.lastHasImage
+            : isPhoto
             ? '[Hình ảnh]'
             : 'Chưa có tin nhắn';
 

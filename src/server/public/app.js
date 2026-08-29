@@ -163,6 +163,7 @@ function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           threadId: activeThreadId,
+          message: text.trim(),
           content: text.trim(),
           isGroup: historyData?.isGroup || false,
         }),
@@ -299,11 +300,13 @@ function App() {
             const currentHistory = historyDataRef.current;
 
             // 1. Cập nhật vào timeline nếu tin nhắn thuộc thread đang mở
-            if (newMsg.threadId === currentActiveId) {
+            if (currentActiveId && String(newMsg.threadId) === String(currentActiveId)) {
               const own = window.__LOGGED_IN_ID__ || '';
               const isSelf = newMsg.role === 'model' || (own && newMsg.senderId === own) || newMsg.senderId === 'admin';
               const enrichedMsg = {
                 ...newMsg,
+                mediaType: newMsg.mediaType || null,
+                mediaUrls: newMsg.mediaUrls || undefined,
                 senderName: isSelf
                   ? 'Admin (Tôi)'
                   : !newMsg.isGroup
@@ -312,7 +315,15 @@ function App() {
               };
 
               setHistoryData((prev) => {
-                if (!prev) return prev;
+                if (!prev) {
+                  return {
+                    success: true,
+                    threadId: currentActiveId,
+                    threadName: enrichedMsg.senderName,
+                    isGroup: Boolean(newMsg.isGroup),
+                    messages: [enrichedMsg],
+                  };
+                }
                 const exists = prev.messages?.some((m) => m.id === enrichedMsg.id);
                 if (exists) {
                   return {
@@ -329,42 +340,58 @@ function App() {
 
             // 2. Cập nhật Sidebar và đưa thread lên đầu danh sách tức thì
             setThreads((prev) => {
-              const foundIndex = prev.findIndex((t) => t.threadId === newMsg.threadId);
+              const foundIndex = prev.findIndex((t) => String(t.threadId) === String(newMsg.threadId));
               const isManualMsg =
                 !newMsg.isGroup &&
                 (/^-M(\s|_|-|$)/i.test(newMsg.senderName) ||
                   (foundIndex >= 0 && prev[foundIndex].isManual));
 
+              const lastContent =
+                newMsg.content ||
+                (newMsg.mediaType === 'photo'
+                  ? '[Hình ảnh]'
+                  : newMsg.mediaType === 'voice'
+                  ? '[Tin nhắn thoại]'
+                  : newMsg.mediaType === 'sticker'
+                  ? '[Nhãn dán]'
+                  : '');
+
               const updatedItem =
                 foundIndex >= 0
                   ? {
                       ...prev[foundIndex],
-                      lastContent: newMsg.content || (newMsg.hasImage ? '[Hình ảnh]' : ''),
-                      lastHasImage: Boolean(newMsg.hasImage),
+                      lastContent,
+                      lastMediaType: newMsg.mediaType,
+                      lastHasImage: newMsg.mediaType === 'photo',
+                      lastHasVoice: newMsg.mediaType === 'voice',
+                      lastHasSticker: newMsg.mediaType === 'sticker',
                       lastTimestamp: newMsg.timestamp || Date.now(),
                       lastRole: newMsg.role,
                     }
                   : {
                       threadId: newMsg.threadId,
-                      threadName: newMsg.senderName || `Khách ${newMsg.threadId.slice(-4)}`,
+                      threadName: newMsg.senderName || `Khách ${String(newMsg.threadId).slice(-4)}`,
                       isGroup: Boolean(newMsg.isGroup),
                       isManual: Boolean(isManualMsg),
-                      lastContent: newMsg.content || (newMsg.hasImage ? '[Hình ảnh]' : ''),
-                      lastHasImage: Boolean(newMsg.hasImage),
+                      lastContent,
+                      lastMediaType: newMsg.mediaType,
+                      lastHasImage: newMsg.mediaType === 'photo',
+                      lastHasVoice: newMsg.mediaType === 'voice',
+                      lastHasSticker: newMsg.mediaType === 'sticker',
                       lastTimestamp: newMsg.timestamp || Date.now(),
                       lastRole: newMsg.role,
                     };
 
-              const filtered = prev.filter((t) => t.threadId !== newMsg.threadId);
+              const filtered = prev.filter((t) => String(t.threadId) !== String(newMsg.threadId));
               return [updatedItem, ...filtered];
             });
           } else if (payload.type === 'thread_renamed' && payload.data) {
             const { threadId, newName } = payload.data;
-            if (threadId === activeThreadIdRef.current) {
+            if (String(threadId) === String(activeThreadIdRef.current)) {
               setHistoryData((prev) => (prev ? { ...prev, threadName: newName } : null));
             }
             setThreads((prev) =>
-              prev.map((t) => (t.threadId === threadId ? { ...t, threadName: newName } : t))
+              prev.map((t) => (String(t.threadId) === String(threadId) ? { ...t, threadName: newName } : t))
             );
           }
         } catch (err) {

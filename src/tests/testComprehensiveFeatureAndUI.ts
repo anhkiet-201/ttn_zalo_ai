@@ -70,11 +70,10 @@ async function runComprehensiveTests() {
     } as any;
 
     const p1 = (dispatcher as any).parseMessage(rawSticker1);
-    assert.strictEqual(p1.hasSticker, true, "1.1: hasSticker = true");
-    assert.strictEqual(p1.stickerId, "12345", "1.1: stickerId");
-    assert.strictEqual(p1.stickerUrl, "https://zalo-api.zadn.vn/api/emoticon/sticker/webpc?eid=12345&size=130", "1.1: sinh URL Zalo CDN");
-    assert.strictEqual(p1.stickerText, "Xin chào", "1.1: stickerText");
-    assert.strictEqual(p1.hasImage, false, "1.1: hasImage phải là false");
+    assert.strictEqual(p1.mediaType, "sticker", "1.1: mediaType = 'sticker'");
+    assert.strictEqual(p1.mediaUrls?.[0]?.id, "12345", "1.1: stickerId");
+    assert.strictEqual(p1.mediaUrls?.[0]?.url, "https://zalo-api.zadn.vn/api/emoticon/sticker/webpc?eid=12345&size=130", "1.1: sinh URL Zalo CDN");
+    assert.strictEqual(p1.mediaUrls?.[0]?.description, "Xin chào", "1.1: sticker description");
 
     // Case 1.2: Payload có paramsExt containType = 36 & URL trực tiếp
     const rawSticker2 = {
@@ -96,11 +95,11 @@ async function runComprehensiveTests() {
     } as any;
 
     const p2 = (dispatcher as any).parseMessage(rawSticker2);
-    assert.strictEqual(p2.hasSticker, true, "1.2: hasSticker = true");
-    assert.strictEqual(p2.stickerUrl, "https://stickers.zaloapp.com/stickers/abc.png", "1.2: stickerUrl trực tiếp");
-    assert.strictEqual(p2.stickerText, "Cảm ơn", "1.2: stickerText");
+    assert.strictEqual(p2.mediaType, "sticker", "1.2: mediaType = 'sticker'");
+    assert.strictEqual(p2.mediaUrls?.[0]?.url, "https://stickers.zaloapp.com/stickers/abc.png", "1.2: stickerUrl trực tiếp");
+    assert.strictEqual(p2.mediaUrls?.[0]?.description, "Cảm ơn", "1.2: description");
 
-    // Case 1.3: Tin nhắn ảnh có url (phải nhận hasImage = true, hasVoice = false)
+    // Case 1.3: Tin nhắn ảnh có url (phải nhận mediaType = 'photo')
     const rawPhoto = {
       type: 0,
       data: {
@@ -119,10 +118,9 @@ async function runComprehensiveTests() {
     } as any;
 
     const p3 = (dispatcher as any).parseMessage(rawPhoto);
-    assert.strictEqual(p3.hasImage, true, "1.3: hasImage = true");
-    assert.strictEqual(p3.hasVoice, false, "1.3: hasVoice = false");
-    assert.strictEqual(p3.imageUrls?.length, 1, "1.3: trích xuất đúng 1 ảnh tốt nhất");
-    assert.strictEqual(p3.imageUrls?.[0], "https://res-zalo.zadn.vn/photo/sample_hd.jpg", "1.3: ưu tiên hdUrl");
+    assert.strictEqual(p3.mediaType, "photo", "1.3: mediaType = 'photo'");
+    assert.strictEqual(p3.mediaUrls?.length, 1, "1.3: trích xuất đúng 1 ảnh tốt nhất");
+    assert.strictEqual(p3.mediaUrls?.[0]?.url, "https://res-zalo.zadn.vn/photo/sample_hd.jpg", "1.3: ưu tiên hdUrl");
 
     const duration = performance.now() - start;
     results.push({
@@ -171,11 +169,15 @@ async function runComprehensiveTests() {
       senderId: "user_comp_1",
       senderName: "Ứng Viên Test",
       role: "user",
-      content: '[🏷️ Nhãn dán / Sticker]: "Cảm ơn"',
-      hasSticker: true,
-      stickerId: "stk_888",
-      stickerUrl: "https://zalo-api.zadn.vn/api/emoticon/sticker/webpc?id=stk_888",
-      stickerText: "Cảm ơn",
+      content: "",
+      mediaType: "sticker",
+      mediaUrls: [
+        {
+          id: "stk_888",
+          url: "https://zalo-api.zadn.vn/api/emoticon/sticker/webpc?id=stk_888",
+          description: "Cảm ơn",
+        },
+      ],
       timestamp: 1700000010000,
     });
 
@@ -185,18 +187,23 @@ async function runComprehensiveTests() {
       senderId: "user_comp_1",
       senderName: "Ứng Viên Test",
       role: "user",
-      content: '[🏷️ Nhãn dán / Sticker]: "Cảm ơn"',
-      hasSticker: true,
-      stickerId: "stk_888",
-      stickerUrl: "https://zalo-api.zadn.vn/api/emoticon/sticker/webpc?id=stk_888",
-      stickerText: "Cảm ơn",
+      content: "",
+      mediaType: "sticker",
+      mediaUrls: [
+        {
+          id: "stk_888",
+          url: "https://zalo-api.zadn.vn/api/emoticon/sticker/webpc?id=stk_888",
+          description: "Cảm ơn",
+        },
+      ],
       timestamp: 1700000012000,
     });
 
     const history = chatHistoryRepo.getRecentHistory(threadId, 10);
     assert.strictEqual(history.length, 1, "Chỉ có 1 bản ghi duy nhất sau deduplication");
-    assert.strictEqual(history[0].hasSticker, true, "hasSticker = true trong DB");
-    assert.strictEqual(history[0].stickerText, "Cảm ơn", "stickerText chuẩn xác");
+    assert.strictEqual(history[0].mediaType, "sticker", "mediaType = 'sticker' trong DB");
+    assert.strictEqual(history[0].mediaUrls?.[0]?.url, "https://zalo-api.zadn.vn/api/emoticon/sticker/webpc?id=stk_888", "mediaUrls[0].url khớp chuẩn");
+    assert.strictEqual(history[0].mediaUrls?.[0]?.description, "Cảm ơn", "description chuẩn xác");
 
     const duration = performance.now() - start;
     results.push({
@@ -249,13 +256,12 @@ async function runComprehensiveTests() {
         senderName: "Ứng Viên Tổng Hợp",
         isGroup: false,
         isSelf: false,
-        text: "[Tin nhắn thoại]",
+        text: "",
+        mediaType: "voice",
+        mediaUrls: [{ url: "https://zalo.me/voice/sample.m4a", duration: 5000 }],
         timestamp: 1700000021000,
         hasQuote: false,
         args: [],
-        hasVoice: true,
-        voiceUrl: "https://zalo.me/voice/sample.m4a",
-        voiceDuration: 5000,
       },
       ThreadType.User
     );
@@ -269,13 +275,12 @@ async function runComprehensiveTests() {
         senderName: "Ứng Viên Tổng Hợp",
         isGroup: false,
         isSelf: false,
-        text: '[🏷️ Sticker]: "Vẫy tay chào"',
+        text: "",
+        mediaType: "sticker",
+        mediaUrls: [{ id: "stk_wave_1", description: "Vẫy tay chào", url: "https://zalo.me/stk/wave.png" }],
         timestamp: 1700000022000,
         hasQuote: false,
         args: [],
-        hasSticker: true,
-        stickerId: "stk_wave_1",
-        stickerText: "Vẫy tay chào",
       },
       ThreadType.User
     );
@@ -288,8 +293,8 @@ async function runComprehensiveTests() {
 
     assert.strictEqual(finalBatch.messages.length, 3, "Batch gom đủ 3 tin nhắn đa phương tiện");
     assert.strictEqual(finalBatch.messages[0].text, "Chào anh chị");
-    assert.strictEqual(finalBatch.messages[1].hasVoice, true);
-    assert.strictEqual(finalBatch.messages[2].hasSticker, true);
+    assert.strictEqual(finalBatch.messages[1].mediaType, "voice");
+    assert.strictEqual(finalBatch.messages[2].mediaType, "sticker");
 
     const duration = performance.now() - start;
     results.push({
@@ -342,12 +347,17 @@ async function runComprehensiveTests() {
     const start = performance.now();
 
     function determineMessageDisplayMode(msg: any): { isPureSticker: boolean; isPureImage: boolean; isVoice: boolean; isBubble: boolean } {
-      const hasVoice = Boolean(msg.hasVoice || msg.voiceUrl);
-      const hasSticker = Boolean(msg.hasSticker || msg.stickerUrl || msg.stickerId);
       const images = Array.isArray(msg.imageUrls) ? msg.imageUrls.filter(Boolean) : [];
-      const hasImages = !hasVoice && !hasSticker && msg.hasImage && images.length > 0;
+      const hasVoice = Boolean(msg.hasVoice && images.length === 0);
+      const hasSticker = Boolean(
+        !hasVoice && (msg.hasSticker || msg.stickerUrl || msg.stickerId)
+      );
+      const hasImages = Boolean(!hasVoice && !hasSticker && (msg.hasImage || images.length > 0) && images.length > 0);
       const hasRealText = Boolean(
         !hasVoice && !hasSticker && msg.content && msg.content.trim() &&
+        msg.content !== "[Hình ảnh đính kèm]" &&
+        msg.content !== "[Hình ảnh]" &&
+        msg.content !== "[Sticker]" &&
         !msg.content.startsWith("[🏷️ Nhãn dán / Sticker]:") &&
         !msg.content.startsWith("[🏷️ Sticker]:") &&
         !msg.content.startsWith("[Nhãn dán]:")
@@ -371,7 +381,27 @@ async function runComprehensiveTests() {
     };
     const mode1 = determineMessageDisplayMode(stickerMsg);
     assert.strictEqual(mode1.isPureSticker, true, "Sticker độc lập phải bật Pure Sticker Mode");
+    assert.strictEqual(mode1.isPureImage, false, "Sticker không được nhận nhầm thành Pure Image");
     assert.strictEqual(mode1.isBubble, false, "Pure Sticker không được có khung Bubble xám");
+
+    const imageMsg = {
+      hasImage: true,
+      imageUrls: ["https://example.com/photo.jpg"],
+      content: "[Hình ảnh đính kèm]",
+    };
+    const modeImg = determineMessageDisplayMode(imageMsg);
+    assert.strictEqual(modeImg.isPureSticker, false, "Ảnh không được nhận nhầm thành Pure Sticker");
+    assert.strictEqual(modeImg.isPureImage, true, "Ảnh thuần túy phải bật Pure Image Mode (chuẩn Zalo PC)");
+    assert.strictEqual(modeImg.isBubble, false, "Pure Image không có khung Bubble bao bọc");
+
+    const textImageMsg = {
+      hasImage: true,
+      imageUrls: ["https://example.com/photo.jpg"],
+      content: "Gửi bạn ảnh hiện trường",
+    };
+    const modeTextImg = determineMessageDisplayMode(textImageMsg);
+    assert.strictEqual(modeTextImg.isPureImage, false, "Ảnh kèm text phải nằm trong Message Bubble");
+    assert.strictEqual(modeTextImg.isBubble, true, "Ảnh kèm text có khung Message Bubble");
 
     const voiceMsg = {
       hasVoice: true,
@@ -384,10 +414,10 @@ async function runComprehensiveTests() {
     const duration = performance.now() - start;
     results.push({
       module: "Giao Diện UI",
-      test: "Test 6: Pure Sticker Mode Không Khung Bubble",
+      test: "Test 6: Pure Image & Pure Sticker Phân Tách Tuyệt Đối Chuẩn Zalo PC",
       status: "PASS",
       durationMs: duration,
-      details: "Tách biệt Pure Sticker Mode hiển thị trong suốt chuẩn phong cách Zalo PC",
+      details: "Tách biệt 100%: Pure Sticker (130px + Badge), Pure Image (Album Grid + Shimmer) và Message Bubble",
     });
   }
 
@@ -536,11 +566,11 @@ async function runComprehensiveTests() {
           senderId: `user_${i % 50}`,
           senderName: `Ứng Viên ${i % 50}`,
           role: "user",
-          content: isStk ? `[🏷️ Nhãn dán / Sticker]: "Sticker ${i}"` : `[🎙️ Tin nhắn thoại]: "Voice ${i}"`,
-          hasSticker: isStk,
-          stickerId: isStk ? `stk_${i}` : undefined,
-          hasVoice: !isStk,
-          voiceUrl: !isStk ? `https://zalo.me/voice/${i}.m4a` : undefined,
+          content: "",
+          mediaType: isStk ? "sticker" : "voice",
+          mediaUrls: isStk
+            ? [{ id: `stk_${i}`, url: `https://zalo.me/stk/${i}.png`, description: `Sticker ${i}` }]
+            : [{ url: `https://zalo.me/voice/${i}.m4a`, duration: 5000 }],
           timestamp: 1700000000000 + i * 10,
         });
       }

@@ -1,24 +1,15 @@
-import { type ParsedMessage, ThreadType } from "../types/zalo.types.js";
+import { type ParsedMessage, type MediaType, type MediaItem, ThreadType } from "../types/zalo.types.js";
 import { config } from "../config/index.js";
 
 export interface QueuedMessage {
   text: string;
+  mediaType?: MediaType;
+  mediaUrls?: MediaItem[];
   hasQuote?: boolean;
   quoteText?: string;
   quoteSenderName?: string;
   quoteSenderId?: string;
   timestamp: number;
-  imageUrls?: string[];
-  hasVoice?: boolean;
-  voiceUrl?: string;
-  voiceUrls?: string[];
-  voiceDuration?: number;
-  hasSticker?: boolean;
-  isSticker?: boolean;
-  stickerId?: string;
-  stickerCateId?: string;
-  stickerUrl?: string;
-  stickerText?: string;
   rawMessage?: ParsedMessage["raw"];
 }
 
@@ -83,65 +74,52 @@ export class MessageBatcher {
       this.messageBatches.set(threadId, batch);
     }
 
-    // Cập nhật tên người gửi mới nhất nếu có
     if (parsedMessage.senderName) {
       batch.senderName = parsedMessage.senderName;
       batch.senderId = parsedMessage.senderId;
     }
 
-    // Thêm tin nhắn vào batch
     batch.messages.push({
       text: parsedMessage.text,
+      mediaType: parsedMessage.mediaType,
+      mediaUrls: parsedMessage.mediaUrls,
       hasQuote: parsedMessage.hasQuote,
       quoteText: parsedMessage.quoteText,
       quoteSenderName: parsedMessage.quoteSenderName,
       quoteSenderId: parsedMessage.quoteSenderId,
       timestamp: parsedMessage.timestamp,
-      imageUrls: parsedMessage.imageUrls,
-      hasVoice: parsedMessage.hasVoice,
-      voiceUrl: parsedMessage.voiceUrl,
-      voiceUrls: parsedMessage.voiceUrls,
-      voiceDuration: parsedMessage.voiceDuration,
-      hasSticker: parsedMessage.hasSticker,
-      isSticker: parsedMessage.isSticker,
-      stickerId: parsedMessage.stickerId,
-      stickerCateId: parsedMessage.stickerCateId,
-      stickerUrl: parsedMessage.stickerUrl,
-      stickerText: parsedMessage.stickerText,
       rawMessage: parsedMessage.raw,
     });
 
-    // Reset lại debounce timer mỗi khi có tin nhắn mới gửi đến
     if (batch.timer) {
       clearTimeout(batch.timer);
     }
 
     const debounceMs = this.getRandomDebounceMs();
 
-    // Capture batch reference vào closure để tránh race condition
-    const capturedBatch = batch;
     batch.timer = setTimeout(async () => {
-      if (this.messageBatches.get(threadId) === capturedBatch) {
-        this.messageBatches.delete(threadId);
-        if (capturedBatch.messages.length > 0) {
-          try {
-            await this.processor(capturedBatch);
-          } catch (error) {
-            console.error(
-              `❌ [MessageBatcher] Lỗi khi xử lý batch tin nhắn cho luồng [${threadId}]:`,
-              error
-            );
-          }
+      const capturedBatch = this.messageBatches.get(threadId);
+      if (capturedBatch && capturedBatch.messages.length > 0) {
+        if (this.messageBatches.get(threadId) === capturedBatch) {
+          this.messageBatches.delete(threadId);
+        }
+
+        try {
+          await this.processor(capturedBatch);
+        } catch (error) {
+          console.error(
+            `❌ [MessageBatcher] Lỗi khi xử lý batch tin nhắn cho luồng [${threadId}]:`,
+            error
+          );
         }
       }
     }, debounceMs);
-
   }
 
   /**
-   * Hủy bỏ tất cả timer đang chờ khi dừng ứng dụng
+   * Hủy toàn bộ hàng đợi gom tin nhắn đang chờ (Graceful Cleanup)
    */
-  public clearAll(): void {
+  public destroy(): void {
     for (const batch of this.messageBatches.values()) {
       if (batch.timer) {
         clearTimeout(batch.timer);

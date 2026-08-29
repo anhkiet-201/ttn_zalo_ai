@@ -2,6 +2,7 @@ import { SQLiteDatabase } from "../sqliteDb.js";
 import { config } from "../../config/index.js";
 import { chatBroadcaster } from "../../server/chatBroadcaster.js";
 import crypto from "node:crypto";
+import { type MediaType, type MediaItem } from "../../types/zalo.types.js";
 
 export type ThreadFilter = "all" | "personal" | "direct" | "group" | "manual";
 
@@ -12,16 +13,8 @@ export interface ChatMessageRecord {
   senderName?: string;
   role: "user" | "model";
   content: string;
-  hasImage?: boolean;
-  imageUrls?: string[];
-  hasVoice?: boolean;
-  voiceUrl?: string;
-  voiceDuration?: number;
-  hasSticker?: boolean;
-  stickerId?: string;
-  stickerCateId?: string;
-  stickerUrl?: string;
-  stickerText?: string;
+  mediaType?: MediaType;
+  mediaUrls?: MediaItem[];
   hasQuote?: boolean;
   quoteText?: string;
   quoteSenderName?: string;
@@ -35,9 +28,7 @@ export interface ThreadListItem {
   senderName: string;
   senderId: string;
   lastContent: string;
-  lastHasImage: boolean;
-  lastHasVoice?: boolean;
-  lastHasSticker?: boolean;
+  lastMediaType?: MediaType;
   lastTimestamp: number;
   lastRole: "user" | "model";
   isGroup: boolean;
@@ -61,11 +52,14 @@ export class ChatHistoryRepository {
    * Lưu một tin nhắn mới vào SQLite và phát sự kiện Realtime tới Web Chat
    */
   public addMessage(record: ChatMessageRecord): void {
-    // Chống duplicate: kiểm tra xem tin nhắn cùng thread, cùng role và nội dung/ảnh/voice/sticker đã tồn tại chưa
+    const id = record.id || crypto.randomUUID();
+    const mediaType = record.mediaType || null;
+    const mediaUrls = record.mediaUrls && record.mediaUrls.length > 0 ? record.mediaUrls : undefined;
+
+    // Chống duplicate: kiểm tra xem tin nhắn cùng thread, cùng role và nội dung/media đã tồn tại trong 5s chưa
     try {
       let existing: { id: string } | undefined;
 
-      // 1. Nếu có record.id, kiểm tra xem tin nhắn đã có trong DB chưa
       if (record.id) {
         const checkIdStmt = this.db.connection.prepare(`
           SELECT id FROM chat_messages WHERE id = ? LIMIT 1
@@ -73,43 +67,23 @@ export class ChatHistoryRepository {
         existing = checkIdStmt.get(record.id) as { id: string } | undefined;
       }
 
-      // 2. Nếu chưa có id hoặc chưa tìm thấy theo id, kiểm tra deduplication trong 5s
       if (!existing) {
-        if (record.hasImage && record.imageUrls && record.imageUrls.length > 0) {
-          const checkImageStmt = this.db.connection.prepare(`
-            SELECT id FROM chat_messages 
-            WHERE thread_id = ? AND role = ? AND has_image = 1 AND image_urls = ? AND abs(timestamp - ?) < 5000 
-            LIMIT 1
-          `);
-          existing = checkImageStmt.get(
-            record.threadId,
-            record.role,
-            JSON.stringify(record.imageUrls),
-            record.timestamp
-          ) as { id: string } | undefined;
-        } else if (record.hasVoice && record.voiceUrl) {
-          const checkVoiceStmt = this.db.connection.prepare(`
-            SELECT id FROM chat_messages 
-            WHERE thread_id = ? AND role = ? AND has_voice = 1 AND voice_url = ? AND abs(timestamp - ?) < 5000 
-            LIMIT 1
-          `);
-          existing = checkVoiceStmt.get(
-            record.threadId,
-            record.role,
-            record.voiceUrl,
-            record.timestamp
-          ) as { id: string } | undefined;
-        } else if (record.hasSticker) {
-          const checkStickerStmt = this.db.connection.prepare(`
-            SELECT id FROM chat_messages 
-            WHERE thread_id = ? AND role = ? AND (has_sticker = 1 OR content LIKE '%[Sticker]%' OR content LIKE '%[🏷️ Sticker]%') AND abs(timestamp - ?) < 5000 
-            LIMIT 1
-          `);
-          existing = checkStickerStmt.get(
-            record.threadId,
-            record.role,
-            record.timestamp
-          ) as { id: string } | undefined;
+        if (mediaType && mediaUrls && mediaUrls.length > 0) {
+          const primaryUrl = mediaUrls[0]?.url || mediaUrls[0]?.id;
+          if (primaryUrl) {
+            const checkMediaStmt = this.db.connection.prepare(`
+              SELECT id FROM chat_messages 
+              WHERE thread_id = ? AND role = ? AND media_type = ? AND media_urls LIKE ? AND abs(timestamp - ?) < 5000 
+              LIMIT 1
+            `);
+            existing = checkMediaStmt.get(
+              record.threadId,
+              record.role,
+              mediaType,
+              `%${primaryUrl}%`,
+              record.timestamp
+            ) as { id: string } | undefined;
+          }
         } else if (record.content && record.content.trim()) {
           const checkTextStmt = this.db.connection.prepare(`
             SELECT id FROM chat_messages 
@@ -126,57 +100,40 @@ export class ChatHistoryRepository {
       }
 
       if (existing) {
-        // Đã có bản ghi -> Cập nhật thông tin chi tiết (ví dụ: bổ sung ý nghĩa sticker / STT voice)
         const updateStmt = this.db.connection.prepare(`
           UPDATE chat_messages SET
             content = @content,
-            has_voice = @has_voice,
-            voice_url = @voice_url,
-            voice_duration = @voice_duration,
-            has_sticker = @has_sticker,
-            sticker_id = @sticker_id,
-            sticker_cate_id = @sticker_cate_id,
-            sticker_url = @sticker_url,
-            sticker_text = @sticker_text
+            media_type = @media_type,
+            media_urls = @media_urls
           WHERE id = @id
         `);
-
         updateStmt.run({
           id: existing.id,
-          content: record.content,
-          has_voice: record.hasVoice ? 1 : 0,
-          voice_url: record.voiceUrl || null,
-          voice_duration: record.voiceDuration || 0,
-          has_sticker: record.hasSticker ? 1 : 0,
-          sticker_id: record.stickerId || null,
-          sticker_cate_id: record.stickerCateId || null,
-          sticker_url: record.stickerUrl || null,
-          sticker_text: record.stickerText || null,
+          content: record.content || "",
+          media_type: mediaType,
+          media_urls: mediaUrls ? JSON.stringify(mediaUrls) : null,
         });
 
         try {
           chatBroadcaster.broadcast({
             ...record,
             id: existing.id,
+            mediaType,
+            mediaUrls,
           });
         } catch {}
         return;
       }
-    } catch {
-      // Bỏ qua lỗi check
-    }
+    } catch {}
 
-    const id = record.id || crypto.randomUUID();
     const stmt = this.db.connection.prepare(`
       INSERT INTO chat_messages (
-        id, thread_id, sender_id, sender_name, role, content, has_image, image_urls,
-        has_voice, voice_url, voice_duration,
-        has_sticker, sticker_id, sticker_cate_id, sticker_url, sticker_text,
+        id, thread_id, sender_id, sender_name, role, content,
+        media_type, media_urls,
         has_quote, quote_text, quote_sender_name, quote_sender_id, is_group, timestamp
       ) VALUES (
-        @id, @thread_id, @sender_id, @sender_name, @role, @content, @has_image, @image_urls,
-        @has_voice, @voice_url, @voice_duration,
-        @has_sticker, @sticker_id, @sticker_cate_id, @sticker_url, @sticker_text,
+        @id, @thread_id, @sender_id, @sender_name, @role, @content,
+        @media_type, @media_urls,
         @has_quote, @quote_text, @quote_sender_name, @quote_sender_id, @is_group, @timestamp
       )
     `);
@@ -187,17 +144,9 @@ export class ChatHistoryRepository {
       sender_id: record.senderId,
       sender_name: record.senderName || "",
       role: record.role,
-      content: record.content,
-      has_image: record.hasImage ? 1 : 0,
-      image_urls: record.imageUrls ? JSON.stringify(record.imageUrls) : null,
-      has_voice: record.hasVoice ? 1 : 0,
-      voice_url: record.voiceUrl || null,
-      voice_duration: record.voiceDuration || 0,
-      has_sticker: record.hasSticker ? 1 : 0,
-      sticker_id: record.stickerId || null,
-      sticker_cate_id: record.stickerCateId || null,
-      sticker_url: record.stickerUrl || null,
-      sticker_text: record.stickerText || null,
+      content: record.content || "",
+      media_type: mediaType,
+      media_urls: mediaUrls ? JSON.stringify(mediaUrls) : null,
       has_quote: record.hasQuote ? 1 : 0,
       quote_text: record.quoteText || null,
       quote_sender_name: record.quoteSenderName || null,
@@ -210,6 +159,8 @@ export class ChatHistoryRepository {
       chatBroadcaster.broadcast({
         ...record,
         id,
+        mediaType,
+        mediaUrls,
       });
     } catch (err) {
       console.warn("⚠️ Lỗi khi phát sự kiện Realtime tin nhắn:", err);
@@ -233,7 +184,7 @@ export class ChatHistoryRepository {
   }
 
   /**
-   * Lấy danh sách N tin nhắn gần nhất của một thread (được sắp xếp theo thứ tự thời gian tăng dần từ cũ đến mới)
+   * Lấy danh sách N tin nhắn gần nhất của một thread
    */
   public getRecentHistory(
     threadId: string,
@@ -242,10 +193,7 @@ export class ChatHistoryRepository {
     const stmt = this.db.connection.prepare(`
       SELECT 
         id, thread_id as threadId, sender_id as senderId, sender_name as senderName,
-        role, content, has_image as hasImage, image_urls as imageUrls,
-        has_voice as hasVoice, voice_url as voiceUrl, voice_duration as voiceDuration,
-        has_sticker as hasSticker, sticker_id as stickerId, sticker_cate_id as stickerCateId,
-        sticker_url as stickerUrl, sticker_text as stickerText,
+        role, content, media_type as mediaType, media_urls as mediaUrls,
         has_quote as hasQuote, quote_text as quoteText,
         quote_sender_name as quoteSenderName, quote_sender_id as quoteSenderId,
         is_group as isGroup, timestamp
@@ -255,36 +203,12 @@ export class ChatHistoryRepository {
       LIMIT ?
     `);
 
-    const rows = stmt.all(threadId, limit) as Array<{
-      id: string;
-      threadId: string;
-      senderId: string;
-      senderName: string;
-      role: "user" | "model";
-      content: string;
-      hasImage: number;
-      imageUrls: string | null;
-      hasVoice?: number;
-      voiceUrl?: string | null;
-      voiceDuration?: number | null;
-      hasSticker?: number;
-      stickerId?: string | null;
-      stickerCateId?: string | null;
-      stickerUrl?: string | null;
-      stickerText?: string | null;
-      hasQuote: number;
-      quoteText: string | null;
-      quoteSenderName: string | null;
-      quoteSenderId: string | null;
-      isGroup: number;
-      timestamp: number;
-    }>;
-
+    const rows = stmt.all(threadId, limit) as Array<any>;
     return rows.reverse().map((row) => this.mapMessageRow(row));
   }
 
   /**
-   * Lấy danh sách tin nhắn cũ hơn một mốc thời gian (phục vụ Lazy Load khi cuộn lên trên)
+   * Lấy danh sách tin nhắn cũ hơn một mốc thời gian (phục vụ Lazy Load)
    */
   public getHistoryBefore(
     threadId: string,
@@ -294,10 +218,7 @@ export class ChatHistoryRepository {
     const stmt = this.db.connection.prepare(`
       SELECT 
         id, thread_id as threadId, sender_id as senderId, sender_name as senderName,
-        role, content, has_image as hasImage, image_urls as imageUrls,
-        has_voice as hasVoice, voice_url as voiceUrl, voice_duration as voiceDuration,
-        has_sticker as hasSticker, sticker_id as stickerId, sticker_cate_id as stickerCateId,
-        sticker_url as stickerUrl, sticker_text as stickerText,
+        role, content, media_type as mediaType, media_urls as mediaUrls,
         has_quote as hasQuote, quote_text as quoteText,
         quote_sender_name as quoteSenderName, quote_sender_id as quoteSenderId,
         is_group as isGroup, timestamp
@@ -307,37 +228,12 @@ export class ChatHistoryRepository {
       LIMIT ?
     `);
 
-    const rows = stmt.all(threadId, beforeTimestamp, limit) as Array<{
-      id: string;
-      threadId: string;
-      senderId: string;
-      senderName: string;
-      role: "user" | "model";
-      content: string;
-      hasImage: number;
-      imageUrls: string | null;
-      hasVoice?: number;
-      voiceUrl?: string | null;
-      voiceDuration?: number | null;
-      hasSticker?: number;
-      stickerId?: string | null;
-      stickerCateId?: string | null;
-      stickerUrl?: string | null;
-      stickerText?: string | null;
-      hasQuote: number;
-      quoteText: string | null;
-      quoteSenderName: string | null;
-      quoteSenderId: string | null;
-      isGroup: number;
-      timestamp: number;
-    }>;
-
+    const rows = stmt.all(threadId, beforeTimestamp, limit) as Array<any>;
     return rows.reverse().map((row) => this.mapMessageRow(row));
   }
 
   /**
    * Lấy danh sách các cuộc trò chuyện (Threads) phân trang có tin nhắn mới nhất
-   * Hỗ trợ lọc theo tab: "all" | "personal" | "group" | "manual"
    */
   public getThreadList(
     limit: number = 20,
@@ -351,9 +247,7 @@ export class ChatHistoryRepository {
         COALESCE(tm.custom_name, c.full_name, m.sender_name) as senderName,
         m.sender_id as senderId,
         m.content as lastContent,
-        m.has_image as lastHasImage,
-        m.has_voice as lastHasVoice,
-        m.has_sticker as lastHasSticker,
+        m.media_type as lastMediaType,
         m.timestamp as lastTimestamp,
         m.role as lastRole,
         COALESCE(tm.is_group, m.is_group) as isGroup,
@@ -363,7 +257,7 @@ export class ChatHistoryRepository {
         c.phone_number as phoneNumber
       FROM (
         SELECT 
-          id, thread_id, sender_id, sender_name, content, has_image, has_voice, has_sticker,
+          id, thread_id, sender_id, sender_name, content, media_type,
           MAX(timestamp) as timestamp, role, is_group
         FROM chat_messages
         GROUP BY thread_id
@@ -379,7 +273,6 @@ export class ChatHistoryRepository {
 
     const params: (string | number)[] = [];
 
-    // 1. Điều kiện tìm kiếm (Search)
     if (search && search.trim()) {
       const searchTerm = `%${search.trim().toLowerCase()}%`;
       query += `
@@ -396,7 +289,6 @@ export class ChatHistoryRepository {
       params.push(searchTerm, searchTerm, searchTerm, searchTerm, searchTerm, searchTerm, searchTerm);
     }
 
-    // 2. Điều kiện lọc theo Tab Filter (all, direct/personal, group, manual)
     if (filter === "direct" || filter === "personal") {
       query += ` 
         AND COALESCE(tm.is_group, m.is_group) = 0 
@@ -435,9 +327,7 @@ export class ChatHistoryRepository {
       senderName: string;
       senderId: string;
       lastContent: string;
-      lastHasImage: number;
-      lastHasVoice?: number;
-      lastHasSticker?: number;
+      lastMediaType?: MediaType;
       lastTimestamp: number;
       lastRole: "user" | "model";
       isGroup: number;
@@ -452,9 +342,7 @@ export class ChatHistoryRepository {
       senderName: r.senderName || "",
       senderId: r.senderId || "",
       lastContent: r.lastContent || "",
-      lastHasImage: Boolean(r.lastHasImage),
-      lastHasVoice: Boolean(r.lastHasVoice),
-      lastHasSticker: Boolean(r.lastHasSticker),
+      lastMediaType: r.lastMediaType || null,
       lastTimestamp: r.lastTimestamp,
       lastRole: r.lastRole,
       isGroup: Boolean(r.isGroup),
@@ -533,7 +421,7 @@ export class ChatHistoryRepository {
   }
 
   /**
-   * Helper parse row SQLite sang ChatMessageRecord
+   * Helper map SQLite row -> ChatMessageRecord
    */
   private mapMessageRow(row: {
     id: string;
@@ -542,16 +430,8 @@ export class ChatHistoryRepository {
     senderName: string;
     role: "user" | "model";
     content: string;
-    hasImage: number;
-    imageUrls: string | null;
-    hasVoice?: number;
-    voiceUrl?: string | null;
-    voiceDuration?: number | null;
-    hasSticker?: number;
-    stickerId?: string | null;
-    stickerCateId?: string | null;
-    stickerUrl?: string | null;
-    stickerText?: string | null;
+    mediaType?: MediaType;
+    mediaUrls?: string | null;
     hasQuote?: number;
     quoteText?: string | null;
     quoteSenderName?: string | null;
@@ -559,16 +439,14 @@ export class ChatHistoryRepository {
     isGroup?: number;
     timestamp: number;
   }): ChatMessageRecord {
-    let parsedUrls: string[] | undefined = undefined;
-    try {
-      if (row.imageUrls) {
-        const raw = JSON.parse(row.imageUrls);
-        parsedUrls = Array.isArray(raw) ? raw : [String(raw)];
-      }
-    } catch {
-      if (row.imageUrls) {
-        parsedUrls = [row.imageUrls];
-      }
+    let resolvedMediaItems: MediaItem[] | undefined = undefined;
+    if (row.mediaUrls) {
+      try {
+        const parsed = JSON.parse(row.mediaUrls);
+        if (Array.isArray(parsed)) {
+          resolvedMediaItems = parsed;
+        }
+      } catch {}
     }
 
     return {
@@ -578,16 +456,8 @@ export class ChatHistoryRepository {
       senderName: row.senderName,
       role: row.role,
       content: row.content || "",
-      hasImage: Boolean(row.hasImage),
-      imageUrls: parsedUrls,
-      hasVoice: Boolean(row.hasVoice),
-      voiceUrl: row.voiceUrl || undefined,
-      voiceDuration: row.voiceDuration || undefined,
-      hasSticker: Boolean(row.hasSticker),
-      stickerId: row.stickerId || undefined,
-      stickerCateId: row.stickerCateId || undefined,
-      stickerUrl: row.stickerUrl || undefined,
-      stickerText: row.stickerText || undefined,
+      mediaType: row.mediaType || null,
+      mediaUrls: resolvedMediaItems,
       hasQuote: Boolean(row.hasQuote),
       quoteText: row.quoteText || undefined,
       quoteSenderName: row.quoteSenderName || undefined,

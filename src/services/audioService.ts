@@ -61,7 +61,7 @@ export class AudioService {
       const timeoutMs = 35000;
       const response = await Promise.race([
         this.ai.models.generateContent({
-          model: config.geminiFlashLiteModel || "gemini-2.5-flash-lite",
+          model: config.geminiFlashLiteModel || "gemini-3.5-flash-lite",
           contents,
         }),
         new Promise<never>((_, reject) =>

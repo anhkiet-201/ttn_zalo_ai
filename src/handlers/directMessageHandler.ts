@@ -64,17 +64,23 @@ export class DirectMessageHandler {
       return;
     }
 
-    if (!parsedMessage.text && !parsedMessage.hasImage && !parsedMessage.hasVoice && !parsedMessage.hasSticker) return;
-
-    if (parsedMessage.hasImage && parsedMessage.imageUrls?.length) {
-      console.log(`🖼️ [Ảnh Cá Nhân] Nhận ${parsedMessage.imageUrls.length} hình ảnh từ ${senderInfo}`);
+    if (
+      !parsedMessage.text &&
+      !parsedMessage.mediaType &&
+      (!parsedMessage.mediaUrls || parsedMessage.mediaUrls.length === 0)
+    ) {
+      return;
     }
 
-    if (parsedMessage.hasVoice && parsedMessage.voiceUrl) {
-      console.log(`🎙️ [Tin Nhắn Thoại] Nhận ghi âm (${parsedMessage.voiceDuration || 0}ms) từ ${senderInfo}`);
+    if (parsedMessage.mediaType === "photo" && parsedMessage.mediaUrls?.length) {
+      console.log(`🖼️ [Ảnh Cá Nhân] Nhận ${parsedMessage.mediaUrls.length} hình ảnh từ ${senderInfo}`);
     }
 
-    if (parsedMessage.hasSticker) {
+    if (parsedMessage.mediaType === "voice" && parsedMessage.mediaUrls?.length) {
+      console.log(`🎙️ [Tin Nhắn Thoại] Nhận ghi âm (${parsedMessage.mediaUrls[0].duration || 0}ms) từ ${senderInfo}`);
+    }
+
+    if (parsedMessage.mediaType === "sticker") {
       console.log(`🏷️ [Nhãn Dán / Sticker] Nhận sticker từ ${senderInfo}`);
     }
 
@@ -90,15 +96,16 @@ export class DirectMessageHandler {
   private async processBatch(batch: MessageBatch): Promise<void> {
     // 0.1 Xử lý phân tích nhãn dán Sticker nếu có
     for (const msg of batch.messages) {
-      if (msg.hasSticker && (msg.stickerUrl || msg.stickerId || msg.stickerText)) {
+      if (msg.mediaType === "sticker" && msg.mediaUrls?.[0]) {
+        const item = msg.mediaUrls[0];
         console.log(`🏷️ [StickerService] Đang đọc hiểu ý nghĩa sticker từ [${batch.senderName}]...`);
         const stickerMeaning = await this.aiService.sticker.understandSticker(
-          msg.stickerUrl,
-          msg.stickerText
+          item.url,
+          item.description
         );
         console.log(`✅ [Sticker AI] Ý nghĩa nhãn dán: "${stickerMeaning}"`);
         msg.text = `[🏷️ Nhãn dán / Sticker]: "${stickerMeaning}"`;
-        msg.stickerText = stickerMeaning;
+        item.description = stickerMeaning;
 
         // Lưu bản ghi hoàn chỉnh với stickerUrl và ý nghĩa vào ChatHistory
         try {
@@ -109,11 +116,8 @@ export class DirectMessageHandler {
             senderName: batch.senderName,
             role: "user",
             content: msg.text,
-            hasSticker: true,
-            stickerId: msg.stickerId,
-            stickerCateId: msg.stickerCateId,
-            stickerUrl: msg.stickerUrl,
-            stickerText: stickerMeaning,
+            mediaType: "sticker",
+            mediaUrls: [item],
             hasQuote: msg.hasQuote,
             quoteText: msg.quoteText,
             quoteSenderName: msg.quoteSenderName,
@@ -137,9 +141,10 @@ export class DirectMessageHandler {
     // 0.2 Xử lý phiên âm tin nhắn thoại (Audio Speech-to-Text) nếu có
     const companyHints = this.aiService.rag.getCompanyHints();
     for (const msg of batch.messages) {
-      if (msg.hasVoice && msg.voiceUrl) {
+      if (msg.mediaType === "voice" && msg.mediaUrls?.[0]?.url) {
+        const item = msg.mediaUrls[0];
         console.log(`🎙️ [AudioService] Đang phiên âm tin nhắn thoại từ [${batch.senderName}]...`);
-        const transcribedText = await this.aiService.audio.transcribeAudio(msg.voiceUrl, companyHints);
+        const transcribedText = await this.aiService.audio.transcribeAudio(item.url, companyHints);
         console.log(`✅ [Audio STT] Phiên âm: "${transcribedText}"`);
         msg.text = `[🎙️ Tin nhắn thoại]: "${transcribedText}"`;
 
@@ -151,9 +156,8 @@ export class DirectMessageHandler {
             senderName: batch.senderName,
             role: "user",
             content: msg.text,
-            hasVoice: true,
-            voiceUrl: msg.voiceUrl,
-            voiceDuration: msg.voiceDuration,
+            mediaType: "voice",
+            mediaUrls: [item],
             hasQuote: msg.hasQuote,
             quoteText: msg.quoteText,
             quoteSenderName: msg.quoteSenderName,
@@ -177,7 +181,11 @@ export class DirectMessageHandler {
     // Thu thập tất cả hình ảnh từ batch
     const allImageUrls: string[] = [];
     for (const msg of batch.messages) {
-      if (msg.imageUrls?.length) allImageUrls.push(...msg.imageUrls);
+      if (msg.mediaType === "photo" && msg.mediaUrls) {
+        for (const item of msg.mediaUrls) {
+          if (item.url) allImageUrls.push(item.url);
+        }
+      }
     }
 
     // 1. Quét và ghi nhận số điện thoại vào User Context (phân biệt theo senderId)
@@ -214,7 +222,7 @@ export class DirectMessageHandler {
 
       // Thả tim xác nhận đã đọc ảnh
       for (const msg of batch.messages) {
-        if (msg.rawMessage && msg.imageUrls?.length) {
+        if (msg.rawMessage && msg.mediaType === "photo") {
           try {
             await this.zaloService.sendReaction(msg.rawMessage, Reactions.HEART);
           } catch {}
@@ -268,7 +276,10 @@ export class DirectMessageHandler {
       }
     }
 
-    const formattedText = textLines.join("\n");
+    let formattedText = textLines.join("\n");
+    if (!formattedText && allImageUrls.length > 0) {
+      formattedText = "[Ứng viên gửi hình ảnh đính kèm]";
+    }
     if (!formattedText && allImageUrls.length === 0) return;
 
     console.log(`📥 [DM: "${batch.senderName}"] ${formattedText.length > 100 ? formattedText.slice(0, 100) + "..." : formattedText}`);

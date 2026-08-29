@@ -65,9 +65,9 @@ async function runVoiceAndAudioTests() {
     } as any;
 
     const parsed1 = (dispatcher as any).parseMessage(rawVoice1);
-    assert.strictEqual(parsed1.hasVoice, true, "Case 1: hasVoice phải là true");
-    assert.strictEqual(parsed1.voiceUrl, "https://zalo.me/voice/recording_01.m4a", "Case 1: voiceUrl khớp");
-    assert.strictEqual(parsed1.voiceDuration, 7500, "Case 1: duration khớp");
+    assert.strictEqual(parsed1.mediaType, "voice", "Case 1: mediaType phải là voice");
+    assert.strictEqual(parsed1.mediaUrls?.[0]?.url, "https://zalo.me/voice/recording_01.m4a", "Case 1: voiceUrl khớp");
+    assert.strictEqual(parsed1.mediaUrls?.[0]?.duration, 7500, "Case 1: duration khớp");
 
     // Case 2: Payload có thông tin trong params & paramsExt
     const rawVoice2 = {
@@ -89,9 +89,9 @@ async function runVoiceAndAudioTests() {
     } as any;
 
     const parsed2 = (dispatcher as any).parseMessage(rawVoice2);
-    assert.strictEqual(parsed2.hasVoice, true, "Case 2: hasVoice phải là true");
-    assert.strictEqual(parsed2.voiceUrl, "https://zalo.me/voice/recording_02.m4a", "Case 2: voiceUrl khớp từ params");
-    assert.strictEqual(parsed2.voiceDuration, 12000, "Case 2: duration khớp từ params");
+    assert.strictEqual(parsed2.mediaType, "voice", "Case 2: mediaType phải là voice");
+    assert.strictEqual(parsed2.mediaUrls?.[0]?.url, "https://zalo.me/voice/recording_02.m4a", "Case 2: voiceUrl khớp từ params");
+    assert.strictEqual(parsed2.mediaUrls?.[0]?.duration, 12000, "Case 2: duration khớp từ params");
 
     // Case 3: Quote tin nhắn thoại
     const rawVoice3 = {
@@ -137,9 +137,9 @@ async function runVoiceAndAudioTests() {
     } as any;
 
     const parsedPhoto = (dispatcher as any).parseMessage(rawPhoto);
-    assert.strictEqual(parsedPhoto.hasImage, true, "Case 4: hasImage = true");
-    assert.strictEqual(parsedPhoto.imageUrls?.length, 1, "Case 4: trích xuất đúng 1 ảnh tốt nhất");
-    assert.strictEqual(parsedPhoto.imageUrls?.[0], "https://res-zalo.zadn.vn/photo/abc_hd.jpg", "Case 4: ưu tiên hdUrl");
+    assert.strictEqual(parsedPhoto.mediaType, "photo", "Case 4: mediaType = 'photo'");
+    assert.strictEqual(parsedPhoto.mediaUrls?.length, 1, "Case 4: trích xuất đúng 1 ảnh tốt nhất");
+    assert.strictEqual(parsedPhoto.mediaUrls?.[0]?.url, "https://res-zalo.zadn.vn/photo/abc_hd.jpg", "Case 4: ưu tiên hdUrl");
 
     const duration = performance.now() - start;
     results.push({
@@ -191,11 +191,10 @@ async function runVoiceAndAudioTests() {
         isGroup: false,
         isSelf: false,
         text: "",
+        mediaType: "voice",
+        mediaUrls: [{ url: "https://zalo.me/voice/test_batch.m4a", duration: 8000 }],
         timestamp: Date.now() + 10,
         hasQuote: false,
-        hasVoice: true,
-        voiceUrl: "https://zalo.me/voice/test_batch.m4a",
-        voiceDuration: 8000,
       },
       ThreadType.User
     );
@@ -205,8 +204,8 @@ async function runVoiceAndAudioTests() {
 
     assert.ok(batchedResult, "Batcher phải kích hoạt callback");
     assert.strictEqual((batchedResult as any).messages.length, 2, "Batch phải gom đủ 2 tin nhắn");
-    assert.strictEqual((batchedResult as any).messages[1].hasVoice, true, "Tin nhắn 2 trong batch phải có hasVoice");
-    assert.strictEqual((batchedResult as any).messages[1].voiceUrl, "https://zalo.me/voice/test_batch.m4a", "voiceUrl trong batch khớp");
+    assert.strictEqual((batchedResult as any).messages[1].mediaType, "voice", "Tin nhắn 2 trong batch phải có mediaType = 'voice'");
+    assert.strictEqual((batchedResult as any).messages[1].mediaUrls?.[0]?.url, "https://zalo.me/voice/test_batch.m4a", "voiceUrl trong batch khớp");
 
     const duration = performance.now() - start;
     results.push({
@@ -229,10 +228,9 @@ async function runVoiceAndAudioTests() {
       senderId: "user_v1",
       senderName: "Nguyễn Văn Voice",
       role: "user",
-      content: '[🎙️ Tin nhắn thoại]: "Tôi muốn hỏi công ty Sanaky"',
-      hasVoice: true,
-      voiceUrl: "https://zalo.me/voice/db_test_1.m4a",
-      voiceDuration: 9500,
+      content: "",
+      mediaType: "voice",
+      mediaUrls: [{ url: "https://zalo.me/voice/db_test_1.m4a", duration: 9500 }],
       timestamp: 1700000010000,
     });
 
@@ -243,24 +241,23 @@ async function runVoiceAndAudioTests() {
       senderId: "user_v1",
       senderName: "Nguyễn Văn Voice",
       role: "user",
-      content: '[🎙️ Tin nhắn thoại]: "Tôi muốn hỏi công ty Sanaky"',
-      hasVoice: true,
-      voiceUrl: "https://zalo.me/voice/db_test_1.m4a",
-      voiceDuration: 9500,
+      content: "",
+      mediaType: "voice",
+      mediaUrls: [{ url: "https://zalo.me/voice/db_test_1.m4a", duration: 9500 }],
       timestamp: 1700000011000,
     });
 
     const recentMsgs = chatHistoryRepo.getRecentHistory("thread_voice_db", 10);
     assert.strictEqual(recentMsgs.length, 1, "Chống trùng lặp: Chỉ được có 1 bản ghi trong DB");
-    assert.strictEqual(recentMsgs[0].hasVoice, true, "hasVoice phải được lưu vào SQLite");
-    assert.strictEqual(recentMsgs[0].voiceUrl, "https://zalo.me/voice/db_test_1.m4a", "voiceUrl phải khớp trong SQLite");
-    assert.strictEqual(recentMsgs[0].voiceDuration, 9500, "voiceDuration phải khớp trong SQLite");
+    assert.strictEqual(recentMsgs[0].mediaType, "voice", "mediaType = 'voice' phải được lưu vào SQLite");
+    assert.strictEqual(recentMsgs[0].mediaUrls?.[0]?.url, "https://zalo.me/voice/db_test_1.m4a", "voiceUrl phải khớp trong SQLite");
+    assert.strictEqual(recentMsgs[0].mediaUrls?.[0]?.duration, 9500, "voiceDuration phải khớp trong SQLite");
 
     // Kiểm tra Thread List Preview
     const threads = chatHistoryRepo.getThreadList(10, 0, undefined, "all");
     const foundThread = threads.find((t) => t.threadId === "thread_voice_db");
     assert.ok(foundThread, "Phải tìm thấy thread_voice_db trong ThreadList");
-    assert.strictEqual(foundThread.lastHasVoice, true, "lastHasVoice của ThreadList phải là true");
+    assert.strictEqual(foundThread.lastMediaType, "voice", "lastMediaType của ThreadList phải là 'voice'");
 
     const duration = performance.now() - start;
     results.push({
@@ -568,11 +565,9 @@ async function runVoiceAndAudioTests() {
     } as any;
 
     const parsed1 = (dispatcher as any).parseMessage(rawSticker1);
-    assert.strictEqual(parsed1.hasSticker, true, "Case 1: hasSticker = true");
-    assert.strictEqual(parsed1.stickerId, "123456", "Case 1: stickerId");
-    assert.strictEqual(parsed1.stickerCateId, "789", "Case 1: stickerCateId");
-    assert.strictEqual(parsed1.stickerText, "Cảm ơn bạn", "Case 1: stickerText");
-    assert.strictEqual(parsed1.hasImage, false, "Sticker không được nhận nhầm thành Image");
+    assert.strictEqual(parsed1.mediaType, "sticker", "Case 1: mediaType = 'sticker'");
+    assert.strictEqual(parsed1.mediaUrls?.[0]?.id, "123456", "Case 1: stickerId");
+    assert.strictEqual(parsed1.mediaUrls?.[0]?.description, "Cảm ơn bạn", "Case 1: description");
 
     // Case 2: Sticker có URL trực tiếp trong paramsExt
     const rawSticker2 = {
@@ -594,9 +589,9 @@ async function runVoiceAndAudioTests() {
     } as any;
 
     const parsed2 = (dispatcher as any).parseMessage(rawSticker2);
-    assert.strictEqual(parsed2.hasSticker, true, "Case 2: hasSticker = true");
-    assert.strictEqual(parsed2.stickerUrl, "https://stickers.zaloapp.com/stickers/v2/54321.png", "Case 2: stickerUrl");
-    assert.strictEqual(parsed2.stickerText, "Vẫy tay chào", "Case 2: stickerText");
+    assert.strictEqual(parsed2.mediaType, "sticker", "Case 2: mediaType = 'sticker'");
+    assert.strictEqual(parsed2.mediaUrls?.[0]?.url, "https://stickers.zaloapp.com/stickers/v2/54321.png", "Case 2: stickerUrl");
+    assert.strictEqual(parsed2.mediaUrls?.[0]?.description, "Vẫy tay chào", "Case 2: description");
 
     const duration = performance.now() - start;
     results.push({
@@ -619,11 +614,15 @@ async function runVoiceAndAudioTests() {
       senderId: "user_stk_01",
       senderName: "Ứng Viên Sticker",
       role: "user",
-      content: '[🏷️ Nhãn dán / Sticker]: "Cảm ơn"',
-      hasSticker: true,
-      stickerId: "998877",
-      stickerUrl: "https://zalo-api.zadn.vn/api/emoticon/sticker/webpc?id=998877",
-      stickerText: "Cảm ơn",
+      content: "",
+      mediaType: "sticker",
+      mediaUrls: [
+        {
+          id: "998877",
+          url: "https://zalo-api.zadn.vn/api/emoticon/sticker/webpc?id=998877",
+          description: "Cảm ơn",
+        },
+      ],
       timestamp: 1700000010000,
     });
 
@@ -633,19 +632,23 @@ async function runVoiceAndAudioTests() {
       senderId: "user_stk_01",
       senderName: "Ứng Viên Sticker",
       role: "user",
-      content: '[🏷️ Nhãn dán / Sticker]: "Cảm ơn"',
-      hasSticker: true,
-      stickerId: "998877",
-      stickerUrl: "https://zalo-api.zadn.vn/api/emoticon/sticker/webpc?id=998877",
-      stickerText: "Cảm ơn",
+      content: "",
+      mediaType: "sticker",
+      mediaUrls: [
+        {
+          id: "998877",
+          url: "https://zalo-api.zadn.vn/api/emoticon/sticker/webpc?id=998877",
+          description: "Cảm ơn",
+        },
+      ],
       timestamp: 1700000011000,
     });
 
     const history = chatHistoryRepo.getRecentHistory(threadId, 10);
     assert.strictEqual(history.length, 1, "Chống trùng lặp sticker thành công (chỉ có 1 bản ghi)");
-    assert.strictEqual(history[0].hasSticker, true, "hasSticker được map chính xác từ SQLite");
-    assert.strictEqual(history[0].stickerId, "998877", "stickerId lưu và đọc chính xác");
-    assert.strictEqual(history[0].stickerText, "Cảm ơn", "stickerText lưu và đọc chính xác");
+    assert.strictEqual(history[0].mediaType, "sticker", "mediaType được map chính xác từ SQLite");
+    assert.strictEqual(history[0].mediaUrls?.[0]?.id, "998877", "stickerId lưu và đọc chính xác");
+    assert.strictEqual(history[0].mediaUrls?.[0]?.description, "Cảm ơn", "description lưu và đọc chính xác");
 
     const duration = performance.now() - start;
     results.push({

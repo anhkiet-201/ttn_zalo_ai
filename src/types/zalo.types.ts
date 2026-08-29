@@ -67,6 +67,15 @@ export interface QuoteData {
   msgType?: string;
 }
 
+export type MediaType = "photo" | "sticker" | "voice" | "file" | null;
+
+export interface MediaItem {
+  url: string;
+  description?: string;
+  duration?: number;
+  id?: string;
+}
+
 /**
  * Dữ liệu tin nhắn đã được chuẩn hoá để các handler dễ xử lý
  */
@@ -80,6 +89,8 @@ export interface ParsedMessage {
   isSelf: boolean;
   text: string;
   timestamp: number;
+  mediaType?: MediaType;
+  mediaUrls?: MediaItem[];
   hasQuote: boolean;
   quoteText?: string;
   quoteSenderName?: string;
@@ -88,18 +99,6 @@ export interface ParsedMessage {
   quoteData?: QuoteData;
   command?: string;
   args: string[];
-  hasImage?: boolean;
-  imageUrls?: string[];
-  hasVoice?: boolean;
-  voiceUrl?: string;
-  voiceUrls?: string[];
-  voiceDuration?: number;
-  hasSticker?: boolean;
-  isSticker?: boolean;
-  stickerId?: string;
-  stickerCateId?: string;
-  stickerUrl?: string;
-  stickerText?: string;
 }
 
 /**

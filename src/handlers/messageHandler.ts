@@ -99,14 +99,13 @@ export class MessageHandler {
   // ── Private helpers ─────────────────────────────────────────────────────
 
   private async persistMessage(parsedMessage: ParsedMessage): Promise<void> {
-    const isSticker =
-      parsedMessage.hasSticker ||
-      parsedMessage.raw?.data?.msgType === "chat.sticker" ||
-      parsedMessage.text === "[Sticker]" ||
-      Boolean(parsedMessage.text && parsedMessage.text.includes("[Sticker]")) ||
-      Boolean(parsedMessage.text && parsedMessage.text.includes("[🏷️ Sticker]"));
-
-    if (!parsedMessage.text && !parsedMessage.hasImage && !isSticker && !parsedMessage.hasVoice) return;
+    if (
+      !parsedMessage.text &&
+      !parsedMessage.mediaType &&
+      (!parsedMessage.mediaUrls || parsedMessage.mediaUrls.length === 0)
+    ) {
+      return;
+    }
 
     try {
       this.chatHistoryRepo.addMessage({
@@ -121,25 +120,9 @@ export class MessageHandler {
             ? "Thành viên nhóm"
             : "Ứng viên"),
         role: parsedMessage.isSelf ? "model" : "user",
-        content:
-          parsedMessage.text ||
-          (parsedMessage.hasVoice
-            ? "[Tin nhắn thoại]"
-            : isSticker
-            ? "[🏷️ Sticker]"
-            : parsedMessage.hasImage
-            ? "[Hình ảnh đính kèm]"
-            : ""),
-        hasImage: parsedMessage.hasImage,
-        imageUrls: parsedMessage.imageUrls,
-        hasVoice: parsedMessage.hasVoice,
-        voiceUrl: parsedMessage.voiceUrl,
-        voiceDuration: parsedMessage.voiceDuration,
-        hasSticker: isSticker,
-        stickerId: parsedMessage.stickerId,
-        stickerCateId: parsedMessage.stickerCateId,
-        stickerUrl: parsedMessage.stickerUrl,
-        stickerText: parsedMessage.stickerText,
+        content: parsedMessage.text || "",
+        mediaType: parsedMessage.mediaType,
+        mediaUrls: parsedMessage.mediaUrls,
         hasQuote: parsedMessage.hasQuote,
         quoteText: parsedMessage.quoteText,
         quoteSenderName: parsedMessage.quoteSenderName,
