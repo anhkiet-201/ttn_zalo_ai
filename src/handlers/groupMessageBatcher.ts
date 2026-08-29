@@ -1,4 +1,4 @@
-import { type ParsedMessage } from "../types/zalo.types.js";
+import { type ParsedMessage, type MediaType, type MediaItem } from "../types/zalo.types.js";
 import { config } from "../config/index.js";
 
 export interface GroupQueuedMessage {
@@ -6,16 +6,8 @@ export interface GroupQueuedMessage {
   senderName: string;
   senderId: string;
   timestamp: number;
-  hasVoice?: boolean;
-  voiceUrl?: string;
-  voiceUrls?: string[];
-  voiceDuration?: number;
-  hasSticker?: boolean;
-  isSticker?: boolean;
-  stickerId?: string;
-  stickerCateId?: string;
-  stickerUrl?: string;
-  stickerText?: string;
+  mediaType?: MediaType;
+  mediaUrls?: MediaItem[];
   rawMessage?: ParsedMessage["raw"];
 }
 
@@ -69,16 +61,8 @@ export class GroupMessageBatcher {
       senderName: parsedMessage.senderName,
       senderId: parsedMessage.senderId,
       timestamp: parsedMessage.timestamp,
-      hasVoice: parsedMessage.hasVoice,
-      voiceUrl: parsedMessage.voiceUrl,
-      voiceUrls: parsedMessage.voiceUrls,
-      voiceDuration: parsedMessage.voiceDuration,
-      hasSticker: parsedMessage.hasSticker,
-      isSticker: parsedMessage.isSticker,
-      stickerId: parsedMessage.stickerId,
-      stickerCateId: parsedMessage.stickerCateId,
-      stickerUrl: parsedMessage.stickerUrl,
-      stickerText: parsedMessage.stickerText,
+      mediaType: parsedMessage.mediaType,
+      mediaUrls: parsedMessage.mediaUrls,
       rawMessage: parsedMessage.raw,
     });
 

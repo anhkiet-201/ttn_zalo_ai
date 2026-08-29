@@ -36,11 +36,22 @@ export class GroupMessageHandler {
     const senderInfo = `${parsedMessage.senderName} (${parsedMessage.senderId})`;
     const groupInfo = parsedMessage.threadId;
 
-    // Bỏ qua sticker / reaction (text rỗng và không có voice)
-    if (!parsedMessage.text && !parsedMessage.hasVoice && !parsedMessage.hasSticker) return;
+    // Bỏ qua tin nhắn không có text, không có ảnh/voice/sticker
+    if (
+      !parsedMessage.text &&
+      !parsedMessage.mediaType &&
+      (!parsedMessage.mediaUrls || parsedMessage.mediaUrls.length === 0)
+    ) {
+      return;
+    }
+
+    // Bỏ qua ảnh nhóm — không có nội dung text để AI phân tích nghiệp vụ RAG
+    if (parsedMessage.mediaType === "photo") {
+      return;
+    }
 
     // Lọc từ khóa nội bộ hoặc tin nhắn văn bản quá ngắn (bỏ qua im lặng)
-    if (parsedMessage.text && !parsedMessage.hasSticker) {
+    if (parsedMessage.text && parsedMessage.mediaType !== "sticker") {
       const lowerText = parsedMessage.text.toLowerCase().trim();
       const matchedKeyword = config.groupIgnoreKeywords.find((kw) => lowerText.includes(kw));
       if (matchedKeyword || lowerText.length < 25) {
@@ -56,7 +67,14 @@ export class GroupMessageHandler {
       return;
     }
 
-    console.log(`👥 [Nhóm: "${groupName}"] ${senderInfo}: "${parsedMessage.text.length > 80 ? parsedMessage.text.slice(0, 80) + "..." : parsedMessage.text || (parsedMessage.hasSticker ? "[Nhãn dán / Sticker]" : "[Tin nhắn thoại]")}"`);
+    const mediaLabel =
+      parsedMessage.mediaType === "voice"  ? "[Tin nhắn thoại]"     :
+      parsedMessage.mediaType === "sticker"? "[Nhãn dán / Sticker]" :
+      "[Đính kèm]";
+    const displayText = parsedMessage.text
+      ? (parsedMessage.text.length > 80 ? parsedMessage.text.slice(0, 80) + "..." : parsedMessage.text)
+      : mediaLabel;
+    console.log(`👥 [Nhóm: "${groupName}"] ${senderInfo}: "${displayText}"`);
 
     this.groupBatcher.enqueue(parsedMessage, groupName);
   }
@@ -69,9 +87,10 @@ export class GroupMessageHandler {
   private async processGroupBatch(batch: GroupMessageBatch): Promise<void> {
     // Đọc hiểu nhãn dán trong nhóm nếu có
     for (const msg of batch.messages) {
-      if (msg.hasSticker && (msg.stickerUrl || msg.stickerId || msg.stickerText)) {
+      if (msg.mediaType === "sticker" && msg.mediaUrls?.[0]) {
+        const item = msg.mediaUrls[0];
         try {
-          const meaning = await this.aiService.sticker.understandSticker(msg.stickerUrl, msg.stickerText);
+          const meaning = await this.aiService.sticker.understandSticker(item.url, item.description);
           msg.text = `[Nhãn dán]: ${meaning}`;
         } catch {}
       }
@@ -80,9 +99,10 @@ export class GroupMessageHandler {
     // Phiên âm các tin nhắn thoại trong nhóm nếu có
     const companyHints = this.ragService.getCompanyHints();
     for (const msg of batch.messages) {
-      if (msg.hasVoice && msg.voiceUrl) {
+      if (msg.mediaType === "voice" && msg.mediaUrls?.[0]?.url) {
+        const item = msg.mediaUrls[0];
         try {
-          const transcribed = await this.aiService.audio.transcribeAudio(msg.voiceUrl, companyHints);
+          const transcribed = await this.aiService.audio.transcribeAudio(item.url, companyHints);
           msg.text = `[Tin nhắn thoại]: ${transcribed}`;
         } catch {}
       }
