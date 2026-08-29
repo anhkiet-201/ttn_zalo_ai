@@ -12,6 +12,7 @@ import { chatBroadcaster } from "./chatBroadcaster.js";
 import { ChatHistoryRepository, CandidateRepository, ThreadMetadataRepository, type ThreadFilter, type ChatMessageRecord } from "../database/index.js";
 import { UserContextManager } from "../services/userContextManager.js";
 import { type ZaloService } from "../services/zaloService.js";
+import { config } from "../config/index.js";
 
 /**
  * ChatRouter: Chuyên trách điều phối và xử lý toàn bộ các routes của Web Chat:
@@ -135,8 +136,7 @@ export async function handleChatRoute(
     try {
       const upstream = await fetch(targetUrl, {
         headers: {
-          "User-Agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          "User-Agent": config.userAgent,
           Accept: "*/*",
         },
       });

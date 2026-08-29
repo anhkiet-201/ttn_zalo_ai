@@ -1,3 +1,5 @@
+import { config } from "../config/index.js";
+
 /**
  * audioHelper.ts: Module hỗ trợ tải và chuẩn hóa tệp âm thanh (Voice Message) từ Zalo
  * Chuyển đổi thành Base64 kèm MIME Type chuẩn để đưa trực tiếp vào Gemini AI Model.
@@ -31,8 +33,7 @@ export async function downloadAudioAsBase64(
     try {
       const res = await fetch(trimmedUrl, {
         headers: {
-          "User-Agent":
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+          "User-Agent": config.userAgent,
           Accept: "audio/*,*/*;q=0.8",
         },
         signal: AbortSignal.timeout(45000),
