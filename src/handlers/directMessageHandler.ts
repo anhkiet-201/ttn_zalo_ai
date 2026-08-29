@@ -327,7 +327,6 @@ export class DirectMessageHandler {
 
     // 5. Gom nội dung text có timestamp và ngữ cảnh quote
     const textLines: string[] = [];
-    const allQuotedImageUrls: string[] = [];
     let lastQuote: string | undefined;
     let lastQuoteSender: string | undefined;
 
@@ -337,7 +336,7 @@ export class DirectMessageHandler {
         const quoteMsgType = msg.quoteData?.msgType || msg.quoteMsgType;
         const quoteTs = msg.quoteData?.timestamp || msg.quoteTimestamp;
 
-        // Tra cứu tin nhắn gốc được trích dẫn trong database để khôi phục description và ảnh gốc
+        // Tra cứu tin nhắn gốc được trích dẫn trong database để khôi phục description
         const quotedMsg = this.chatHistoryRepo.findQuotedMessage(
           batch.threadId,
           msg.quoteData?.msgId || msg.quoteMsgId,
@@ -353,24 +352,6 @@ export class DirectMessageHandler {
             msg.quoteText = quotedMsg.content.trim();
           } else if (quotedMsg.mediaUrls?.[0]?.description) {
             msg.quoteText = quotedMsg.mediaUrls[0].description;
-          }
-
-          if (quotedMsg.mediaType === "photo" && quotedMsg.mediaUrls) {
-            for (const item of quotedMsg.mediaUrls) {
-              if (item.url && !allQuotedImageUrls.includes(item.url)) {
-                allQuotedImageUrls.push(item.url);
-              }
-            }
-          }
-        }
-
-        // Gom thêm URL ảnh nếu được trích xuất trực tiếp từ payload quote (attach)
-        const directMedia = msg.quotedMediaUrls || msg.quoteData?.quotedMediaUrls;
-        if (directMedia && directMedia.length > 0) {
-          for (const item of directMedia) {
-            if (item.url && !allQuotedImageUrls.includes(item.url)) {
-              allQuotedImageUrls.push(item.url);
-            }
           }
         }
       }
@@ -412,7 +393,7 @@ export class DirectMessageHandler {
 
     console.log(`📥 [DM: "${batch.senderName}"] ${formattedText.length > 100 ? formattedText.slice(0, 100) + "..." : formattedText}`);
 
-    // 6. Gọi AI generateReply — truyền đầy đủ description, ảnh kèm theo và ảnh trích dẫn (Quoted Images)
+    // 6. Gọi AI generateReply — truyền đầy đủ description văn bản và chỉ gửi ảnh mới đính kèm (nếu có)
     try {
       const aiReply = await this.aiService.generateReply(
         batch.threadId,
@@ -424,7 +405,6 @@ export class DirectMessageHandler {
           quoteContext: lastQuote,
           quoteSenderName: lastQuoteSender,
           imageUrls: allImageUrls.length > 0 ? allImageUrls : undefined,
-          quotedImageUrls: allQuotedImageUrls.length > 0 ? allQuotedImageUrls : undefined,
           userContextText,
           onToolCall: async (toolName, args) => {
             const res = await this.toolExecutor.execute(toolName, args, {

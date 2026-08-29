@@ -136,31 +136,39 @@ export class ReplyService {
               : `[${timeStr}] [Candidate: ${resolvedName}]`
             : `[${timeStr}] [Recruiter / Bot]`;
 
-        let msgBody = rec.content;
+        let msgBody = rec.content || "";
 
-        // Nếu msgBody rỗng, kiểm tra xem có media không và trích xuất description
-        if (!msgBody || !msgBody.trim()) {
-          if (rec.mediaUrls && rec.mediaUrls.length > 0) {
-            const firstDesc = rec.mediaUrls[0]?.description;
-            if (firstDesc) {
-              msgBody = firstDesc;
-            } else if (rec.mediaType === "photo") {
-              msgBody = `[Attached Images (${rec.mediaUrls.length} photos)]`;
-            } else if (rec.mediaType === "voice") {
-              msgBody = `[Voice Message Audio]`;
-            } else if (rec.mediaType === "sticker") {
-              msgBody = `[Sticker]`;
+        // Trích xuất đầy đủ mô tả của từng media đính kèm trong tin nhắn lịch sử
+        const mediaDescriptions: string[] = [];
+        if (rec.mediaUrls && rec.mediaUrls.length > 0) {
+          rec.mediaUrls.forEach((m, idx) => {
+            if (m.description && m.description.trim()) {
+              const desc = m.description.trim();
+              mediaDescriptions.push(
+                rec.mediaUrls!.length > 1
+                  ? `[Media #${idx + 1} Description]: ${desc}`
+                  : `[Media Description]: ${desc}`
+              );
             }
-          }
+          });
         }
 
-        // Bổ sung mô tả chi tiết nếu có mediaUrls chứa description chưa nằm trong msgBody
-        if (rec.mediaUrls && rec.mediaUrls.length > 0) {
-          const descriptions = rec.mediaUrls
-            .map((m) => m.description)
-            .filter((d): d is string => Boolean(d && d.trim()));
-          if (descriptions.length > 0 && !descriptions.some((d) => msgBody.includes(d))) {
-            msgBody += ` (Details: ${descriptions.join("; ")})`;
+        // Nếu msgBody rỗng, sử dụng toàn bộ description của media làm nội dung chính
+        if (!msgBody.trim()) {
+          if (mediaDescriptions.length > 0) {
+            msgBody = mediaDescriptions.join("\n");
+          } else if (rec.mediaType === "photo") {
+            msgBody = `[Photo Message: ${rec.mediaUrls?.length || 1} image(s)]`;
+          } else if (rec.mediaType === "voice") {
+            msgBody = `[Voice Message Audio]`;
+          } else if (rec.mediaType === "sticker") {
+            msgBody = `[Sticker]`;
+          }
+        } else if (mediaDescriptions.length > 0) {
+          // Bổ sung các description chưa có trong msgBody
+          const missingDescs = mediaDescriptions.filter((d) => !msgBody.includes(d));
+          if (missingDescs.length > 0) {
+            msgBody += `\n${missingDescs.join("\n")}`;
           }
         }
 
@@ -189,51 +197,27 @@ export class ReplyService {
       }
 
       const userParts: ChatMessagePart[] = [{ text: promptText }];
-      const quotedImageUrls = options?.quotedImageUrls || [];
 
-      // Tải song song tất cả các hình ảnh gửi kèm hoặc được trích dẫn (Quote) nếu có
-      if (imageUrls.length > 0 || quotedImageUrls.length > 0) {
-        if (imageUrls.length > 0) {
-          console.log(`🖼️ [ReplyService] Đang tải song song ${imageUrls.length} hình ảnh gửi kèm...`);
-          const downloadResults = await Promise.all(
-            imageUrls.map((url) => downloadImageAsBase64(url))
-          );
+      // Chỉ tải hình ảnh gửi kèm trực tiếp trong batch hiện tại (không tải lại ảnh cũ khi quote)
+      if (imageUrls.length > 0) {
+        console.log(`🖼️ [ReplyService] Đang tải song song ${imageUrls.length} hình ảnh gửi kèm...`);
+        const downloadResults = await Promise.all(
+          imageUrls.map((url) => downloadImageAsBase64(url))
+        );
 
-          downloadResults.forEach((imgData, idx) => {
-            if (imgData) {
-              userParts.push({
-                text: `[Attached Image #${idx + 1}]:`,
-              });
-              userParts.push({
-                inlineData: {
-                  mimeType: imgData.mimeType,
-                  data: imgData.data,
-                },
-              });
-            }
-          });
-        }
-
-        if (quotedImageUrls.length > 0) {
-          console.log(`🖼️ [ReplyService] Đang tải song song ${quotedImageUrls.length} hình ảnh được trích dẫn (Quote)...`);
-          const quotedDownloadResults = await Promise.all(
-            quotedImageUrls.map((url) => downloadImageAsBase64(url))
-          );
-
-          quotedDownloadResults.forEach((imgData, idx) => {
-            if (imgData) {
-              userParts.push({
-                text: `[Quoted Image via Reply #${idx + 1}]:`,
-              });
-              userParts.push({
-                inlineData: {
-                  mimeType: imgData.mimeType,
-                  data: imgData.data,
-                },
-              });
-            }
-          });
-        }
+        downloadResults.forEach((imgData, idx) => {
+          if (imgData) {
+            userParts.push({
+              text: `[Attached Image #${idx + 1}]:`,
+            });
+            userParts.push({
+              inlineData: {
+                mimeType: imgData.mimeType,
+                data: imgData.data,
+              },
+            });
+          }
+        });
       }
 
       const userContent: ChatContent = {
@@ -273,21 +257,49 @@ export class ReplyService {
           ),
         ]);
 
-      let response = await generateWithTimeout({
-        model: config.geminiModel,
-        contents,
-        config: {
-          systemInstruction: fullSystemInstruction,
-          tools: [{ functionDeclarations: recruitmentTools }],
-        },
-      });
+      let response: any;
+      try {
+        response = await generateWithTimeout({
+          model: config.geminiModel,
+          contents,
+          config: {
+            systemInstruction: fullSystemInstruction,
+            tools: [{ functionDeclarations: recruitmentTools }],
+          },
+        });
+      } catch (err: any) {
+        const errorMsg = String(err?.message || "");
+        const isImageError =
+          (err?.status === 400 || errorMsg.includes("INVALID_ARGUMENT") || errorMsg.includes("image")) &&
+          imageUrls.length > 0;
+
+        if (isImageError) {
+          console.warn("⚠️ [ReplyService] Gemini gặp lỗi decode ảnh (INVALID_ARGUMENT / Link hết hạn). Đang tự động thử lại bằng Text/Description...", errorMsg);
+          // Loại bỏ các inlineData ảnh bị lỗi, giữ lại text prompt và history
+          const strippedContents: Content[] = contents.map((c) => ({
+            role: c.role,
+            parts: (c.parts || []).filter((p: any) => !p.inlineData),
+          }));
+
+          response = await generateWithTimeout({
+            model: config.geminiModel,
+            contents: strippedContents,
+            config: {
+              systemInstruction: fullSystemInstruction,
+              tools: [{ functionDeclarations: recruitmentTools }],
+            },
+          });
+        } else {
+          throw err;
+        }
+      }
 
       // 5. Vòng lặp xử lý Function Calls khi AI quyết định gọi Tool
       let turns = 0;
       while (response.functionCalls && response.functionCalls.length > 0 && turns < 3) {
         turns++;
         const functionCalls = response.functionCalls;
-        const callsSummary = functionCalls.map(c => `${c.name}(${JSON.stringify(c.args)})`).join(", ");
+        const callsSummary = functionCalls.map((c: any) => `${c.name}(${JSON.stringify(c.args)})`).join(", ");
         console.log(`🛠️ [Tool Call] ${callsSummary}`);
 
         const modelContent = response.candidates?.[0]?.content;

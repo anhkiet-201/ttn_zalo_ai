@@ -39,7 +39,6 @@ export interface GenerateReplyOptions {
   quoteContext?: string;
   quoteSenderName?: string;
   imageUrls?: string[];
-  quotedImageUrls?: string[];
   userContextText?: string;
   onToolCall?: ToolExecutionHandler;
 }
