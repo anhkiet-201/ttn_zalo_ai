@@ -3,13 +3,14 @@ import { type ZaloService } from "../services/zaloService.js";
 import { type AIService } from "../services/aiService.js";
 import { ThreadMetadataRepository } from "../database/index.js";
 import { type RAGService } from "../services/ragService.js";
+import { type HRNotifier } from "../services/hrNotifier.js";
 import { GroupMessageBatcher } from "./groupMessageBatcher.js";
 import { type GroupMessageBatch } from "./groupMessageBatcher.js";
 import { config } from "../config/index.js";
 
 /**
  * GroupMessageHandler: Chuyên trách xử lý tin nhắn từ các nhóm chat Zalo.
- * SRP: Debounce gom batch tin nhắn nhóm → gọi AI analyzeGroupBatch → cập nhật RAG.
+ * SRP: Debounce gom batch tin nhắn nhóm → gọi AI analyzeGroupBatch → cập nhật RAG → thông báo HR.
  * Không xử lý DM ứng viên cá nhân, không gọi Tool Executor.
  */
 export class GroupMessageHandler {
@@ -19,7 +20,8 @@ export class GroupMessageHandler {
     private readonly zaloService: ZaloService,
     private readonly aiService: AIService,
     private readonly ragService: RAGService,
-    private readonly threadMetaRepo: ThreadMetadataRepository
+    private readonly threadMetaRepo: ThreadMetadataRepository,
+    private readonly hrNotifier?: HRNotifier
   ) {
     this.groupBatcher = new GroupMessageBatcher(
       async (batch) => this.processGroupBatch(batch),
@@ -79,7 +81,8 @@ export class GroupMessageHandler {
     const hasUpdated = await this.aiService.analyzeGroupBatch(
       batch.groupName,
       batch.messages,
-      this.ragService
+      this.ragService,
+      this.hrNotifier
     );
 
     // Nếu RAG được cập nhật thành công → thả tim xác nhận

@@ -1,6 +1,7 @@
 import { GoogleGenAI, type Content, type Part } from "@google/genai";
 import { config } from "../config/index.js";
 import { type RAGService, type RagUpdateArgs } from "./ragService.js";
+import { type HRNotifier } from "./hrNotifier.js";
 import { type GroupQueuedMessage } from "../handlers/groupMessageBatcher.js";
 import {
   type RagUpdateReport,
@@ -18,11 +19,13 @@ export class GroupAnalysisService {
   /**
    * Phân tích batch tin nhắn nhóm bằng Gemini Tool Calling.
    * Nếu AI phát hiện thông tin nghiệp vụ → fire tool call "update_rag" → ragService.executeRagUpdate().
+   * Tự động gửi thông báo chi tiết sang HR_RECIPIENT_ID qua hrNotifier.
    */
   public async analyzeGroupBatch(
     groupName: string,
     messages: GroupQueuedMessage[],
-    ragService: RAGService
+    ragService: RAGService,
+    hrNotifier?: HRNotifier
   ): Promise<boolean> {
     if (!this.ai) {
       console.warn("⚠️ [GroupAnalysisService] Gemini AI chưa được cấu hình, bỏ qua phân tích nhóm.");
@@ -100,6 +103,31 @@ export class GroupAnalysisService {
           const result = ragService.executeRagUpdate(args);
           if (result.success) {
             updatedCount++;
+
+            // Gửi thông báo tự động tới HR_RECIPIENT_ID
+            if (hrNotifier) {
+              const currentEntry = result.entry || args.newEntry || args.updatedFields || {};
+              const title =
+                (currentEntry["title"] as string) ||
+                (args.newEntry?.title as string) ||
+                (args.updatedFields?.title as string) ||
+                args.targetId ||
+                "Không rõ";
+
+              const targetId = (currentEntry["id"] as string) || args.targetId;
+
+              await hrNotifier.notifyRagUpdate({
+                groupName,
+                action: args.action,
+                targetFile: `${args.targetFile}.json`,
+                targetId,
+                title,
+                reason: args.reason,
+                message: result.message,
+                updatedFields: args.updatedFields,
+                newEntry: args.newEntry,
+              });
+            }
           }
 
           functionResponseParts.push({

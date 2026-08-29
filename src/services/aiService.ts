@@ -5,6 +5,7 @@ import { ChatHistoryRepository } from "../database/index.js";
 import { CCCDService } from "./cccdService.js";
 import { ReplyService } from "./replyService.js";
 import { GroupAnalysisService } from "./groupAnalysisService.js";
+import { type HRNotifier } from "./hrNotifier.js";
 import { type GroupQueuedMessage } from "../handlers/groupMessageBatcher.js";
 import {
   type CCCDAnalysisResult,
@@ -102,9 +103,10 @@ export class AIService {
   public async analyzeGroupBatch(
     groupName: string,
     messages: GroupQueuedMessage[],
-    ragService: RAGService
+    ragService: RAGService,
+    hrNotifier?: HRNotifier
   ): Promise<boolean> {
-    return this.groupAnalysisService.analyzeGroupBatch(groupName, messages, ragService);
+    return this.groupAnalysisService.analyzeGroupBatch(groupName, messages, ragService, hrNotifier);
   }
 
   /** Delegate to GroupAnalysisService */

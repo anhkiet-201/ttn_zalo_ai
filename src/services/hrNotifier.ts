@@ -204,4 +204,76 @@ export class HRNotifier {
       console.error("❌ Lỗi khi gửi cảnh báo lỗi AI tới HR:", err);
     }
   }
+
+  /**
+   * Gửi thông báo khi cơ sở dữ liệu RAG được tự động cập nhật từ phân tích tin nhắn nhóm
+   */
+  public async notifyRagUpdate(params: {
+    groupName: string;
+    action: string;
+    targetFile: string;
+    targetId?: string;
+    title?: string;
+    reason?: string;
+    message?: string;
+    updatedFields?: Record<string, any>;
+    newEntry?: Record<string, any>;
+  }): Promise<void> {
+    const { groupName, action, targetFile, targetId, title, reason, message, updatedFields, newEntry } = params;
+    const actionText = action === "create_new" ? "TẠO MỚI ENTRY" : "CẬP NHẬT ENTRY";
+
+    const detailLines: string[] = [];
+    if (updatedFields) {
+      if (updatedFields.vacancies !== undefined) {
+        detailLines.push(`• Chỉ tiêu tuyển: ${updatedFields.vacancies === 0 ? "TẠM NGƯNG TUYỂN" : `${updatedFields.vacancies} người`}`);
+      }
+      if (updatedFields.interview_schedule) {
+        detailLines.push(`• Lịch hẹn: ${updatedFields.interview_schedule}`);
+      }
+      if (updatedFields.map_url) {
+        detailLines.push(`• Link Maps: ${updatedFields.map_url}`);
+      }
+      if (updatedFields.location) {
+        detailLines.push(`• Địa điểm: ${updatedFields.location}`);
+      }
+    } else if (newEntry) {
+      if (newEntry.vacancies !== undefined) {
+        detailLines.push(`• Chỉ tiêu tuyển: ${newEntry.vacancies} người`);
+      }
+      if (newEntry.interview_schedule) {
+        detailLines.push(`• Lịch hẹn: ${newEntry.interview_schedule}`);
+      }
+      if (newEntry.map_url) {
+        detailLines.push(`• Link Maps: ${newEntry.map_url}`);
+      }
+      if (newEntry.location) {
+        detailLines.push(`• Địa điểm: ${newEntry.location}`);
+      }
+    }
+
+    const report = `📢 [TỰ ĐỘNG CẬP NHẬT RAG TỪ NHÓM]
+👥 Nhóm nguồn: ${groupName}
+🔄 Thao tác: ${actionText}
+📁 File: ${targetFile} ${targetId ? `(ID: ${targetId})` : ""}
+🏷️ Tiêu đề: ${title || "Chưa rõ"}
+📝 Lý do: ${reason || message || "Phân tích tự động từ tin nhắn nhóm"}
+${detailLines.length > 0 ? `\n📊 Chi tiết cập nhật:\n${detailLines.join("\n")}\n` : ""}
+⏱️ Thời gian: ${new Date().toLocaleString("vi-VN")}`;
+
+    try {
+      await this.zaloService.sendMessage(
+        this.hrRecipientId,
+        report,
+        config.hrThreadType
+      );
+      console.log(
+        `📤 [HR Notifier] Đã gửi thông báo cập nhật RAG từ nhóm [${groupName}] tới HR (${this.hrRecipientId}) thành công!`
+      );
+    } catch (err) {
+      console.error(
+        `❌ Lỗi gửi thông báo cập nhật RAG tới HR (${this.hrRecipientId}):`,
+        err
+      );
+    }
+  }
 }

@@ -68,7 +68,8 @@ export class MessageHandler {
       this.zaloService,
       this.aiService,
       ragService,
-      this.threadMetaRepo
+      this.threadMetaRepo,
+      resolvedHRNotifier
     );
   }
 
