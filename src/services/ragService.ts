@@ -296,4 +296,136 @@ export class RAGService {
 
     return { success: false, message: `action không hợp lệ: ${args.action}` };
   }
+
+  /**
+   * Xóa một hoặc nhiều mục trong kho RAG theo ID hoặc từ khóa tìm kiếm (tên công ty, aliases)
+   */
+  public deleteRagEntry(params: {
+    targetFile?: "job_rag" | "policy_rag" | "location_rag" | "all" | string;
+    targetId?: string;
+    keyword?: string;
+    reason?: string;
+  }): {
+    success: boolean;
+    message: string;
+    deletedItems: Array<{
+      targetFile: string;
+      id: string;
+      title: string;
+      aliases?: string[];
+    }>;
+  } {
+    const { targetFile = "all", targetId, keyword, reason } = params;
+    const filesToSearch =
+      targetFile === "all" || !targetFile
+        ? this.RAG_FILES
+        : [targetFile.replace(/\.json$/i, "")];
+
+    const cleanKeyword = (keyword || "").trim();
+    const normKeyword = cleanKeyword ? normalizeText(cleanKeyword) : "";
+    const cleanTargetId = (targetId || "").trim().toLowerCase();
+
+    if (!cleanKeyword && !cleanTargetId) {
+      return {
+        success: false,
+        message: "Vui lòng cung cấp ID hoặc từ khóa tên công ty/chính sách cần xóa.",
+        deletedItems: [],
+      };
+    }
+
+    const deletedItems: Array<{
+      targetFile: string;
+      id: string;
+      title: string;
+      aliases?: string[];
+    }> = [];
+
+    for (const rFile of filesToSearch) {
+      const filePath = path.join(this.baseDir, "data", `${rFile}.json`);
+      if (!fs.existsSync(filePath)) continue;
+
+      let data: Record<string, unknown>[];
+      try {
+        data = JSON.parse(fs.readFileSync(filePath, "utf-8"));
+      } catch {
+        continue;
+      }
+
+      const keptEntries: Record<string, unknown>[] = [];
+      let fileModified = false;
+
+      for (const entry of data) {
+        const entryId = String(entry["id"] || "").toLowerCase();
+        const entryTitle = String(entry["title"] || "");
+        const normTitle = normalizeText(entryTitle);
+        const aliases = Array.isArray(entry["aliases"]) ? (entry["aliases"] as string[]) : [];
+
+        let isMatch = false;
+
+        // 1. So khớp theo targetId hoặc ID
+        if (cleanTargetId && (entryId === cleanTargetId || entryId === cleanKeyword)) {
+          isMatch = true;
+        }
+
+        // 2. So khớp theo keyword tên công ty / title
+        if (!isMatch && normKeyword) {
+          if (entryId === normKeyword) {
+            isMatch = true;
+          } else if (normTitle && (normTitle === normKeyword || normTitle.includes(normKeyword) || normKeyword.includes(normTitle))) {
+            isMatch = true;
+          } else {
+            // So khớp theo danh sách aliases
+            for (const a of aliases) {
+              const normA = normalizeText(String(a));
+              if (normA && (normA === normKeyword || normKeyword.includes(normA) || normA.includes(normKeyword))) {
+                isMatch = true;
+                break;
+              }
+            }
+          }
+        }
+
+        if (isMatch) {
+          fileModified = true;
+          deletedItems.push({
+            targetFile: `${rFile}.json`,
+            id: String(entry["id"] || "N/A"),
+            title: entryTitle || String(entry["id"] || "Không rõ"),
+            aliases,
+          });
+        } else {
+          keptEntries.push(entry);
+        }
+      }
+
+      if (fileModified) {
+        try {
+          fs.writeFileSync(filePath, JSON.stringify(keptEntries, null, 2), "utf-8");
+          this.cachedContext = null;
+          if (rFile === "job_rag") {
+            this.cachedJobRag = null;
+          }
+        } catch (err) {
+          console.error(`❌ Lỗi ghi file sau khi xóa trong ${rFile}.json:`, err);
+        }
+      }
+    }
+
+    if (deletedItems.length > 0) {
+      const summaryTitles = deletedItems.map((it) => `"${it.title}" (${it.id})`).join(", ");
+      const msg = `🗑️ [RAG Delete] Đã xóa ${deletedItems.length} mục: ${summaryTitles} (${reason || "Yêu cầu xóa từ HR"})`;
+      console.log(msg);
+      return {
+        success: true,
+        message: msg,
+        deletedItems,
+      };
+    }
+
+    return {
+      success: false,
+      message: `Không tìm thấy mục nào khớp với từ khóa "${keyword || targetId}".`,
+      deletedItems: [],
+    };
+  }
 }

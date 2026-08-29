@@ -95,6 +95,31 @@ export class GroupAnalysisService {
 
         const functionResponseParts: Part[] = [];
         for (const call of functionCalls) {
+          if (call.name === "delete_rag") {
+            const args = (call.args as unknown) as {
+              targetFile?: string;
+              targetId?: string;
+              keyword?: string;
+              reason?: string;
+            };
+            const deleteRes = ragService.deleteRagEntry(args);
+            if (deleteRes.success) {
+              updatedCount += deleteRes.deletedItems.length;
+            }
+
+            functionResponseParts.push({
+              functionResponse: {
+                name: "delete_rag",
+                response: {
+                  success: deleteRes.success,
+                  message: deleteRes.message,
+                  deletedItems: deleteRes.deletedItems,
+                },
+              },
+            });
+            continue;
+          }
+
           if (call.name !== "update_rag") continue;
 
           const args = (call.args as unknown) as RagUpdateArgs;
@@ -232,6 +257,42 @@ export class GroupAnalysisService {
 
         const functionResponseParts: Part[] = [];
         for (const call of functionCalls) {
+          if (call.name === "delete_rag") {
+            const args = (call.args as unknown) as {
+              targetFile?: string;
+              targetId?: string;
+              keyword?: string;
+              reason?: string;
+            };
+            const deleteRes = ragService.deleteRagEntry(args);
+            if (deleteRes.success) {
+              for (const it of deleteRes.deletedItems) {
+                items.push({
+                  targetFile: it.targetFile,
+                  action: "update_existing",
+                  targetId: it.id,
+                  title: it.title,
+                  reason: args.reason,
+                  summary: `Đã xóa "${it.title}" (ID: ${it.id})`,
+                  success: true,
+                  message: deleteRes.message,
+                });
+              }
+            }
+
+            functionResponseParts.push({
+              functionResponse: {
+                name: "delete_rag",
+                response: {
+                  success: deleteRes.success,
+                  message: deleteRes.message,
+                  deletedItems: deleteRes.deletedItems,
+                },
+              },
+            });
+            continue;
+          }
+
           if (call.name !== "update_rag") continue;
 
           const args = (call.args as unknown) as RagUpdateArgs;

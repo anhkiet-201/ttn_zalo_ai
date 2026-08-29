@@ -247,4 +247,32 @@ export const groupRagTools: FunctionDeclaration[] = [
       required: ["action", "targetFile", "reason"],
     },
   },
+  {
+    name: "delete_rag",
+    description:
+      "GỌI TOOL NÀY khi người dùng hoặc HR yêu cầu xóa bỏ hoàn toàn một công ty, chính sách, hoặc địa điểm khỏi cơ sở dữ liệu RAG.",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        targetFile: {
+          type: Type.STRING,
+          description:
+            'File RAG: "job_rag" (công ty tuyển dụng), "policy_rag" (chính sách), "location_rag" (địa điểm), hoặc "all" để tìm và xóa trong tất cả file.',
+        },
+        targetId: {
+          type: Type.STRING,
+          description: "ID của entry cần xóa nếu biết rõ (ví dụ: 'job_05', 'job_13').",
+        },
+        keyword: {
+          type: Type.STRING,
+          description: "Tên công ty hoặc từ khóa cần xóa (ví dụ: 'cmt', 'sanaky', 'chervon').",
+        },
+        reason: {
+          type: Type.STRING,
+          description: "Lý do xóa bỏ.",
+        },
+      },
+      required: ["reason"],
+    },
+  },
 ];

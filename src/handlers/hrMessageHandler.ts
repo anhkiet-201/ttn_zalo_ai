@@ -107,6 +107,35 @@ export class HRMessageHandler {
 
     const ragContent = rawText.replace(/^\/?rag\s*/i, "").trim();
 
+    // 1. Xử lý lệnh XÓA RAG trực tiếp (vd: /rag xóa cmt, /rag xoa sanaky, /rag delete job_05)
+    const deleteMatch = ragContent.match(/^(?:xóa|xoa|delete|del|remove)\s+(.+)$/i);
+    if (deleteMatch) {
+      const keyword = deleteMatch[1].trim();
+      console.log(`📥 [HR Admin] Nhận lệnh xóa RAG với từ khóa: "${keyword}"`);
+      const deleteResult = this.ragService.deleteRagEntry({ keyword, targetFile: "all" });
+
+      if (deleteResult.success && deleteResult.deletedItems.length > 0) {
+        let replyText = `🗑️ [ĐÃ XÓA DỮ LIỆU RAG THÀNH CÔNG]\n━━━━━━━━━━━━━━━━━━━━\nĐã xóa ${deleteResult.deletedItems.length} mục khỏi cơ sở dữ liệu:\n\n`;
+        deleteResult.deletedItems.forEach((it, idx) => {
+          replyText += `${idx + 1}. 🏢 ${it.title.toUpperCase()} (ID: ${it.id})\n`;
+          replyText += `   📁 File: ${it.targetFile}\n`;
+          if (it.aliases && it.aliases.length > 0) {
+            replyText += `   🏷️ Tên khác: ${it.aliases.join(", ")}\n`;
+          }
+          replyText += "\n";
+        });
+        replyText += `👉 Bot sẽ không còn tư vấn hoặc hiển thị các mục này cho ứng viên nữa!`;
+        await this.zaloService.replyMessage(parsedMessage.raw, replyText.trim());
+      } else {
+        await this.zaloService.replyMessage(
+          parsedMessage.raw,
+          `⚠️ [KHÔNG TÌM THẤY DỮ LIỆU ĐỂ XÓA]\n━━━━━━━━━━━━━━━━━━━━\nKhông tìm thấy công ty hay chính sách nào khớp với từ khóa: "${keyword}"\n\n👉 Gõ "/rag" để xem danh sách toàn bộ ID và tên công ty hiện có.`
+        );
+      }
+      return true;
+    }
+
+    // 2. Xử lý cập nhật/tạo mới RAG qua văn bản tự nhiên
     if (ragContent.length > 5 && ragContent.toLowerCase() !== "ds") {
       console.log(`📥 [HR Admin] Nhận yêu cầu cập nhật RAG (${ragContent.length} ký tự)...`);
       const report = await this.aiService.updateRagFromText(ragContent, this.ragService);
@@ -184,7 +213,9 @@ export class HRMessageHandler {
     const helpText =
       `👑 MENU LỆNH DÀNH CHO HR QUẢN TRỊ VIÊN:\n\n` +
       `• ds / /ds: Xem danh sách ứng viên mới nhất\n` +
-      `• rag / /rag: Xem/cập nhật kho dữ liệu tuyển dụng RAG\n` +
+      `• rag / /rag: Xem danh sách công ty đang tuyển\n` +
+      `• /rag <bài viết>: Cập nhật / tạo mới công ty từ bài viết\n` +
+      `• /rag xóa <tên/id>: Xóa công ty khỏi cơ sở dữ liệu (VD: /rag xóa cmt)\n` +
       `• ping: Kiểm tra trạng thái hoạt động của bot\n` +
       `• help: Xem hướng dẫn các câu lệnh quản trị`;
     await this.zaloService.replyMessage(parsedMessage.raw, helpText);
