@@ -81,7 +81,60 @@ async function runTest() {
   if (!replyInDb?.quoteText?.includes("079123456789")) {
     throw new Error(`❌ quoteText trong tin nhắn reply không chứa description CCCD!`);
   }
-  console.log(`✅ 5. Tin nhắn reply lưu trong DB có quoteText chi tiết: "${replyInDb.quoteText}"`);
+  // 6. Test kịch bản thực tế: Người dùng gửi ảnh -> chat text nhiều câu -> rồi bấm reply vào ảnh cũ
+  const factoryPhotoId = "msg_photo_factory_003";
+  const photoTs = Date.now() - 50000;
+  repo.addMessage({
+    id: factoryPhotoId,
+    threadId,
+    senderId: candidateId,
+    senderName: "Anh Kiệt",
+    role: "user",
+    content: "[Image Content]: Ảnh chụp ngoại cảnh công ty Minh Nam tại KCN VSIP 2A",
+    mediaType: "photo",
+    mediaUrls: [{ url: "https://zalo.me/photos/minh_nam.jpg", description: "[Image #1]: Ảnh chụp Minh Nam" }],
+    timestamp: photoTs,
+  });
+
+  // Tin nhắn văn bản sau đó 1
+  repo.addMessage({
+    id: "msg_text_004",
+    threadId,
+    senderId: candidateId,
+    senderName: "Anh Kiệt",
+    role: "user",
+    content: "Tuần sau có tuyển cty này ko",
+    timestamp: photoTs + 10000,
+  });
+
+  // Tin nhắn văn bản sau đó 2
+  repo.addMessage({
+    id: "msg_text_005",
+    threadId,
+    senderId: candidateId,
+    senderName: "Anh Kiệt",
+    role: "user",
+    content: "Sowin thì sao",
+    timestamp: photoTs + 25000,
+  });
+
+  // Người dùng reply vào ảnh cũ với nội dung "Muốn làm cty này cơ"
+  const replyTs = photoTs + 40000;
+  const replyPhotoMsgId = "msg_reply_photo_006";
+  const foundQuotedPhoto = repo.findQuotedMessage(
+    threadId,
+    undefined, // Không có ID trực tiếp từ rawQuote
+    candidateId,
+    undefined,
+    replyPhotoMsgId,
+    "chat.photo",
+    replyTs
+  );
+
+  if (!foundQuotedPhoto || foundQuotedPhoto.id !== factoryPhotoId || !foundQuotedPhoto.content.includes("Minh Nam")) {
+    throw new Error(`❌ findQuotedMessage không tìm được ảnh Minh Nam! Nhận: ${foundQuotedPhoto?.content}`);
+  }
+  console.log(`✅ 6. findQuotedMessage tìm chính xác ảnh cũ "Minh Nam" sau 2 lượt chat text.`);
 
   console.log("\n=======================================================================");
   console.log("🎉 TẤT CẢ CÁC BÀI TEST DESCRIPTION MEDIA & QUOTE REPLY ĐỀU ĐẠT 100%!");

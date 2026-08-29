@@ -66,6 +66,8 @@ export interface QuoteData {
   senderId?: string;
   senderName?: string;
   msgType?: string;
+  timestamp?: number;
+  quotedMediaUrls?: MediaItem[];
 }
 
 export type MediaType = "photo" | "sticker" | "voice" | "file" | null;
@@ -97,6 +99,8 @@ export interface ParsedMessage {
   quoteSenderName?: string;
   quoteSenderId?: string;
   quoteMsgType?: string;
+  quoteTimestamp?: number;
+  quotedMediaUrls?: MediaItem[];
   quoteData?: QuoteData;
   command?: string;
   args: string[];

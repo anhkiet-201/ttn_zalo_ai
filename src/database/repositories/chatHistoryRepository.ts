@@ -233,27 +233,26 @@ export class ChatHistoryRepository {
 
   /**
    * Tìm tin nhắn được trích dẫn (Quote) trong cùng một thread:
-   * 1. Tìm theo msgId / cliMsgId / globalMsgId
-   * 2. Nếu không thấy ID, tìm tin nhắn gần nhất của người được trích dẫn (quoteOwnerId)
+   * 1. Tìm theo quoteMsgId (id chính xác hoặc chứa ID)
+   * 2. Tìm theo quoteTs (timestamp của tin nhắn gốc)
+   * 3. Nếu là Quote Ảnh / Voice / Sticker: Tìm tin nhắn media tương ứng gần nhất trước thời điểm Reply
+   * 4. Fallback: Lấy tin nhắn ngay trước đó trong thread (loại trừ chính tin nhắn Reply)
    */
   public findQuotedMessage(
     threadId: string,
     quoteMsgId?: string,
     quoteOwnerId?: string,
-    quoteTs?: number
+    quoteTs?: number,
+    currentMsgId?: string,
+    quoteMsgType?: string,
+    currentMsgTs?: number
   ): ChatMessageRecord | null {
     if (!threadId) return null;
 
-    // 1. Thử tìm bằng quoteMsgId nếu có
-    if (quoteMsgId) {
-      const msg = this.getMessageById(quoteMsgId);
-      if (msg && msg.threadId === threadId) {
-        return msg;
-      }
-    }
+    const maxTs = currentMsgTs || Date.now();
 
-    // 2. Thử tìm tin nhắn theo senderId và timestamp xấp xỉ
-    if (quoteOwnerId && quoteTs) {
+    // 1. Thử tìm chính xác bằng quoteMsgId nếu có
+    if (quoteMsgId) {
       try {
         const stmt = this.db.connection.prepare(`
           SELECT 
@@ -263,17 +262,42 @@ export class ChatHistoryRepository {
             quote_sender_name as quoteSenderName, quote_sender_id as quoteSenderId,
             is_group as isGroup, timestamp
           FROM chat_messages
-          WHERE thread_id = ? AND sender_id = ? AND abs(timestamp - ?) < 30000
+          WHERE thread_id = ? AND (id = ? OR id LIKE ?)
+          LIMIT 1
+        `);
+        const row = stmt.get(threadId, quoteMsgId, `%${quoteMsgId}%`) as any;
+        if (row && (!currentMsgId || row.id !== currentMsgId)) {
+          return this.mapMessageRow(row);
+        }
+      } catch {}
+    }
+
+    // 2. Thử tìm theo timestamp của tin nhắn gốc (quoteTs) nếu có
+    if (quoteTs && quoteTs > 0) {
+      try {
+        const stmt = this.db.connection.prepare(`
+          SELECT 
+            id, thread_id as threadId, sender_id as senderId, sender_name as senderName,
+            role, content, media_type as mediaType, media_urls as mediaUrls,
+            has_quote as hasQuote, quote_text as quoteText,
+            quote_sender_name as quoteSenderName, quote_sender_id as quoteSenderId,
+            is_group as isGroup, timestamp
+          FROM chat_messages
+          WHERE thread_id = ? AND abs(timestamp - ?) < 5000 AND (id != ? OR ? IS NULL)
           ORDER BY abs(timestamp - ?) ASC
           LIMIT 1
         `);
-        const row = stmt.get(threadId, quoteOwnerId, quoteTs, quoteTs) as any;
+        const row = stmt.get(threadId, quoteTs, currentMsgId || "", currentMsgId || null, quoteTs) as any;
         if (row) return this.mapMessageRow(row);
       } catch {}
     }
 
-    // 3. Fallback: Lấy tin nhắn gần nhất của người gửi đó trong thread
-    if (quoteOwnerId) {
+    // 3. Nếu là trích dẫn Ảnh (quoteMsgType là photo) -> Tìm tin nhắn ảnh gần nhất trước đó
+    const isPhotoQuote =
+      quoteMsgType === "chat.photo" ||
+      quoteMsgType === "photo" ||
+      quoteMsgType === "image";
+    if (isPhotoQuote) {
       try {
         const stmt = this.db.connection.prepare(`
           SELECT 
@@ -283,14 +307,77 @@ export class ChatHistoryRepository {
             quote_sender_name as quoteSenderName, quote_sender_id as quoteSenderId,
             is_group as isGroup, timestamp
           FROM chat_messages
-          WHERE thread_id = ? AND sender_id = ?
+          WHERE thread_id = ? AND media_type = 'photo' AND timestamp <= ? AND (id != ? OR ? IS NULL)
           ORDER BY timestamp DESC
           LIMIT 1
         `);
-        const row = stmt.get(threadId, quoteOwnerId) as any;
+        const row = stmt.get(threadId, maxTs, currentMsgId || "", currentMsgId || null) as any;
         if (row) return this.mapMessageRow(row);
       } catch {}
     }
+
+    // 4. Nếu là trích dẫn Voice -> Tìm tin nhắn thoại gần nhất trước đó
+    const isVoiceQuote =
+      quoteMsgType === "chat.voice" ||
+      quoteMsgType === "chat.audio" ||
+      quoteMsgType === "voice";
+    if (isVoiceQuote) {
+      try {
+        const stmt = this.db.connection.prepare(`
+          SELECT 
+            id, thread_id as threadId, sender_id as senderId, sender_name as senderName,
+            role, content, media_type as mediaType, media_urls as mediaUrls,
+            has_quote as hasQuote, quote_text as quoteText,
+            quote_sender_name as quoteSenderName, quote_sender_id as quoteSenderId,
+            is_group as isGroup, timestamp
+          FROM chat_messages
+          WHERE thread_id = ? AND media_type = 'voice' AND timestamp <= ? AND (id != ? OR ? IS NULL)
+          ORDER BY timestamp DESC
+          LIMIT 1
+        `);
+        const row = stmt.get(threadId, maxTs, currentMsgId || "", currentMsgId || null) as any;
+        if (row) return this.mapMessageRow(row);
+      } catch {}
+    }
+
+    // 5. Nếu là trích dẫn Sticker -> Tìm tin nhắn nhãn dán gần nhất trước đó
+    const isStickerQuote = quoteMsgType === "chat.sticker" || quoteMsgType === "sticker";
+    if (isStickerQuote) {
+      try {
+        const stmt = this.db.connection.prepare(`
+          SELECT 
+            id, thread_id as threadId, sender_id as senderId, sender_name as senderName,
+            role, content, media_type as mediaType, media_urls as mediaUrls,
+            has_quote as hasQuote, quote_text as quoteText,
+            quote_sender_name as quoteSenderName, quote_sender_id as quoteSenderId,
+            is_group as isGroup, timestamp
+          FROM chat_messages
+          WHERE thread_id = ? AND media_type = 'sticker' AND timestamp <= ? AND (id != ? OR ? IS NULL)
+          ORDER BY timestamp DESC
+          LIMIT 1
+        `);
+        const row = stmt.get(threadId, maxTs, currentMsgId || "", currentMsgId || null) as any;
+        if (row) return this.mapMessageRow(row);
+      } catch {}
+    }
+
+    // 6. Fallback: Lấy tin nhắn TRƯỚC ĐÓ gần nhất trong thread (loại trừ tin nhắn hiện tại)
+    try {
+      const stmt = this.db.connection.prepare(`
+        SELECT 
+          id, thread_id as threadId, sender_id as senderId, sender_name as senderName,
+          role, content, media_type as mediaType, media_urls as mediaUrls,
+          has_quote as hasQuote, quote_text as quoteText,
+          quote_sender_name as quoteSenderName, quote_sender_id as quoteSenderId,
+          is_group as isGroup, timestamp
+        FROM chat_messages
+        WHERE thread_id = ? AND timestamp < ? AND (id != ? OR ? IS NULL)
+        ORDER BY timestamp DESC
+        LIMIT 1
+      `);
+      const row = stmt.get(threadId, maxTs, currentMsgId || "", currentMsgId || null) as any;
+      if (row) return this.mapMessageRow(row);
+    } catch {}
 
     return null;
   }

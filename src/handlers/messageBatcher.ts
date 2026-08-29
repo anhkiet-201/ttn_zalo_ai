@@ -2,6 +2,7 @@ import { type ParsedMessage, type MediaType, type MediaItem, ThreadType } from "
 import { config } from "../config/index.js";
 
 export interface QueuedMessage {
+  id?: string;
   text: string;
   mediaType?: MediaType;
   mediaUrls?: MediaItem[];
@@ -10,6 +11,9 @@ export interface QueuedMessage {
   quoteSenderName?: string;
   quoteSenderId?: string;
   quoteMsgId?: string;
+  quoteMsgType?: string;
+  quoteTimestamp?: number;
+  quotedMediaUrls?: MediaItem[];
   quoteData?: ParsedMessage["quoteData"];
   timestamp: number;
   rawMessage?: ParsedMessage["raw"];
@@ -82,6 +86,7 @@ export class MessageBatcher {
     }
 
     batch.messages.push({
+      id: parsedMessage.id,
       text: parsedMessage.text,
       mediaType: parsedMessage.mediaType,
       mediaUrls: parsedMessage.mediaUrls,
@@ -89,7 +94,10 @@ export class MessageBatcher {
       quoteText: parsedMessage.quoteText,
       quoteSenderName: parsedMessage.quoteSenderName,
       quoteSenderId: parsedMessage.quoteSenderId,
-      quoteMsgId: parsedMessage.quoteData?.msgId,
+      quoteMsgId: parsedMessage.quoteData?.msgId || parsedMessage.id,
+      quoteMsgType: parsedMessage.quoteMsgType || parsedMessage.quoteData?.msgType,
+      quoteTimestamp: parsedMessage.quoteTimestamp || parsedMessage.quoteData?.timestamp,
+      quotedMediaUrls: parsedMessage.quotedMediaUrls || parsedMessage.quoteData?.quotedMediaUrls,
       quoteData: parsedMessage.quoteData,
       timestamp: parsedMessage.timestamp,
       rawMessage: parsedMessage.raw,

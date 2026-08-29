@@ -333,11 +333,18 @@ export class DirectMessageHandler {
 
     for (const msg of batch.messages) {
       if (msg.hasQuote) {
+        const currentMsgId = String(msg.rawMessage?.data?.msgId || msg.rawMessage?.data?.cliMsgId || msg.id || "");
+        const quoteMsgType = msg.quoteData?.msgType || msg.quoteMsgType;
+        const quoteTs = msg.quoteData?.timestamp || msg.quoteTimestamp;
+
         // Tra cứu tin nhắn gốc được trích dẫn trong database để khôi phục description và ảnh gốc
         const quotedMsg = this.chatHistoryRepo.findQuotedMessage(
           batch.threadId,
-          msg.quoteData?.msgId,
+          msg.quoteData?.msgId || msg.quoteMsgId,
           msg.quoteSenderId,
+          quoteTs,
+          currentMsgId,
+          quoteMsgType,
           msg.timestamp
         );
 
@@ -353,6 +360,16 @@ export class DirectMessageHandler {
               if (item.url && !allQuotedImageUrls.includes(item.url)) {
                 allQuotedImageUrls.push(item.url);
               }
+            }
+          }
+        }
+
+        // Gom thêm URL ảnh nếu được trích xuất trực tiếp từ payload quote (attach)
+        const directMedia = msg.quotedMediaUrls || msg.quoteData?.quotedMediaUrls;
+        if (directMedia && directMedia.length > 0) {
+          for (const item of directMedia) {
+            if (item.url && !allQuotedImageUrls.includes(item.url)) {
+              allQuotedImageUrls.push(item.url);
             }
           }
         }

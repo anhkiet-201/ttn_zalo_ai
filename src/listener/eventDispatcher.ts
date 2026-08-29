@@ -355,14 +355,17 @@ export class EventDispatcher {
     let quoteSenderName: string | undefined = undefined;
     let quoteMsgType: string | undefined = undefined;
     let quoteMsgId: string | undefined = undefined;
+    let quoteTimestamp: number | undefined = undefined;
+    const quotedMediaUrls: MediaItem[] = [];
 
     if (hasQuote && rawQuote) {
       quoteMsgId =
-        String(rawQuote.globalMsgId || rawQuote.cliMsgId || rawQuote.msgId || "") ||
+        String(rawQuote.globalMsgId || rawQuote.cliMsgId || rawQuote.msgId || rawQuote.id || "") ||
         undefined;
       quoteText = typeof rawQuote.msg === "string" ? rawQuote.msg.trim() : undefined;
       quoteSenderId = rawQuote.ownerId ? String(rawQuote.ownerId) : undefined;
       quoteMsgType = rawQuote.msgType ? String(rawQuote.msgType) : undefined;
+      quoteTimestamp = Number(rawQuote.ts || rawQuote.timestamp) || undefined;
 
       if ((this.ownId && quoteSenderId === this.ownId) || quoteSenderId === "admin") {
         quoteSenderName = "Bot";
@@ -372,22 +375,38 @@ export class EventDispatcher {
         quoteSenderName = isGroup ? `Thành viên (${quoteSenderId})` : "Ứng viên";
       }
 
-      if (!quoteText && rawQuote.attach) {
+      if (rawQuote.attach) {
         try {
           const parsedAttach =
             typeof rawQuote.attach === "string"
               ? JSON.parse(rawQuote.attach)
               : rawQuote.attach;
-          if (parsedAttach?.description) {
-            quoteText = `[Hình ảnh: ${parsedAttach.description}]`;
-          } else if (parsedAttach?.title) {
-            quoteText = `[Hình ảnh: ${parsedAttach.title}]`;
+          if (Array.isArray(parsedAttach)) {
+            for (const item of parsedAttach) {
+              const u = item?.hdUrl || item?.normalUrl || item?.rawUrl || item?.url || item?.href || item?.thumb;
+              const d = item?.description || item?.title;
+              if (u) quotedMediaUrls.push({ url: u, description: d || undefined });
+            }
+          } else if (parsedAttach && typeof parsedAttach === "object") {
+            const u = parsedAttach?.hdUrl || parsedAttach?.normalUrl || parsedAttach?.rawUrl || parsedAttach?.url || parsedAttach?.href || parsedAttach?.thumb;
+            const d = parsedAttach?.description || parsedAttach?.title;
+            if (u) quotedMediaUrls.push({ url: u, description: d || undefined });
+            if (d && !quoteText) {
+              quoteText = `[Hình ảnh: ${d}]`;
+            }
           }
         } catch {}
       }
 
+      if (rawQuote.href || rawQuote.url || rawQuote.hdUrl) {
+        const u = rawQuote.hdUrl || rawQuote.normalUrl || rawQuote.rawUrl || rawQuote.url || rawQuote.href;
+        if (u && !quotedMediaUrls.some((m) => m.url === u)) {
+          quotedMediaUrls.push({ url: u, description: quoteText });
+        }
+      }
+
       if (!quoteText) {
-        if (quoteMsgType === "chat.photo" || rawQuote.attach) {
+        if (quoteMsgType === "chat.photo" || rawQuote.attach || quotedMediaUrls.length > 0) {
           quoteText = "[Hình ảnh]";
         } else if (quoteMsgType === "chat.sticker") {
           quoteText = "[Nhãn dán / Sticker]";
@@ -416,12 +435,16 @@ export class EventDispatcher {
       quoteSenderName,
       quoteSenderId,
       quoteMsgType,
+      quoteTimestamp,
+      quotedMediaUrls: quotedMediaUrls.length > 0 ? quotedMediaUrls : undefined,
       quoteData: hasQuote && quoteText ? {
         msg: quoteText,
         msgId: quoteMsgId,
         senderId: quoteSenderId,
         senderName: quoteSenderName,
         msgType: quoteMsgType,
+        timestamp: quoteTimestamp,
+        quotedMediaUrls: quotedMediaUrls.length > 0 ? quotedMediaUrls : undefined,
       } : undefined,
       command,
       args,
