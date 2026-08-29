@@ -314,7 +314,12 @@ function App() {
               setHistoryData((prev) => {
                 if (!prev) return prev;
                 const exists = prev.messages?.some((m) => m.id === enrichedMsg.id);
-                if (exists) return prev;
+                if (exists) {
+                  return {
+                    ...prev,
+                    messages: prev.messages.map((m) => (m.id === enrichedMsg.id ? { ...m, ...enrichedMsg } : m)),
+                  };
+                }
                 return {
                   ...prev,
                   messages: [...(prev.messages || []), enrichedMsg],

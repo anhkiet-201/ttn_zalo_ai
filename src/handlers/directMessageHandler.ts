@@ -103,6 +103,7 @@ export class DirectMessageHandler {
         // Lưu bản ghi hoàn chỉnh với stickerUrl và ý nghĩa vào ChatHistory
         try {
           this.chatHistoryRepo.addMessage({
+            id: String(msg.rawMessage?.data?.msgId || msg.rawMessage?.data?.cliMsgId || "") || undefined,
             threadId: batch.threadId,
             senderId: batch.senderId,
             senderName: batch.senderName,

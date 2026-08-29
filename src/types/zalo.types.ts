@@ -70,6 +70,7 @@ export interface QuoteData {
  * Dữ liệu tin nhắn đã được chuẩn hoá để các handler dễ xử lý
  */
 export interface ParsedMessage {
+  id?: string;
   raw: Message;
   threadId: string;
   senderId: string;

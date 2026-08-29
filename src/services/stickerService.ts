@@ -19,13 +19,20 @@ export class StickerService {
     caption?: string
   ): Promise<string> {
     // 1. Nếu payload đã có caption/text rõ ràng thì dùng ngay, không cần gọi AI
-    if (
-      caption &&
-      caption.trim() &&
-      caption.trim() !== "[Sticker]" &&
-      caption.trim() !== "[Nhãn dán]"
-    ) {
-      return caption.trim();
+    if (caption && typeof caption === "string") {
+      const clean = caption
+        .replace(/\[.*?\]/g, "")
+        .trim()
+        .replace(/^["':\s]+|["':\s]+$/g, "");
+      if (
+        clean &&
+        clean.length > 0 &&
+        clean !== "Sticker" &&
+        clean !== "Nhãn dán" &&
+        clean !== "Nhãn dán biểu cảm"
+      ) {
+        return clean;
+      }
     }
 
     if (!stickerUrl || typeof stickerUrl !== "string") {
@@ -43,8 +50,16 @@ export class StickerService {
         return "Nhãn dán biểu cảm";
       }
 
-      // 3. Prompt tiếng Anh súc tích yêu cầu Gemini Flash tóm tắt hành động/cảm xúc của sticker bằng 1-4 từ tiếng Việt
-      const prompt = `Describe the concise intent, gesture, or emotion of this Vietnamese chat sticker in 1 to 4 Vietnamese words (for example: 'Vẫy tay chào', 'Cảm ơn', 'Đồng ý', 'Thả tim', 'Like 👍', 'Xin lỗi', 'Vui mừng', 'Ngạc nhiên', 'Thắc mắc', 'Chúc mừng'). Output ONLY the short Vietnamese phrase, no explanation, no quotation marks.`;
+      // 3. Prompt phân tích biểu cảm, ý nghĩa và chữ viết trên sticker qua Gemini Vision
+      const prompt = `You are an AI assistant analyzing a chat sticker/emoticon in Vietnamese.
+Carefully examine the character, action, facial expression, and especially any written text or caption visible inside this sticker image.
+
+Rules:
+1. If there is text written in the sticker image (e.g. 'Ủa alo', 'Chờ tí', 'Dạ em nghe', 'Ok nha', 'Gửi CV', 'Tuyệt vời', 'Mệt mỏi', 'Cảm ơn sếp', 'Hihi', 'Huhu'):
+   - Include or extract that exact text (e.g. 'Chờ tí', 'Thắc mắc: Ủa alo', 'Đồng ý: Ok nha', 'Vẫy tay: Hello', 'Cảm ơn sếp').
+2. If there is no text in the image:
+   - Describe the concise intent or emotion in 1 to 4 Vietnamese words (e.g. 'Vẫy tay chào', 'Cảm ơn', 'Dạ vâng', 'Đồng ý', 'Thả tim', 'Like 👍', 'Xin chào', 'Hỏi thăm', 'Chúc mừng', 'Xin lỗi', 'Buồn bã', 'Ngạc nhiên', 'Ủng hộ').
+3. Output format: Return ONLY the short Vietnamese phrase (under 50 characters), no quotes, no conversational filler, no markdown.`;
 
       const contents: Content[] = [
         {
@@ -69,9 +84,9 @@ export class StickerService {
       });
 
       const resultText = response.text
-        ? response.text.trim().replace(/^["'\s]+|["'\s]+$/g, "")
+        ? response.text.trim().replace(/^["'`\s]+|["'`\s]+$/g, "")
         : "";
-      if (resultText && resultText.length < 50) {
+      if (resultText && resultText.length < 80) {
         return resultText;
       }
 

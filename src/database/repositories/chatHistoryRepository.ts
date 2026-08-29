@@ -63,64 +63,103 @@ export class ChatHistoryRepository {
   public addMessage(record: ChatMessageRecord): void {
     // Chống duplicate: kiểm tra xem tin nhắn cùng thread, cùng role và nội dung/ảnh/voice/sticker đã tồn tại chưa
     try {
-      let existing: { id: string } | undefined = undefined;
-      if (record.hasImage && record.imageUrls && record.imageUrls.length > 0) {
-        // Chỉ chống trùng lặp khi CHÍNH XÁC CÙNG URL ẢNH được gửi lại trong vòng 5 giây
-        const checkImageStmt = this.db.connection.prepare(`
-          SELECT id FROM chat_messages 
-          WHERE thread_id = ? AND role = ? AND has_image = 1 AND image_urls = ? AND abs(timestamp - ?) < 5000 
-          LIMIT 1
+      let existing: { id: string } | undefined;
+
+      // 1. Nếu có record.id, kiểm tra xem tin nhắn đã có trong DB chưa
+      if (record.id) {
+        const checkIdStmt = this.db.connection.prepare(`
+          SELECT id FROM chat_messages WHERE id = ? LIMIT 1
         `);
-        existing = checkImageStmt.get(
-          record.threadId,
-          record.role,
-          JSON.stringify(record.imageUrls),
-          record.timestamp
-        ) as { id: string } | undefined;
-      } else if (record.hasVoice && record.voiceUrl) {
-        // Chống trùng lặp tin nhắn thoại cùng URL voice trong vòng 5 giây
-        const checkVoiceStmt = this.db.connection.prepare(`
-          SELECT id FROM chat_messages 
-          WHERE thread_id = ? AND role = ? AND has_voice = 1 AND voice_url = ? AND abs(timestamp - ?) < 5000 
-          LIMIT 1
-        `);
-        existing = checkVoiceStmt.get(
-          record.threadId,
-          record.role,
-          record.voiceUrl,
-          record.timestamp
-        ) as { id: string } | undefined;
-      } else if (record.hasSticker && (record.stickerUrl || record.stickerId)) {
-        // Chống trùng lặp sticker trong vòng 5 giây
-        const checkStickerStmt = this.db.connection.prepare(`
-          SELECT id FROM chat_messages 
-          WHERE thread_id = ? AND role = ? AND has_sticker = 1 AND (sticker_url = ? OR sticker_id = ?) AND abs(timestamp - ?) < 5000 
-          LIMIT 1
-        `);
-        existing = checkStickerStmt.get(
-          record.threadId,
-          record.role,
-          record.stickerUrl || "",
-          record.stickerId || "",
-          record.timestamp
-        ) as { id: string } | undefined;
-      } else if (record.content && record.content.trim()) {
-        // Đối với tin nhắn chữ, chống trùng lặp cùng nội dung trong vòng 5 giây
-        const checkTextStmt = this.db.connection.prepare(`
-          SELECT id FROM chat_messages 
-          WHERE thread_id = ? AND role = ? AND TRIM(content) = ? AND abs(timestamp - ?) < 5000 
-          LIMIT 1
-        `);
-        existing = checkTextStmt.get(
-          record.threadId,
-          record.role,
-          record.content.trim(),
-          record.timestamp
-        ) as { id: string } | undefined;
+        existing = checkIdStmt.get(record.id) as { id: string } | undefined;
+      }
+
+      // 2. Nếu chưa có id hoặc chưa tìm thấy theo id, kiểm tra deduplication trong 5s
+      if (!existing) {
+        if (record.hasImage && record.imageUrls && record.imageUrls.length > 0) {
+          const checkImageStmt = this.db.connection.prepare(`
+            SELECT id FROM chat_messages 
+            WHERE thread_id = ? AND role = ? AND has_image = 1 AND image_urls = ? AND abs(timestamp - ?) < 5000 
+            LIMIT 1
+          `);
+          existing = checkImageStmt.get(
+            record.threadId,
+            record.role,
+            JSON.stringify(record.imageUrls),
+            record.timestamp
+          ) as { id: string } | undefined;
+        } else if (record.hasVoice && record.voiceUrl) {
+          const checkVoiceStmt = this.db.connection.prepare(`
+            SELECT id FROM chat_messages 
+            WHERE thread_id = ? AND role = ? AND has_voice = 1 AND voice_url = ? AND abs(timestamp - ?) < 5000 
+            LIMIT 1
+          `);
+          existing = checkVoiceStmt.get(
+            record.threadId,
+            record.role,
+            record.voiceUrl,
+            record.timestamp
+          ) as { id: string } | undefined;
+        } else if (record.hasSticker) {
+          const checkStickerStmt = this.db.connection.prepare(`
+            SELECT id FROM chat_messages 
+            WHERE thread_id = ? AND role = ? AND (has_sticker = 1 OR content LIKE '%[Sticker]%' OR content LIKE '%[🏷️ Sticker]%') AND abs(timestamp - ?) < 5000 
+            LIMIT 1
+          `);
+          existing = checkStickerStmt.get(
+            record.threadId,
+            record.role,
+            record.timestamp
+          ) as { id: string } | undefined;
+        } else if (record.content && record.content.trim()) {
+          const checkTextStmt = this.db.connection.prepare(`
+            SELECT id FROM chat_messages 
+            WHERE thread_id = ? AND role = ? AND TRIM(content) = ? AND abs(timestamp - ?) < 5000 
+            LIMIT 1
+          `);
+          existing = checkTextStmt.get(
+            record.threadId,
+            record.role,
+            record.content.trim(),
+            record.timestamp
+          ) as { id: string } | undefined;
+        }
       }
 
       if (existing) {
-        // Đã có tin nhắn này, bỏ qua để tránh trùng lặp bản ghi và duplicate SSE
+        // Đã có bản ghi -> Cập nhật thông tin chi tiết (ví dụ: bổ sung ý nghĩa sticker / STT voice)
+        const updateStmt = this.db.connection.prepare(`
+          UPDATE chat_messages SET
+            content = @content,
+            has_voice = @has_voice,
+            voice_url = @voice_url,
+            voice_duration = @voice_duration,
+            has_sticker = @has_sticker,
+            sticker_id = @sticker_id,
+            sticker_cate_id = @sticker_cate_id,
+            sticker_url = @sticker_url,
+            sticker_text = @sticker_text
+          WHERE id = @id
+        `);
+
+        updateStmt.run({
+          id: existing.id,
+          content: record.content,
+          has_voice: record.hasVoice ? 1 : 0,
+          voice_url: record.voiceUrl || null,
+          voice_duration: record.voiceDuration || 0,
+          has_sticker: record.hasSticker ? 1 : 0,
+          sticker_id: record.stickerId || null,
+          sticker_cate_id: record.stickerCateId || null,
+          sticker_url: record.stickerUrl || null,
+          sticker_text: record.stickerText || null,
+        });
+
+        try {
+          chatBroadcaster.broadcast({
+            ...record,
+            id: existing.id,
+          });
+        } catch {}
         return;
       }
     } catch {

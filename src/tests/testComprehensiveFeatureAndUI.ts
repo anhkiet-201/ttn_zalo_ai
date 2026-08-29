@@ -72,7 +72,7 @@ async function runComprehensiveTests() {
     const p1 = (dispatcher as any).parseMessage(rawSticker1);
     assert.strictEqual(p1.hasSticker, true, "1.1: hasSticker = true");
     assert.strictEqual(p1.stickerId, "12345", "1.1: stickerId");
-    assert.strictEqual(p1.stickerUrl, "https://zalo-api.zadn.vn/api/emoticon/sticker/webpc?id=12345", "1.1: sinh URL Zalo CDN");
+    assert.strictEqual(p1.stickerUrl, "https://zalo-api.zadn.vn/api/emoticon/sticker/webpc?eid=12345&size=130", "1.1: sinh URL Zalo CDN");
     assert.strictEqual(p1.stickerText, "Xin chào", "1.1: stickerText");
     assert.strictEqual(p1.hasImage, false, "1.1: hasImage phải là false");
 

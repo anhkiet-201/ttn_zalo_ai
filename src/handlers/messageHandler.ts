@@ -100,14 +100,17 @@ export class MessageHandler {
 
   private async persistMessage(parsedMessage: ParsedMessage): Promise<void> {
     const isSticker =
+      parsedMessage.hasSticker ||
       parsedMessage.raw?.data?.msgType === "chat.sticker" ||
       parsedMessage.text === "[Sticker]" ||
-      Boolean(parsedMessage.text && parsedMessage.text.includes("[Sticker]"));
+      Boolean(parsedMessage.text && parsedMessage.text.includes("[Sticker]")) ||
+      Boolean(parsedMessage.text && parsedMessage.text.includes("[🏷️ Sticker]"));
 
     if (!parsedMessage.text && !parsedMessage.hasImage && !isSticker && !parsedMessage.hasVoice) return;
 
     try {
       this.chatHistoryRepo.addMessage({
+        id: parsedMessage.id,
         threadId: parsedMessage.threadId,
         senderId: parsedMessage.senderId,
         senderName:
@@ -123,7 +126,7 @@ export class MessageHandler {
           (parsedMessage.hasVoice
             ? "[Tin nhắn thoại]"
             : isSticker
-            ? "[Sticker]"
+            ? "[🏷️ Sticker]"
             : parsedMessage.hasImage
             ? "[Hình ảnh đính kèm]"
             : ""),
@@ -132,6 +135,11 @@ export class MessageHandler {
         hasVoice: parsedMessage.hasVoice,
         voiceUrl: parsedMessage.voiceUrl,
         voiceDuration: parsedMessage.voiceDuration,
+        hasSticker: isSticker,
+        stickerId: parsedMessage.stickerId,
+        stickerCateId: parsedMessage.stickerCateId,
+        stickerUrl: parsedMessage.stickerUrl,
+        stickerText: parsedMessage.stickerText,
         hasQuote: parsedMessage.hasQuote,
         quoteText: parsedMessage.quoteText,
         quoteSenderName: parsedMessage.quoteSenderName,

@@ -202,7 +202,11 @@ export function ZaloSticker({ message, isOutgoing }) {
     }
   }
 
-  const stickerUrl = message.stickerUrl || (message.stickerId ? `https://zalo-api.zadn.vn/api/emoticon/sticker/webpc?id=${message.stickerId}` : '');
+  if (caption === 'Sticker' || caption === 'Nhãn dán' || caption === 'Nhãn dán biểu cảm' || caption === '[Sticker]') {
+    caption = '';
+  }
+
+  const stickerUrl = message.stickerUrl || (message.stickerId ? `https://zalo-api.zadn.vn/api/emoticon/sticker/webpc?eid=${message.stickerId}&size=130` : '');
 
   if (!stickerUrl || hasError) {
     return html`
@@ -286,6 +290,9 @@ export function MessageBubble({ message, ownId, isGroup, onImageClick }) {
     message.stickerUrl ||
     message.stickerId ||
     (message.content && (
+      message.content === '[Sticker]' ||
+      message.content === '[Nhãn dán]' ||
+      message.content.includes('[Sticker]') ||
       message.content.startsWith('[🏷️ Nhãn dán / Sticker]:') ||
       message.content.startsWith('[🏷️ Sticker]:') ||
       message.content.startsWith('[Nhãn dán]:')
@@ -302,6 +309,7 @@ export function MessageBubble({ message, ownId, isGroup, onImageClick }) {
       message.content !== '[Sticker]' &&
       message.content !== '[Nhãn dán]' &&
       message.content !== '[Tin nhắn thoại]' &&
+      !message.content.includes('[Sticker]') &&
       !message.content.startsWith('[🏷️ Nhãn dán / Sticker]:') &&
       !message.content.startsWith('[🏷️ Sticker]:') &&
       !message.content.startsWith('[Nhãn dán]:')

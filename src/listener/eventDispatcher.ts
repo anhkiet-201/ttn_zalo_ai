@@ -209,8 +209,8 @@ export function extractStickerInfo(
   let stickerText: string | undefined = undefined;
 
   for (const src of sources) {
-    if (!stickerId && (src.id || src.stickerId || src.sticker_id)) {
-      stickerId = String(src.id || src.stickerId || src.sticker_id);
+    if (!stickerId && (src.eid || src.id || src.stickerId || src.sticker_id)) {
+      stickerId = String(src.eid || src.id || src.stickerId || src.sticker_id);
     }
     if (!stickerCateId && (src.cateId || src.cate_id || src.catId || src.categoryId)) {
       stickerCateId = String(src.cateId || src.cate_id || src.catId || src.categoryId);
@@ -227,7 +227,15 @@ export function extractStickerInfo(
     if (!stickerText) {
       const textCandidates = [src.text, src.description, src.caption, src.title, src.alt, src.stickerText];
       for (const t of textCandidates) {
-        if (typeof t === "string" && t.trim() && t.trim() !== "[Sticker]" && t.trim() !== "[Nhãn dán]") {
+        if (
+          typeof t === "string" &&
+          t.trim() &&
+          t.trim() !== "[Sticker]" &&
+          t.trim() !== "[Nhãn dán]" &&
+          t.trim() !== "[🏷️ Sticker]" &&
+          t.trim() !== "[🏷️ Nhãn dán / Sticker]" &&
+          t.trim() !== "Nhãn dán biểu cảm"
+        ) {
           stickerText = t.trim();
           break;
         }
@@ -235,11 +243,11 @@ export function extractStickerInfo(
     }
   }
 
-  // Nếu có stickerId mà chưa có URL, tạo URL Zalo Sticker CDN tiêu chuẩn
+  // Nếu có stickerId mà chưa có URL, tạo URL Zalo Sticker CDN tiêu chuẩn hỗ trợ ảnh PNG sắc nét
   if (stickerId) {
     isSticker = true;
     if (!stickerUrl) {
-      stickerUrl = `https://zalo-api.zadn.vn/api/emoticon/sticker/webpc?id=${stickerId}`;
+      stickerUrl = `https://zalo-api.zadn.vn/api/emoticon/sticker/webpc?eid=${stickerId}&size=130`;
     }
   }
 
@@ -507,7 +515,10 @@ export class EventDispatcher {
       }
     }
 
+    const messageId = String(rawMessage.data?.msgId || rawMessage.data?.cliMsgId || "") || undefined;
+
     return {
+      id: messageId,
       raw: rawMessage,
       threadId,
       senderId,
