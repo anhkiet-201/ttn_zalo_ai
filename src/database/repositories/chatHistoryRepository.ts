@@ -3,7 +3,7 @@ import { config } from "../../config/index.js";
 import { chatBroadcaster } from "../../server/chatBroadcaster.js";
 import crypto from "node:crypto";
 
-export type ThreadFilter = "all" | "personal" | "group" | "manual";
+export type ThreadFilter = "all" | "personal" | "direct" | "group" | "manual";
 
 export interface ChatMessageRecord {
   id?: string;
@@ -274,18 +274,19 @@ export class ChatHistoryRepository {
       query += `
         AND (
           LOWER(m.thread_id) LIKE ? OR
-          LOWER(COALESCE(tm.custom_name, m.sender_name)) LIKE ? OR
-          LOWER(m.content) LIKE ? OR
+          LOWER(COALESCE(tm.custom_name, '')) LIKE ? OR
+          LOWER(COALESCE(m.sender_name, '')) LIKE ? OR
+          LOWER(COALESCE(m.content, '')) LIKE ? OR
           LOWER(COALESCE(c.full_name, '')) LIKE ? OR
           LOWER(COALESCE(c.phone_number, '')) LIKE ? OR
           LOWER(COALESCE(c.target_company, '')) LIKE ?
         )
       `;
-      params.push(searchTerm, searchTerm, searchTerm, searchTerm, searchTerm, searchTerm);
+      params.push(searchTerm, searchTerm, searchTerm, searchTerm, searchTerm, searchTerm, searchTerm);
     }
 
-    // 2. Điều kiện lọc theo Tab Filter (all, personal, group, manual)
-    if (filter === "personal") {
+    // 2. Điều kiện lọc theo Tab Filter (all, direct/personal, group, manual)
+    if (filter === "direct" || filter === "personal") {
       query += ` 
         AND COALESCE(tm.is_group, m.is_group) = 0 
         AND COALESCE(tm.is_manual, 0) = 0
@@ -367,17 +368,18 @@ export class ChatHistoryRepository {
       query += `
         AND (
           LOWER(m.thread_id) LIKE ? OR
-          LOWER(COALESCE(tm.custom_name, m.sender_name)) LIKE ? OR
-          LOWER(m.content) LIKE ? OR
+          LOWER(COALESCE(tm.custom_name, '')) LIKE ? OR
+          LOWER(COALESCE(m.sender_name, '')) LIKE ? OR
+          LOWER(COALESCE(m.content, '')) LIKE ? OR
           LOWER(COALESCE(c.full_name, '')) LIKE ? OR
           LOWER(COALESCE(c.phone_number, '')) LIKE ? OR
           LOWER(COALESCE(c.target_company, '')) LIKE ?
         )
       `;
-      params.push(searchTerm, searchTerm, searchTerm, searchTerm, searchTerm, searchTerm);
+      params.push(searchTerm, searchTerm, searchTerm, searchTerm, searchTerm, searchTerm, searchTerm);
     }
 
-    if (filter === "personal") {
+    if (filter === "direct" || filter === "personal") {
       query += ` 
         AND COALESCE(tm.is_group, m.is_group) = 0 
         AND COALESCE(tm.is_manual, 0) = 0

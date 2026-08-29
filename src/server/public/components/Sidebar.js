@@ -3,7 +3,7 @@ import htm from 'https://esm.sh/htm';
 
 const html = htm.bind(React.createElement);
 
-// Helper định dạng thời gian gọn gàng chuẩn Zalo PC (VD: "Vài giây", "3 phút", "1 giờ", "14/08")
+// Helper định dạng thời gian gọn gàng chuẩn Zalo PC
 function formatZaloTime(timestamp) {
   if (!timestamp) return '';
   const date = new Date(Number(timestamp));
@@ -56,7 +56,7 @@ export function Sidebar({
             <input
               type="text"
               className="sidebar-search-input"
-              placeholder="Tìm kiếm cuộc trò chuyện..."
+              placeholder="Tìm kiếm nhóm hoặc tin nhắn..."
               value=${searchQuery}
               onChange=${(e) => onSearchChange(e.target.value)}
             />
@@ -122,7 +122,7 @@ export function Sidebar({
       <div className="sidebar-threads-scroll">
         ${threads.length === 0 && !loadingThreads && html`
           <div style=${{ padding: '40px 20px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px' }}>
-            Không có cuộc trò chuyện nào
+            Không tìm thấy cuộc trò chuyện nào
           </div>
         `}
 
@@ -130,8 +130,8 @@ export function Sidebar({
           const isActive = thread.threadId === activeThreadId;
           const isGroup = Boolean(thread.isGroup);
           const isManual = Boolean(thread.isManual);
-          const displayName = thread.threadName || (isGroup ? 'Nhóm trò chuyện' : `Khách ${thread.threadId.slice(-4)}`);
-          const avatarChar = isGroup ? '👥' : (displayName || 'U').trim().charAt(0).toUpperCase();
+          const displayName = thread.threadName || (isGroup ? `Nhóm ${thread.threadId}` : `Khách ${thread.threadId.slice(-4)}`);
+          const avatarChar = (displayName || 'U').trim().charAt(0).toUpperCase();
 
           const snippet = thread.lastContent
             ? thread.lastContent
@@ -150,7 +150,15 @@ export function Sidebar({
             >
               <div className="thread-avatar-wrapper">
                 <div className=${`thread-avatar-circle ${isGroup ? 'is-group' : ''} ${isManual ? 'is-manual-avatar' : ''}`}>
-                  ${avatarChar}
+                  ${isGroup ? html`
+                    <!-- Icon SVG Nhóm Tinh Tế Chuẩn Zalo PC -->
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                      <circle cx="9" cy="7" r="4"></circle>
+                      <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                      <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                    </svg>
+                  ` : avatarChar}
                 </div>
                 ${!isGroup && html`<div className="thread-online-badge"></div>`}
               </div>
@@ -169,6 +177,9 @@ export function Sidebar({
                   </span>
 
                   <div className="thread-tags-box">
+                    ${isGroup && html`
+                      <span className="tag-group-pill">Nhóm</span>
+                    `}
                     ${isManual && html`
                       <span className="tag-manual">-M</span>
                     `}

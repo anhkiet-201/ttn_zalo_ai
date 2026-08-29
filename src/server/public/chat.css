@@ -255,7 +255,11 @@ body {
 }
 
 .thread-avatar-circle.is-group {
-  background: linear-gradient(135deg, #10b981, #059669);
+  background: linear-gradient(135deg, #0d9488, #0f766e);
+}
+
+.chat-header-avatar.is-group {
+  background: linear-gradient(135deg, #0d9488, #0f766e);
 }
 
 .thread-avatar-circle.is-manual-avatar {
@@ -327,6 +331,16 @@ body {
   align-items: center;
   gap: 4px;
   flex-shrink: 0;
+}
+
+.tag-group-pill {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 5px;
+  background: #ecfdf5;
+  color: #047857;
+  border: 1px solid #a7f3d0;
+  border-radius: 4px;
 }
 
 .tag-manual {

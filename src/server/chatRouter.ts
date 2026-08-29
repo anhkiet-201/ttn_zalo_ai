@@ -169,6 +169,9 @@ export async function handleChatRoute(
             } else {
               threadName = isGroup ? `Nhóm ${item.threadId}` : `Người dùng ${item.threadId}`;
             }
+          } else if (!threadName.startsWith("Nhóm ") && !threadName.startsWith("Người dùng ")) {
+            // Tự động lưu tên nhóm / tên người dùng vào DB để tìm kiếm nhanh
+            threadMetaRepo.upsertMetadata(item.threadId, threadName, undefined, isGroup);
           }
 
           const isManual = !isGroup && Boolean(
