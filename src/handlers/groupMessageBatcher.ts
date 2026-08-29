@@ -70,7 +70,14 @@ export class GroupMessageBatcher {
       const currentBatch = this.batches.get(threadId);
       if (currentBatch && currentBatch.messages.length > 0) {
         this.batches.delete(threadId);
-        await this.processor(currentBatch);
+        try {
+          await this.processor(currentBatch);
+        } catch (error) {
+          console.error(
+            `❌ [GroupMessageBatcher] Lỗi khi xử lý batch nhóm [${threadId}]:`,
+            error
+          );
+        }
       } else {
         this.batches.delete(threadId);
       }

@@ -9,7 +9,41 @@ import {
   type ForwardMessagePayload,
   type ForwardMessageResponse,
 } from "zca-js";
-import { SQLiteDatabase } from "../database/sqliteDb.js";
+import { ThreadMetadataRepository } from "../database/repositories/threadMetadataRepository.js";
+
+/**
+ * Bộ đệm in-memory có giới hạn kích thước và thời gian hết hạn (TTL) để tránh rò rỉ bộ nhớ
+ */
+class BoundedCache<K, V> {
+  private readonly map = new Map<K, { value: V; expiresAt: number }>();
+  constructor(private readonly maxSize: number = 500, private readonly ttlMs: number = 30 * 60 * 1000) {}
+
+  public get(key: K): V | undefined {
+    const entry = this.map.get(key);
+    if (!entry) return undefined;
+    if (Date.now() > entry.expiresAt) {
+      this.map.delete(key);
+      return undefined;
+    }
+    return entry.value;
+  }
+
+  public set(key: K, value: V): void {
+    if (this.map.size >= this.maxSize) {
+      const firstKey = this.map.keys().next().value;
+      if (firstKey !== undefined) this.map.delete(firstKey);
+    }
+    this.map.set(key, { value, expiresAt: Date.now() + this.ttlMs });
+  }
+
+  public has(key: K): boolean {
+    return this.get(key) !== undefined;
+  }
+
+  public clear(): void {
+    this.map.clear();
+  }
+}
 
 /**
  * Tách một chuỗi văn bản dài thành nhiều đoạn ngắn (mặc định <= 1500 ký tự)
@@ -59,7 +93,9 @@ export function splitTextIntoChunks(
  * Service đóng gói các thao tác gọi API Zalo thuận tiện và an toàn
  */
 export class ZaloService {
-  private readonly groupNameCache: Map<string, string> = new Map();
+  private readonly groupNameCache = new BoundedCache<string, string>(500, 30 * 60 * 1000);
+  private readonly groupCheckCache = new BoundedCache<string, boolean>(500, 30 * 60 * 1000);
+  private readonly threadMetaRepo = new ThreadMetadataRepository();
 
   constructor(private readonly api: API) {}
 
@@ -105,14 +141,13 @@ export class ZaloService {
     }
   }
 
-  private groupCheckCache = new Map<string, boolean>();
-
   /**
    * Kiểm tra xem threadId có phải là Nhóm Zalo (Group) hay không
    */
   public async isGroupThread(threadId: string): Promise<boolean> {
-    if (this.groupCheckCache.has(threadId)) {
-      return this.groupCheckCache.get(threadId)!;
+    const cached = this.groupCheckCache.get(threadId);
+    if (cached !== undefined) {
+      return cached;
     }
 
     try {
@@ -330,8 +365,7 @@ export class ZaloService {
    * Lấy tên nhóm chat (có kèm in-memory cache và database metadata)
    */
   public async getGroupName(groupId: string): Promise<string> {
-    const threadMetaRepo = new (await import("../database/repositories/threadMetadataRepository.js")).ThreadMetadataRepository();
-    const meta = threadMetaRepo.getMetadata(groupId);
+    const meta = this.threadMetaRepo.getMetadata(groupId);
     if (meta?.customName) {
       this.groupNameCache.set(groupId, meta.customName);
       return meta.customName;
@@ -364,8 +398,7 @@ export class ZaloService {
    * Lấy tên hiển thị của người dùng (Zalo cá nhân 1-1 kèm in-memory cache và database metadata)
    */
   public async getUserName(userId: string): Promise<string> {
-    const threadMetaRepo = new (await import("../database/repositories/threadMetadataRepository.js")).ThreadMetadataRepository();
-    const meta = threadMetaRepo.getMetadata(userId);
+    const meta = this.threadMetaRepo.getMetadata(userId);
     if (meta?.customName) {
       this.groupNameCache.set(`user_${userId}`, meta.customName);
       return meta.customName;
@@ -448,9 +481,7 @@ export class ZaloService {
 
     // 1. Lưu bền vững vào SQLite database trước tiên
     try {
-      const { ThreadMetadataRepository } = await import("../database/repositories/threadMetadataRepository.js");
-      const threadMetaRepo = new ThreadMetadataRepository();
-      threadMetaRepo.upsertMetadata(threadId, trimmedName, isManual, checkGroup);
+      this.threadMetaRepo.upsertMetadata(threadId, trimmedName, isManual, checkGroup);
     } catch (dbErr) {
       console.warn(`⚠️ Không thể lưu metadata cho thread ${threadId}:`, dbErr);
     }

@@ -42,7 +42,7 @@ export class AIService {
   private readonly groupAnalysisService: GroupAnalysisService;
 
   constructor(ragService?: RAGService, chatHistoryRepo?: ChatHistoryRepository) {
-    this.ragService = ragService || new RAGService();
+    this.ragService = ragService || RAGService.getInstance();
     this.chatHistoryRepo = chatHistoryRepo || new ChatHistoryRepository();
 
     if (config.geminiApiKey) {

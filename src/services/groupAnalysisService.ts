@@ -72,7 +72,19 @@ export class GroupAnalysisService {
     let updatedCount = 0;
 
     try {
-      let response = await this.ai.models.generateContent({
+      const timeoutMs = 45000;
+      const generateWithTimeout = (payload: any) =>
+        Promise.race([
+          this.ai!.models.generateContent(payload),
+          new Promise<never>((_, reject) =>
+            setTimeout(
+              () => reject(new Error(`Timeout (${timeoutMs}ms) khi phân tích tin nhắn nhóm`)),
+              timeoutMs
+            )
+          ),
+        ]);
+
+      let response = await generateWithTimeout({
         model: config.geminiModel,
         contents,
         config: {
@@ -165,7 +177,7 @@ export class GroupAnalysisService {
 
         contents.push({ role: "user", parts: functionResponseParts });
 
-        response = await this.ai.models.generateContent({
+        response = await generateWithTimeout({
           model: config.geminiModel,
           contents,
           config: {
@@ -234,7 +246,19 @@ export class GroupAnalysisService {
     const items: RagUpdateItemReport[] = [];
 
     try {
-      let response = await this.ai.models.generateContent({
+      const timeoutMs = 45000;
+      const generateWithTimeout = (payload: any) =>
+        Promise.race([
+          this.ai!.models.generateContent(payload),
+          new Promise<never>((_, reject) =>
+            setTimeout(
+              () => reject(new Error(`Timeout (${timeoutMs}ms) khi cập nhật RAG từ văn bản HR`)),
+              timeoutMs
+            )
+          ),
+        ]);
+
+      let response = await generateWithTimeout({
         model: config.geminiModel,
         contents,
         config: {
@@ -339,7 +363,7 @@ export class GroupAnalysisService {
 
         contents.push({ role: "user", parts: functionResponseParts });
 
-        response = await this.ai.models.generateContent({
+        response = await generateWithTimeout({
           model: config.geminiModel,
           contents,
           config: {

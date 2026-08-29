@@ -41,7 +41,14 @@ export async function downloadImageAsBase64(
         return null;
       }
 
-      // 3. Kiểm tra Content-Type
+      // 3. Kiểm tra Content-Type và kích thước tối đa 15MB
+      const MAX_IMAGE_BYTES = 15 * 1024 * 1024; // 15MB
+      const rawContentLength = Number(res.headers.get("content-length")) || 0;
+      if (rawContentLength > MAX_IMAGE_BYTES) {
+        console.warn(`⚠️ [ImageHelper] Ảnh vượt quá giới hạn 15MB (${rawContentLength} bytes), từ chối tải.`);
+        return null;
+      }
+
       const rawContentType = res.headers.get("content-type") || "";
       const mimeType = rawContentType.split(";")[0].trim().toLowerCase();
 
@@ -52,7 +59,7 @@ export async function downloadImageAsBase64(
       }
 
       const buffer = await res.arrayBuffer();
-      if (buffer.byteLength === 0) {
+      if (buffer.byteLength === 0 || buffer.byteLength > MAX_IMAGE_BYTES) {
         return null;
       }
 

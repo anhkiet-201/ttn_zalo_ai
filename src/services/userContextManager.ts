@@ -12,10 +12,27 @@ import { type CCCDAnalysisResult, type CCCDCardResult } from "./aiService.js";
 export class UserContextManager {
   private static instance: UserContextManager | null = null;
   private readonly cache = new Map<string, UserContextData>();
+  private readonly maxCacheSize: number = 1000;
   private readonly userContextRepo: UserContextRepository;
 
   constructor(userContextRepo?: UserContextRepository) {
     this.userContextRepo = userContextRepo || new UserContextRepository();
+  }
+
+  /**
+   * Cập nhật RAM cache theo cơ chế LRU có giới hạn dung lượng
+   */
+  private setCache(key: string, context: UserContextData): void {
+    if (this.cache.has(key)) {
+      this.cache.delete(key);
+    } else if (this.cache.size >= this.maxCacheSize) {
+      // Xoá bản ghi lâu nhất không dùng khỏi RAM (đã lưu bền vững trên SQLite)
+      const oldestKey = this.cache.keys().next().value;
+      if (oldestKey) {
+        this.cache.delete(oldestKey);
+      }
+    }
+    this.cache.set(key, context);
   }
 
   /**
@@ -56,6 +73,10 @@ export class UserContextManager {
     // 1. Kiểm tra RAM cache trước
     let context = this.cache.get(key);
     if (context) {
+      // Refresh vị trí LRU
+      this.cache.delete(key);
+      this.cache.set(key, context);
+
       if (senderName && senderName !== context.senderName) {
         context.senderName = senderName;
         this.saveAndSync(context);
@@ -70,7 +91,7 @@ export class UserContextManager {
         dbContext.senderName = senderName;
         this.userContextRepo.save(dbContext);
       }
-      this.cache.set(key, dbContext);
+      this.setCache(key, dbContext);
       return dbContext;
     }
 
@@ -85,7 +106,7 @@ export class UserContextManager {
       updatedAt: Date.now(),
     };
 
-    this.cache.set(key, newContext);
+    this.setCache(key, newContext);
     this.userContextRepo.save(newContext);
     return newContext;
   }
@@ -96,7 +117,7 @@ export class UserContextManager {
   public saveAndSync(context: UserContextData): void {
     context.updatedAt = Date.now();
     const key = context.id || `${context.threadId}:${context.senderId}`;
-    this.cache.set(key, context);
+    this.setCache(key, context);
     this.userContextRepo.save(context);
   }
 

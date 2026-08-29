@@ -187,7 +187,19 @@ export class ReplyService {
       fullSystemInstruction += `\n\n--- BẮT ĐẦU NGỮ CẢNH (RAG CONTEXT) ---\n${ragContext}\n--- KẾT THÚC NGỮ CẢNH ---`;
       const contents: Content[] = [...history, userContent];
 
-      let response = await this.ai.models.generateContent({
+      const timeoutMs = 45000;
+      const generateWithTimeout = (payload: any) =>
+        Promise.race([
+          this.ai!.models.generateContent(payload),
+          new Promise<never>((_, reject) =>
+            setTimeout(
+              () => reject(new Error(`Timeout (${timeoutMs}ms) khi gọi Gemini AI`)),
+              timeoutMs
+            )
+          ),
+        ]);
+
+      let response = await generateWithTimeout({
         model: config.geminiModel,
         contents,
         config: {
@@ -238,7 +250,7 @@ export class ReplyService {
           parts: functionResponseParts,
         });
 
-        response = await this.ai.models.generateContent({
+        response = await generateWithTimeout({
           model: config.geminiModel,
           contents,
           config: {

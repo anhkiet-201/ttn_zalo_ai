@@ -25,6 +25,7 @@ export class SQLiteDatabase {
     this.db.pragma("synchronous = NORMAL"); // Tối ưu hóa I/O đĩa
     this.db.pragma("foreign_keys = ON");
     this.db.pragma("cache_size = -64000"); // 64MB Cache RAM cho SQLite
+    this.db.pragma("wal_autocheckpoint = 1000"); // Tự động checkpoint WAL mỗi 1000 trang ghi
 
     this.initTables();
   }

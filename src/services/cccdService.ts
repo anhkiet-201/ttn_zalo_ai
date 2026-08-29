@@ -78,10 +78,19 @@ LƯU Ý: Phải phân biệt rõ ràng nếu có NHIỀU NGƯỜI / NHIỀU TH�
         });
       });
 
-      const response = await this.ai.models.generateContent({
-        model: config.geminiModel,
-        contents: [{ role: "user", parts: userParts }],
-      });
+      const timeoutMs = 45000;
+      const response = await Promise.race([
+        this.ai.models.generateContent({
+          model: config.geminiModel,
+          contents: [{ role: "user", parts: userParts }],
+        }),
+        new Promise<never>((_, reject) =>
+          setTimeout(
+            () => reject(new Error(`Timeout (${timeoutMs}ms) khi phân tích CCCD từ ảnh`)),
+            timeoutMs
+          )
+        ),
+      ]);
 
       const responseText = response.text?.trim() || "";
       const cleanJson = responseText

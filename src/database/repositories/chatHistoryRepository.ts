@@ -249,19 +249,18 @@ export class ChatHistoryRepository {
         c.full_name as candidateName,
         c.target_company as targetCompany,
         c.phone_number as phoneNumber
-      FROM chat_messages m
-      INNER JOIN (
-        SELECT thread_id, MAX(timestamp) as max_ts
+      FROM (
+        SELECT 
+          id, thread_id, sender_id, sender_name, content, has_image,
+          MAX(timestamp) as timestamp, role, is_group
         FROM chat_messages
         GROUP BY thread_id
-      ) latest ON m.thread_id = latest.thread_id AND m.timestamp = latest.max_ts
-        AND m.id = (
-          SELECT id FROM chat_messages
-          WHERE thread_id = m.thread_id
-          ORDER BY timestamp DESC, id DESC
-          LIMIT 1
-        )
-      LEFT JOIN candidates c ON m.thread_id = c.thread_id
+      ) m
+      LEFT JOIN (
+        SELECT thread_id, full_name, target_company, phone_number, MAX(created_at)
+        FROM candidates
+        GROUP BY thread_id
+      ) c ON m.thread_id = c.thread_id
       LEFT JOIN thread_metadata tm ON m.thread_id = tm.thread_id
       WHERE 1=1
     `;
@@ -313,8 +312,7 @@ export class ChatHistoryRepository {
     }
 
     query += `
-      GROUP BY m.thread_id
-      ORDER BY latest.max_ts DESC
+      ORDER BY m.timestamp DESC
       LIMIT ? OFFSET ?
     `;
     params.push(limit, offset);
@@ -357,8 +355,16 @@ export class ChatHistoryRepository {
   public getTotalThreadsCount(search?: string, filter: ThreadFilter = "all"): number {
     let query = `
       SELECT COUNT(DISTINCT m.thread_id) as total
-      FROM chat_messages m
-      LEFT JOIN candidates c ON m.thread_id = c.thread_id
+      FROM (
+        SELECT thread_id, sender_name, content, MAX(timestamp) as timestamp, is_group
+        FROM chat_messages
+        GROUP BY thread_id
+      ) m
+      LEFT JOIN (
+        SELECT thread_id, full_name, target_company, phone_number, MAX(created_at)
+        FROM candidates
+        GROUP BY thread_id
+      ) c ON m.thread_id = c.thread_id
       LEFT JOIN thread_metadata tm ON m.thread_id = tm.thread_id
       WHERE 1=1
     `;

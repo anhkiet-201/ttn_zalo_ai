@@ -104,7 +104,14 @@ export class MessageBatcher {
       if (this.messageBatches.get(threadId) === capturedBatch) {
         this.messageBatches.delete(threadId);
         if (capturedBatch.messages.length > 0) {
-          await this.processor(capturedBatch);
+          try {
+            await this.processor(capturedBatch);
+          } catch (error) {
+            console.error(
+              `❌ [MessageBatcher] Lỗi khi xử lý batch tin nhắn cho luồng [${threadId}]:`,
+              error
+            );
+          }
         }
       }
     }, debounceMs);

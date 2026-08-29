@@ -44,7 +44,7 @@ export class MessageHandler {
     this.chatHistoryRepo = new ChatHistoryRepository();
     this.threadMetaRepo = new ThreadMetadataRepository();
 
-    const ragService = new RAGService();
+    const ragService = RAGService.getInstance();
 
     this.hrHandler = new HRMessageHandler(
       this.zaloService,

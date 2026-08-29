@@ -1,4 +1,7 @@
 import { authenticateZalo, onLogout, setZaloService } from "./auth/sessionManager.js";
+import { stopQrWebServer } from "./auth/qrWebServer.js";
+import { SQLiteDatabase } from "./database/sqliteDb.js";
+import { RAGService } from "./services/ragService.js";
 import { ZaloService } from "./services/zaloService.js";
 import { AIService } from "./services/aiService.js";
 import { EventDispatcher } from "./listener/eventDispatcher.js";
@@ -77,11 +80,23 @@ onLogout(async () => {
 });
 
 // Xử lý tắt ứng dụng một cách an toàn (Graceful Shutdown)
-const handleShutdown = (signal: string) => {
+const handleShutdown = async (signal: string) => {
   console.log(`\n🛑 Nhận tín hiệu ${signal}. Đang tiến hành dừng Bot...`);
   if (currentListener) {
-    currentListener.stop();
+    try {
+      currentListener.stop();
+    } catch {}
+    currentListener = null;
   }
+  try {
+    RAGService.getInstance().destroy();
+  } catch {}
+  try {
+    stopQrWebServer();
+  } catch {}
+  try {
+    SQLiteDatabase.getInstance().close();
+  } catch {}
   process.exit(0);
 };
 

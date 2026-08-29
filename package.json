@@ -9,7 +9,8 @@
     "start": "tsx src/index.ts",
     "setup": "tsx src/setupSession.ts",
     "build": "tsc",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:benchmark": "tsx src/tests/runBenchmark.ts"
   },
   "keywords": [
     "zalo",

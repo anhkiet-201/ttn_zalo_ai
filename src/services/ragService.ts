@@ -97,6 +97,8 @@ function generateNextId(targetFile: RagTargetFile, data: Record<string, unknown>
 }
 
 export class RAGService {
+  private static instance: RAGService | null = null;
+
   private readonly baseDir: string;
   private readonly dataDir: string;
 
@@ -111,6 +113,16 @@ export class RAGService {
     this.baseDir = baseDir;
     this.dataDir = path.join(baseDir, "data");
     this.setupWatchers();
+  }
+
+  /**
+   * Singleton pattern để tái sử dụng một instance duy nhất trong toàn hệ thống
+   */
+  public static getInstance(baseDir?: string): RAGService {
+    if (!RAGService.instance) {
+      RAGService.instance = new RAGService(baseDir);
+    }
+    return RAGService.instance;
   }
 
   /**
@@ -146,6 +158,9 @@ export class RAGService {
       watcher.close();
     }
     this.watchers = [];
+    if (RAGService.instance === this) {
+      RAGService.instance = null;
+    }
   }
 
   public buildPromptContext(): string {
