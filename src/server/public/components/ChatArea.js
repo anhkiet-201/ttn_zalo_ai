@@ -331,9 +331,8 @@ export function ChatArea({
         <div ref=${messagesEndRef} />
       </div>
 
-      <!-- 4. Chân trang (Footer): Tùy biến theo chế độ AI / Thủ Công / Group -->
-      ${canSendInput ? html`
-        <!-- Thanh nhập tin nhắn (Hiện cho Group hoặc Chat Cá Nhân ở chế độ Thủ Công) -->
+      <!-- 4. Chân trang (Footer): CHỈ HIỂN THỊ CHO GROUP HOẶC CHAT CÁ NHÂN Ở CHẾ ĐỘ THỦ CÔNG (-M) -->
+      ${canSendInput && html`
         <footer className="chat-input-wrapper">
           ${selectedImages.length > 0 && html`
             <div className="upload-preview-bar">
@@ -427,24 +426,6 @@ export function ChatArea({
                 <line x1="22" y1="2" x2="11" y2="13"></line>
                 <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
               </svg>
-            </button>
-          </div>
-        </footer>
-      ` : html`
-        <!-- Thông báo khi AI Mode đang BẬT: Ẩn khung nhập tin nhắn -->
-        <footer className="chat-ai-active-footer">
-          <div className="ai-active-notice-box">
-            <span className="ai-active-pulse"></span>
-            <span className="ai-notice-text">
-              🤖 <strong>Chế độ AI Tự động đang bật</strong> — Bot đang tự động trả lời ứng viên này.
-            </span>
-            <button
-              className="btn-takeover-manual"
-              onClick=${handleModeClick}
-              disabled=${togglingMode}
-              title="Chuyển sang chế độ Thủ công (-M) để tự nhắn tin"
-            >
-              Chuyển sang Thủ công (-M) để nhắn tin
             </button>
           </div>
         </footer>
