@@ -48,7 +48,7 @@ export class HRMessageHandler {
     const lowerText = rawText.toLowerCase();
 
     try {
-      if (await this.handleCandidateList(parsedMessage, lowerText)) return;
+      if (await this.handleCandidateList(parsedMessage, rawText, lowerText)) return;
       if (await this.handleRagCommand(parsedMessage, rawText, lowerText, targetThreadType)) return;
       if (await this.handlePing(parsedMessage, lowerText)) return;
       if (await this.handleHelp(parsedMessage, lowerText)) return;
@@ -60,39 +60,151 @@ export class HRMessageHandler {
 
   // ── Private command handlers ────────────────────────────────────────────
 
-  private async handleCandidateList(parsedMessage: ParsedMessage, lowerText: string): Promise<boolean> {
+  private async handleCandidateList(
+    parsedMessage: ParsedMessage,
+    rawText: string,
+    lowerText: string
+  ): Promise<boolean> {
     const isListCmd =
       lowerText === "ds" || lowerText === "/ds" || lowerText === "danhsach" ||
-      lowerText === "/danhsach" || lowerText.startsWith("tim ") || lowerText.startsWith("/uv");
+      lowerText === "/danhsach" || lowerText.startsWith("ds ") || lowerText.startsWith("/ds ") ||
+      lowerText.startsWith("danhsach ") || lowerText.startsWith("/danhsach ");
 
     if (!isListCmd) return false;
 
-    const candidates = this.candidateRepo.getRecentCandidates(5);
+    // Trích xuất tham số ngày phía sau lệnh /ds (nếu có)
+    const dateArg = rawText.replace(/^\/?(?:ds|danhsach)\s*/i, "").trim();
+
+    // Lấy thời gian hiện tại theo GMT+7 (Asia/Ho_Chi_Minh)
+    const now = new Date();
+    const vnTimeStr = now.toLocaleDateString("en-CA", { timeZone: "Asia/Ho_Chi_Minh" }); // YYYY-MM-DD
+    const [curYear, curMonth, curDay] = vnTimeStr.split("-").map(Number);
+
+    let targetDay = curDay;
+    let targetMonth = curMonth;
+    let targetYear = curYear;
+    let isToday = false;
+
+    if (!dateArg) {
+      // /ds -> Hôm nay
+      isToday = true;
+    } else if (/^\d{1,2}$/.test(dateArg)) {
+      // /ds 10 -> Ngày 10 của tháng hiện tại, năm hiện tại
+      targetDay = Number(dateArg);
+      targetMonth = curMonth;
+      targetYear = curYear;
+    } else if (/^(\d{1,2})[\/\-](\d{1,2})$/.test(dateArg)) {
+      // /ds 10/08 hoặc /ds 10/8 -> Ngày 10 tháng 8 năm hiện tại
+      const parts = dateArg.split(/[\/\-]/).map(Number);
+      targetDay = parts[0];
+      targetMonth = parts[1];
+      targetYear = curYear;
+    } else if (/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/.test(dateArg)) {
+      // /ds 10/08/2026 -> Ngày 10/08/2026
+      const parts = dateArg.split(/[\/\-]/).map(Number);
+      targetDay = parts[0];
+      targetMonth = parts[1];
+      targetYear = parts[2];
+    } else {
+      await this.zaloService.replyMessage(
+        parsedMessage.raw,
+        `⚠️ [LỖI CÚ PHÁP NGÀY]\nTham số ngày "${dateArg}" không hợp lệ.\n\nHướng dẫn sử dụng:\n• /ds: Xem ứng viên hôm nay\n• /ds 10: Xem ứng viên ngày 10 tháng này\n• /ds 10/08: Xem ứng viên ngày 10 tháng 8\n• /ds 10/08/2026: Xem ứng viên ngày cụ thể`
+      );
+      return true;
+    }
+
+    // Kiểm tra tính hợp lệ của ngày tháng
+    if (targetMonth < 1 || targetMonth > 12 || targetDay < 1 || targetDay > 31) {
+      await this.zaloService.replyMessage(
+        parsedMessage.raw,
+        `⚠️ [NGÀY THÁNG KHÔNG HỢP LỆ]\nNgày: ${targetDay}, Tháng: ${targetMonth} không tồn tại trên lịch.`
+      );
+      return true;
+    }
+
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const startIso = `${targetYear}-${pad(targetMonth)}-${pad(targetDay)}T00:00:00.000+07:00`;
+    const endIso = `${targetYear}-${pad(targetMonth)}-${pad(targetDay)}T23:59:59.999+07:00`;
+
+    const startTimestamp = new Date(startIso).getTime();
+    const endTimestamp = new Date(endIso).getTime();
+
+    if (isNaN(startTimestamp) || isNaN(endTimestamp)) {
+      await this.zaloService.replyMessage(
+        parsedMessage.raw,
+        `⚠️ [LỖI NGÀY THÁNG]\nKhông thể tính toán mốc thời gian cho ngày: ${targetDay}/${targetMonth}/${targetYear}`
+      );
+      return true;
+    }
+
+    if (targetDay === curDay && targetMonth === curMonth && targetYear === curYear) {
+      isToday = true;
+    }
+
+    const dateLabel = `${pad(targetDay)}/${pad(targetMonth)}/${targetYear}`;
+    const candidates = this.candidateRepo.getCandidatesByDateRange(startTimestamp, endTimestamp);
 
     if (candidates.length === 0) {
-      const emptyMsg = "📋 Hiện tại chưa có ứng viên nào đăng ký trong cơ sở dữ liệu.";
+      const emptyMsg = isToday
+        ? `📋 Hôm nay (${dateLabel}) chưa có ứng viên nào đăng ký trong cơ sở dữ liệu.`
+        : `📋 Không có ứng viên nào đăng ký vào ngày ${dateLabel}.`;
       await this.zaloService.replyMessage(parsedMessage.raw, emptyMsg);
       this.chatHistoryRepo.addMessage({
-        threadId: parsedMessage.threadId, senderId: "bot", senderName: "TTN HR Assistant (Bot)",
-        role: "model", content: emptyMsg, timestamp: Date.now(),
+        threadId: parsedMessage.threadId,
+        senderId: "bot",
+        senderName: "TTN HR Assistant (Bot)",
+        role: "model",
+        content: emptyMsg,
+        timestamp: Date.now(),
       });
       return true;
     }
 
-    let report = `📋 DANH SÁCH ỨNG VIÊN GẦN NHẤT (${candidates.length} người):\n\n`;
+    const titleHeader = isToday
+      ? `📋 DANH SÁCH ỨNG VIÊN HÔM NAY (${dateLabel}) - ${candidates.length} NGƯỜI:\n━━━━━━━━━━━━━━━━━━━━`
+      : `📋 DANH SÁCH ỨNG VIÊN NGÀY ${dateLabel} - ${candidates.length} NGƯỜI:\n━━━━━━━━━━━━━━━━━━━━`;
+
+    let report = titleHeader;
     candidates.forEach((c, idx) => {
-      report += `${idx + 1}. ${c.fullName || c.senderName} - Cty: ${c.targetCompany || "Chưa rõ"}\n`;
-      report += `   • SĐT: ${c.phoneNumber || "Chưa có"} | CCCD: ${c.idNumber || "Chưa có"}\n`;
-      report += `   • Lịch hẹn: ${c.interviewDate || "Chưa có"} | Trạng thái: ${c.status}\n\n`;
+      const name = (c.fullName || c.senderName || "Chưa rõ").toUpperCase();
+      const phone = c.phoneNumber || "Chưa có";
+      const company = c.targetCompany || "Chưa chọn cty";
+      const interview = c.interviewDate || "Chưa hẹn";
+      const idNum = c.idNumber || "Chưa rõ";
+      const cccdExtra: string[] = [idNum];
+      if (c.gender) cccdExtra.push(c.gender);
+      if (c.dob) cccdExtra.push(c.dob);
+
+      const timeStr = c.createdAt
+        ? new Date(c.createdAt).toLocaleTimeString("vi-VN", {
+            timeZone: "Asia/Ho_Chi_Minh",
+            hour: "2-digit",
+            minute: "2-digit",
+          })
+        : "";
+
+      report += `\n\n${idx + 1}. 👤 ${name} (${phone})\n`;
+      report += `   🏭 Công ty: ${company}\n`;
+      report += `   ⏰ Lịch hẹn: ${interview}\n`;
+      report += `   📋 CCCD: ${cccdExtra.join(" · ")}`;
+      if (timeStr) {
+        report += `\n   ⏱️ Đăng ký: ${timeStr}`;
+      }
     });
+
+    report += `\n\n👉 Gõ "/ds" để xem hôm nay hoặc "/ds <ngày>" (vd: /ds 10, /ds 10/08) để tra cứu ngày khác.`;
 
     const replyContent = report.trim();
     await this.zaloService.replyMessage(parsedMessage.raw, replyContent);
     this.chatHistoryRepo.addMessage({
-      threadId: parsedMessage.threadId, senderId: "bot", senderName: "TTN HR Assistant (Bot)",
-      role: "model", content: replyContent, timestamp: Date.now(),
+      threadId: parsedMessage.threadId,
+      senderId: "bot",
+      senderName: "TTN HR Assistant (Bot)",
+      role: "model",
+      content: replyContent,
+      timestamp: Date.now(),
     });
-    console.log(`📤 [HR Admin] Đã reply danh sách ${candidates.length} ứng viên`);
+    console.log(`📤 [HR Admin] Đã reply danh sách ${candidates.length} ứng viên ngày ${dateLabel}`);
     return true;
   }
 
@@ -212,7 +324,9 @@ export class HRMessageHandler {
     if (lowerText !== "help" && lowerText !== "/help" && lowerText !== "menu") return false;
     const helpText =
       `👑 MENU LỆNH DÀNH CHO HR QUẢN TRỊ VIÊN:\n\n` +
-      `• ds / /ds: Xem danh sách ứng viên mới nhất\n` +
+      `• /ds: Xem danh sách ứng viên hôm nay\n` +
+      `• /ds <ngày>: Xem ứng viên ngày trong tháng này (VD: /ds 10)\n` +
+      `• /ds <ngày/tháng>: Xem ứng viên theo ngày tháng (VD: /ds 10/08)\n` +
       `• rag / /rag: Xem danh sách công ty đang tuyển\n` +
       `• /rag <bài viết>: Cập nhật / tạo mới công ty từ bài viết\n` +
       `• /rag xóa <tên/id>: Xóa công ty khỏi cơ sở dữ liệu (VD: /rag xóa cmt)\n` +

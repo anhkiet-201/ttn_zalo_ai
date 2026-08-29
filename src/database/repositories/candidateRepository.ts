@@ -306,6 +306,36 @@ export class CandidateRepository {
     return rows.map((row) => this.mapRowToRecord(row));
   }
 
+  /**
+   * Lấy danh sách hồ sơ ứng viên theo khoảng thời gian (startTimestamp đến endTimestamp)
+   */
+  public getCandidatesByDateRange(
+    startTimestamp: number,
+    endTimestamp: number
+  ): CandidateRecord[] {
+    const stmt = this.db.connection.prepare(`
+      SELECT 
+        id, thread_id as threadId, sender_id as senderId, sender_name as senderName,
+        target_company as targetCompany, phone_number as phoneNumber, interview_date as interviewDate,
+        full_name as fullName, id_number as idNumber, dob, gender,
+        home_town as homeTown, residence, expiry_date as expiryDate,
+        image_urls as imageUrls, status, forwarded_to as forwardedTo,
+        created_at as createdAt, forwarded_at as forwardedAt
+      FROM candidates
+      WHERE (created_at >= ? AND created_at <= ?)
+         OR (forwarded_at >= ? AND forwarded_at <= ?)
+      ORDER BY created_at ASC
+    `);
+
+    const rows = stmt.all(
+      startTimestamp,
+      endTimestamp,
+      startTimestamp,
+      endTimestamp
+    ) as Array<Record<string, unknown>>;
+    return rows.map((row) => this.mapRowToRecord(row));
+  }
+
   private mapRowToRecord(row: Record<string, unknown>): CandidateRecord {
     return {
       id: String(row.id),
