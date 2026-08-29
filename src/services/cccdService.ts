@@ -6,6 +6,7 @@ import {
   type CCCDCardResult,
   type ChatMessagePart,
 } from "../types/ai.types.js";
+import { buildCccdOcrPrompt } from "../prompts/index.js";
 
 /**
  * CCCDService: Chuyên trách phân tích và nhận diện tài liệu Căn cước công dân (CCCD / VNeID / CMND)
@@ -39,33 +40,7 @@ export class CCCDService {
 
       const userParts: ChatMessagePart[] = [
         {
-          text: `Bạn là hệ thống OCR nhận diện tài liệu Căn cước công dân (CCCD / Thẻ căn cước / CMND) Việt Nam chuyên nghiệp.
-Có ${validItems.length} hình ảnh đính kèm theo thứ tự từ Ảnh 0 đến Ảnh ${validItems.length - 1}.
-Nhiệm vụ:
-1. Nhận diện tất cả các thẻ Căn cước công dân (CCCD / CMND / Thẻ căn cước) xuất hiện trong các ảnh (có thể 1 người gửi 2 mặt trước sau, HOẶC nhiều người gửi CCCD khác nhau).
-2. Trả về JSON theo cấu trúc danh sách "cards":
-{
-  "isCCCD": true,
-  "cards": [
-    {
-      "fullName": "Họ và tên in hoa",
-      "idNumber": "Số định danh / Số CCCD gồm 12 hoặc 9 số",
-      "dob": "Ngày tháng năm sinh (dd/mm/yyyy)",
-      "gender": "Nam hoặc Nữ",
-      "nationality": "Quốc tịch",
-      "homeTown": "Quê quán",
-      "residence": "Nơi thường trú / Địa chỉ",
-      "expiryDate": "Hạn sử dụng",
-      "imageIndices": [0] // Mảng index của các ảnh thuộc về thẻ này (ví dụ [0] cho ảnh 0, hoặc [0, 1] nếu ảnh 0 là mặt trước và ảnh 1 là mặt sau của cùng 1 người)
-    }
-  ]
-}
-3. Nếu không có ảnh nào là CCCD:
-{
-  "isCCCD": false,
-  "description": "Mô tả nội dung các ảnh"
-}
-LƯU Ý: Phải phân biệt rõ ràng nếu có NHIỀU NGƯỜI / NHIỀU THẺ CCCD KHÁC NHAU, hãy tạo từng phần tử riêng trong mảng "cards". Chỉ trả về JSON thuần túy, không dùng markdown.`,
+          text: buildCccdOcrPrompt(validItems.length),
         },
       ];
 
