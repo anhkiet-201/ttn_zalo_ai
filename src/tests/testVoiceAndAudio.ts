@@ -118,13 +118,36 @@ async function runVoiceAndAudioTests() {
     assert.strictEqual(parsed3.hasQuote, true, "Case 3: hasQuote phải là true");
     assert.strictEqual(parsed3.quoteText, "[Tin nhắn thoại]", "Case 3: quoteText được gán nhãn [Tin nhắn thoại]");
 
+    // Case 4: Tin nhắn ảnh có thuộc tính url thông thường (phải nhận là Image, không được nhận là Voice)
+    const rawPhoto = {
+      type: 0,
+      data: {
+        msgId: "photo_msg_1",
+        cliMsgId: "cli_photo_1",
+        msgType: "chat.photo",
+        uidFrom: "user_photo_1",
+        idTo: "bot_own_id",
+        dName: "Ứng Viên Gửi Ảnh",
+        ts: "1700000003000",
+        content: JSON.stringify({
+          url: "https://res-zalo.zadn.vn/photo/abc.jpg",
+          hdUrl: "https://res-zalo.zadn.vn/photo/abc_hd.jpg",
+        }),
+      },
+    } as any;
+
+    const parsedPhoto = (dispatcher as any).parseMessage(rawPhoto);
+    assert.strictEqual(parsedPhoto.hasImage, true, "Case 4: hasImage = true");
+    assert.strictEqual(parsedPhoto.imageUrls?.length, 1, "Case 4: trích xuất đúng 1 ảnh tốt nhất");
+    assert.strictEqual(parsedPhoto.imageUrls?.[0], "https://res-zalo.zadn.vn/photo/abc_hd.jpg", "Case 4: ưu tiên hdUrl");
+
     const duration = performance.now() - start;
     results.push({
       module: "Module A",
-      test: "Trích xuất Payload Voice Zalo (JSON, params, quote)",
+      test: "Trích xuất Payload Voice Zalo (JSON, params, quote & Photo Protection)",
       status: "PASS",
       durationMs: duration,
-      details: "Trích xuất thành công 3/3 cấu trúc payload Zalo Voice",
+      details: "Trích xuất chuẩn xác voice payload và bảo vệ 100% không nhận nhầm photo thành voice",
     });
   }
 

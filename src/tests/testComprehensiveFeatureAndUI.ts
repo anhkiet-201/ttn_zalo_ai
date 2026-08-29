@@ -100,13 +100,37 @@ async function runComprehensiveTests() {
     assert.strictEqual(p2.stickerUrl, "https://stickers.zaloapp.com/stickers/abc.png", "1.2: stickerUrl trực tiếp");
     assert.strictEqual(p2.stickerText, "Cảm ơn", "1.2: stickerText");
 
+    // Case 1.3: Tin nhắn ảnh có url (phải nhận hasImage = true, hasVoice = false)
+    const rawPhoto = {
+      type: 0,
+      data: {
+        msgId: "photo_1",
+        cliMsgId: "cli_photo_1",
+        msgType: "chat.photo",
+        uidFrom: "user_photo",
+        idTo: "bot_test_id",
+        dName: "Ứng Viên Ảnh",
+        ts: "1700000000000",
+        content: JSON.stringify({
+          url: "https://res-zalo.zadn.vn/photo/sample.jpg",
+          hdUrl: "https://res-zalo.zadn.vn/photo/sample_hd.jpg",
+        }),
+      },
+    } as any;
+
+    const p3 = (dispatcher as any).parseMessage(rawPhoto);
+    assert.strictEqual(p3.hasImage, true, "1.3: hasImage = true");
+    assert.strictEqual(p3.hasVoice, false, "1.3: hasVoice = false");
+    assert.strictEqual(p3.imageUrls?.length, 1, "1.3: trích xuất đúng 1 ảnh tốt nhất");
+    assert.strictEqual(p3.imageUrls?.[0], "https://res-zalo.zadn.vn/photo/sample_hd.jpg", "1.3: ưu tiên hdUrl");
+
     const duration = performance.now() - start;
     results.push({
       module: "Chức Năng",
-      test: "Test 1: Trích Xuất Payload Sticker Zalo Đa Cấu Trúc",
+      test: "Test 1: Trích Xuất Payload Sticker & Phân Biệt Ảnh / Âm Thanh",
       status: "PASS",
       durationMs: duration,
-      details: "Trích xuất hoàn hảo mọi biến thể JSON/params/paramsExt và tự sinh Zalo CDN",
+      details: "Trích xuất hoàn hảo mọi biến thể JSON/params/paramsExt và ngăn nhận nhầm ảnh thành voice",
     });
   }
 

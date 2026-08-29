@@ -44,7 +44,7 @@ export function isValidHttpUrl(urlString: unknown): boolean {
  */
 export function isAudioUrl(urlString: unknown): boolean {
   if (!urlString || typeof urlString !== "string") return false;
-  const lower = urlString.toLowerCase();
+  const lower = urlString.toLowerCase().split("?")[0];
   return (
     lower.endsWith(".m4a") ||
     lower.endsWith(".aac") ||
@@ -52,8 +52,10 @@ export function isAudioUrl(urlString: unknown): boolean {
     lower.endsWith(".wav") ||
     lower.endsWith(".amr") ||
     lower.endsWith(".ogg") ||
+    lower.endsWith(".opus") ||
     lower.includes("/voice/") ||
-    lower.includes("voicemsg")
+    lower.includes("voicemsg") ||
+    lower.includes("audiomsg")
   );
 }
 
@@ -121,8 +123,13 @@ export function extractAllImageUrls(obj: unknown): string[] {
 /**
  * Trích xuất URL âm thanh (Voice Message) và thời lượng từ payload Zalo
  */
-function extractVoiceInfo(data: any): { voiceUrl?: string; duration?: number } {
+export function extractVoiceInfo(data: any, msgType?: string): { voiceUrl?: string; duration?: number } {
   if (!data) return {};
+
+  // Nếu đây là tin nhắn ảnh hoặc sticker, tuyệt đối không trích xuất voice
+  if (msgType === "chat.photo" || msgType === "chat.sticker" || msgType === "chat.recommended") {
+    return {};
+  }
 
   let voiceUrl: string | undefined = undefined;
   let duration: number | undefined = undefined;
@@ -138,22 +145,43 @@ function extractVoiceInfo(data: any): { voiceUrl?: string; duration?: number } {
   }
 
   if (typeof target === "object" && target !== null) {
-    const urlKeys = [
+    // 1. Kiểm tra các trường chuyên dụng cho voice/audio
+    const explicitVoiceKeys = [
       "voiceUrl",
       "voice_url",
       "m4aUrl",
       "m4a_url",
       "audioUrl",
       "audio_url",
-      "href",
-      "url",
-      "directUrl",
     ];
 
-    for (const key of urlKeys) {
+    for (const key of explicitVoiceKeys) {
       if (typeof target[key] === "string" && isValidHttpUrl(target[key])) {
         voiceUrl = target[key].trim();
         break;
+      }
+    }
+
+    // 2. Nếu chưa có voiceUrl và msgType là tin nhắn thoại rõ ràng
+    const isExplicitVoiceMsg =
+      msgType === "chat.voice" ||
+      msgType === "chat.audio" ||
+      target.msgType === "chat.voice" ||
+      target.msgType === "chat.audio" ||
+      target.type === "chat.voice" ||
+      target.type === "voice";
+
+    if (!voiceUrl) {
+      const genericKeys = ["href", "url", "directUrl", "src", "link"];
+      for (const key of genericKeys) {
+        if (typeof target[key] === "string" && isValidHttpUrl(target[key])) {
+          const val = target[key].trim();
+          // Chỉ nhận nếu URL là định dạng audio hoặc tin nhắn được Zalo định danh là chat.voice
+          if (isAudioUrl(val) || isExplicitVoiceMsg) {
+            voiceUrl = val;
+            break;
+          }
+        }
       }
     }
 
@@ -162,6 +190,8 @@ function extractVoiceInfo(data: any): { voiceUrl?: string; duration?: number } {
     } else if (typeof target.duration === "string" && !isNaN(Number(target.duration))) {
       duration = Number(target.duration);
     }
+  } else if (typeof target === "string" && isValidHttpUrl(target) && isAudioUrl(target)) {
+    voiceUrl = target.trim();
   }
 
   return { voiceUrl, duration };
@@ -401,36 +431,39 @@ export class EventDispatcher {
       rawImageUrls.push(...extractAllImageUrls(rawData.paramsExt));
     }
 
-    // Trích xuất thông tin Voice / Audio nếu có
+    const msgType = String(rawMessage.data?.msgType || "");
+    const isPhoto = msgType === "chat.photo";
+
+    // Trích xuất thông tin Voice / Audio nếu có (bảo vệ tuyệt đối: nếu là photo thì không trích xuất voice)
     let voiceUrl: string | undefined = undefined;
     let voiceDuration: number | undefined = undefined;
 
-    const voiceFromContent = extractVoiceInfo(rawMessage.data.content);
-    if (voiceFromContent.voiceUrl) {
-      voiceUrl = voiceFromContent.voiceUrl;
-      voiceDuration = voiceFromContent.duration;
-    }
+    if (!isPhoto) {
+      const voiceFromContent = extractVoiceInfo(rawMessage.data.content, msgType);
+      if (voiceFromContent.voiceUrl) {
+        voiceUrl = voiceFromContent.voiceUrl;
+        voiceDuration = voiceFromContent.duration;
+      }
 
-    if (!voiceUrl && rawData?.params) {
-      const voiceFromParams = extractVoiceInfo(rawData.params);
-      if (voiceFromParams.voiceUrl) {
-        voiceUrl = voiceFromParams.voiceUrl;
-        voiceDuration = voiceFromParams.duration;
+      if (!voiceUrl && rawData?.params) {
+        const voiceFromParams = extractVoiceInfo(rawData.params, msgType);
+        if (voiceFromParams.voiceUrl) {
+          voiceUrl = voiceFromParams.voiceUrl;
+          voiceDuration = voiceFromParams.duration;
+        }
+      }
+
+      if (!voiceUrl && rawData?.paramsExt) {
+        const voiceFromParamsExt = extractVoiceInfo(rawData.paramsExt, msgType);
+        if (voiceFromParamsExt.voiceUrl) {
+          voiceUrl = voiceFromParamsExt.voiceUrl;
+          voiceDuration = voiceFromParamsExt.duration;
+        }
       }
     }
 
-    if (!voiceUrl && rawData?.paramsExt) {
-      const voiceFromParamsExt = extractVoiceInfo(rawData.paramsExt);
-      if (voiceFromParamsExt.voiceUrl) {
-        voiceUrl = voiceFromParamsExt.voiceUrl;
-        voiceDuration = voiceFromParamsExt.duration;
-      }
-    }
-
-    const msgType = String(rawMessage.data?.msgType || "");
-    const isPhoto = msgType === "chat.photo";
-    const isVoice = msgType === "chat.voice" || msgType === "chat.audio" || Boolean(voiceUrl);
-    const hasVoice = Boolean(voiceUrl);
+    const isVoice = !isPhoto && (msgType === "chat.voice" || msgType === "chat.audio" || Boolean(voiceUrl));
+    const hasVoice = !isPhoto && Boolean(voiceUrl);
 
     // Trích xuất thông tin Sticker / Nhãn dán
     const stickerInfo = extractStickerInfo(

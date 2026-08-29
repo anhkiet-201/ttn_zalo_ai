@@ -276,6 +276,23 @@ export function SmartImage({ src, alt, className, onClick }) {
   `;
 }
 
+function isValidVoiceUrl(url) {
+  if (!url || typeof url !== 'string') return false;
+  const lower = url.toLowerCase().split('?')[0];
+  return (
+    lower.endsWith('.m4a') ||
+    lower.endsWith('.aac') ||
+    lower.endsWith('.mp3') ||
+    lower.endsWith('.wav') ||
+    lower.endsWith('.amr') ||
+    lower.endsWith('.ogg') ||
+    lower.endsWith('.opus') ||
+    lower.includes('/voice/') ||
+    lower.includes('voicemsg') ||
+    lower.includes('audiomsg')
+  );
+}
+
 export function MessageBubble({ message, ownId, isGroup, onImageClick }) {
   const isOutgoing =
     message.role === 'model' ||
@@ -284,19 +301,27 @@ export function MessageBubble({ message, ownId, isGroup, onImageClick }) {
 
   const avatarLetter = (message.senderName || 'U').trim().charAt(0).toUpperCase();
 
-  const hasVoice = Boolean(message.hasVoice || message.voiceUrl);
+  const images = Array.isArray(message.imageUrls) ? message.imageUrls.filter(Boolean) : [];
+  const hasImages = !message.hasVoice && message.hasImage && images.length > 0;
+
+  const hasVoice = Boolean(
+    message.hasVoice &&
+    (isValidVoiceUrl(message.voiceUrl) || images.length === 0)
+  );
+
   const hasSticker = Boolean(
-    message.hasSticker ||
-    message.stickerUrl ||
-    message.stickerId ||
-    (message.content && (
-      message.content === '[Sticker]' ||
-      message.content === '[Nhãn dán]' ||
-      message.content.includes('[Sticker]') ||
-      message.content.startsWith('[🏷️ Nhãn dán / Sticker]:') ||
-      message.content.startsWith('[🏷️ Sticker]:') ||
-      message.content.startsWith('[Nhãn dán]:')
-    ))
+    !hasVoice &&
+    (message.hasSticker ||
+      message.stickerUrl ||
+      message.stickerId ||
+      (message.content && (
+        message.content === '[Sticker]' ||
+        message.content === '[Nhãn dán]' ||
+        message.content.includes('[Sticker]') ||
+        message.content.startsWith('[🏷️ Nhãn dán / Sticker]:') ||
+        message.content.startsWith('[🏷️ Sticker]:') ||
+        message.content.startsWith('[Nhãn dán]:')
+      )))
   );
 
   const hasRealText = Boolean(
@@ -315,8 +340,6 @@ export function MessageBubble({ message, ownId, isGroup, onImageClick }) {
       !message.content.startsWith('[Nhãn dán]:')
   );
 
-  const images = Array.isArray(message.imageUrls) ? message.imageUrls.filter(Boolean) : [];
-  const hasImages = !hasVoice && !hasSticker && message.hasImage && images.length > 0;
   const isPureImage = hasImages && !hasRealText && !message.hasQuote && !hasVoice && !hasSticker;
   const isPureSticker = hasSticker && !hasVoice && !hasImages && !message.hasQuote;
 
