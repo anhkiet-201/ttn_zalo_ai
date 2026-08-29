@@ -315,44 +315,44 @@ export class UserContextManager {
    */
   public formatForPrompt(context: UserContextData): string {
     const lines: string[] = [
-      `--- THÔNG TIN USER CONTEXT (HỒ SƠ ĐÃ GHI NHẬN TỪ NGƯỜI DÙNG) ---`,
-      `• Người gửi: ${context.senderName} (ID: ${context.senderId})`,
-      `• SĐT đã cung cấp: ${
+      `--- USER CONTEXT INFORMATION (VERIFIED CANDIDATE PROFILE) ---`,
+      `• Candidate/Sender: ${context.senderName} (ID: ${context.senderId})`,
+      `• Provided Phone Number(s): ${
         context.phoneNumbers.length > 0
           ? context.phoneNumbers.join(", ")
-          : "Chưa cung cấp"
+          : "None provided"
       }`,
-      `• Công ty đang trao đổi / quan tâm: ${
-        context.targetCompany || "Chưa chọn công ty"
+      `• Target/Discussed Company: ${
+        context.targetCompany || "None selected yet"
       }`,
     ];
 
     if (context.documents.length === 0) {
       lines.push(
-        `• Giấy tờ định danh / CCCD: [CHƯA CÓ CCCD - CẤM TỰ HẸN GIỜ, CẤM GỬI LINK MAP, CẤM GỌI TOOL register_candidate. BẮT BUỘC YÊU CẦU ỨNG VIÊN GỬI ẢNH CCCD + SĐT ĐỂ ĐĂNG KÝ PV].`
+        `• Identity Document Status: [NO CCCD UPLOADED YET - STRICTLY FORBIDDEN to schedule interview appointments, send Google Maps links, or call registration tools. MUST POLITELY ASK CANDIDATE TO SEND 2-SIDED CCCD PHOTOS + PHONE NUMBER].`
       );
     } else {
       lines.push(
-        `• Danh sách CCCD đã gửi (${context.documents.length} ứng viên):`
+        `• Uploaded CCCD Documents (${context.documents.length} person(s)):`
       );
       context.documents.forEach((doc, idx) => {
         const regStatus =
           doc.status === "registered"
-            ? `[ĐÃ ĐĂNG KÝ CTY: ${doc.registeredCompany} - LỊCH HẸN: ${doc.interviewDate}]`
-            : `[CHƯA ĐĂNG KÝ]`;
+            ? `[REGISTERED FOR: ${doc.registeredCompany} - INTERVIEW DATE: ${doc.interviewDate}]`
+            : `[NOT REGISTERED YET]`;
         const imagesDesc =
           doc.imageUrls.length === 0
-            ? `0 ảnh (Chưa có ảnh hoặc ảnh cũ đã hết hạn, BẮT BUỘC XIN LẠI ẢNH 2 MẶT CCCD)`
+            ? `0 photos (No valid photos or previous links expired. MUST ASK CANDIDATE TO RE-UPLOAD 2-SIDED CCCD PHOTOS)`
             : doc.imageUrls.length > 1
-            ? `${doc.imageUrls.length} ảnh (đầy đủ mặt trước & mặt sau)`
-            : `${doc.imageUrls.length} ảnh`;
+            ? `${doc.imageUrls.length} photos (both front & back sides)`
+            : `${doc.imageUrls.length} photo(s)`;
 
         lines.push(
-          `  [${idx + 1}] Họ tên: ${doc.fullName || "Chưa rõ"} | Số CCCD: ${
-            doc.idNumber || "Chưa rõ"
-          } | Ngày sinh: ${doc.dob || "Chưa rõ"} | Giới tính: ${
-            doc.gender || "Chưa rõ"
-          } | Quê quán: ${doc.homeTown || "Chưa rõ"} | Ảnh CCCD: ${imagesDesc} | Trạng thái: ${regStatus}`
+          `  [#${idx + 1}] Full Name: ${doc.fullName || "Unknown"} | ID Number: ${
+            doc.idNumber || "Unknown"
+          } | DOB: ${doc.dob || "Unknown"} | Gender: ${
+            doc.gender || "Unknown"
+          } | Place of Origin: ${doc.homeTown || "Unknown"} | CCCD Photos: ${imagesDesc} | Status: ${regStatus}`
         );
       });
     }

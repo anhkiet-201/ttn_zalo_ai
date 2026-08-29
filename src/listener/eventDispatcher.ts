@@ -354,8 +354,12 @@ export class EventDispatcher {
     let quoteSenderId: string | undefined = undefined;
     let quoteSenderName: string | undefined = undefined;
     let quoteMsgType: string | undefined = undefined;
+    let quoteMsgId: string | undefined = undefined;
 
     if (hasQuote && rawQuote) {
+      quoteMsgId =
+        String(rawQuote.globalMsgId || rawQuote.cliMsgId || rawQuote.msgId || "") ||
+        undefined;
       quoteText = typeof rawQuote.msg === "string" ? rawQuote.msg.trim() : undefined;
       quoteSenderId = rawQuote.ownerId ? String(rawQuote.ownerId) : undefined;
       quoteMsgType = rawQuote.msgType ? String(rawQuote.msgType) : undefined;
@@ -366,6 +370,20 @@ export class EventDispatcher {
         quoteSenderName = String(rawQuote.fromDName || rawQuote.dName);
       } else if (quoteSenderId) {
         quoteSenderName = isGroup ? `Thành viên (${quoteSenderId})` : "Ứng viên";
+      }
+
+      if (!quoteText && rawQuote.attach) {
+        try {
+          const parsedAttach =
+            typeof rawQuote.attach === "string"
+              ? JSON.parse(rawQuote.attach)
+              : rawQuote.attach;
+          if (parsedAttach?.description) {
+            quoteText = `[Hình ảnh: ${parsedAttach.description}]`;
+          } else if (parsedAttach?.title) {
+            quoteText = `[Hình ảnh: ${parsedAttach.title}]`;
+          }
+        } catch {}
       }
 
       if (!quoteText) {
@@ -400,6 +418,7 @@ export class EventDispatcher {
       quoteMsgType,
       quoteData: hasQuote && quoteText ? {
         msg: quoteText,
+        msgId: quoteMsgId,
         senderId: quoteSenderId,
         senderName: quoteSenderName,
         msgType: quoteMsgType,

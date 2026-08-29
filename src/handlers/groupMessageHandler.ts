@@ -83,7 +83,7 @@ export class GroupMessageHandler {
         const item = msg.mediaUrls[0];
         try {
           const meaning = await this.aiService.sticker.understandSticker(item.url, item.description);
-          msg.text = `[Nhãn dán]: ${meaning}`;
+          msg.text = `[Sticker / Emotion]: ${meaning}`;
         } catch {}
       }
     }
@@ -95,7 +95,7 @@ export class GroupMessageHandler {
         const item = msg.mediaUrls[0];
         try {
           const transcribed = await this.aiService.audio.transcribeAudio(item.url, companyHints);
-          msg.text = `[Tin nhắn thoại]: ${transcribed}`;
+          msg.text = `[Voice Message Audio]: ${transcribed}`;
         } catch {}
       }
     }

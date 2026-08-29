@@ -208,6 +208,119 @@ export class ChatHistoryRepository {
   }
 
   /**
+   * Lấy một tin nhắn theo ID
+   */
+  public getMessageById(id: string): ChatMessageRecord | null {
+    if (!id) return null;
+    try {
+      const stmt = this.db.connection.prepare(`
+        SELECT 
+          id, thread_id as threadId, sender_id as senderId, sender_name as senderName,
+          role, content, media_type as mediaType, media_urls as mediaUrls,
+          has_quote as hasQuote, quote_text as quoteText,
+          quote_sender_name as quoteSenderName, quote_sender_id as quoteSenderId,
+          is_group as isGroup, timestamp
+        FROM chat_messages
+        WHERE id = ?
+        LIMIT 1
+      `);
+      const row = stmt.get(id) as any;
+      return row ? this.mapMessageRow(row) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Tìm tin nhắn được trích dẫn (Quote) trong cùng một thread:
+   * 1. Tìm theo msgId / cliMsgId / globalMsgId
+   * 2. Nếu không thấy ID, tìm tin nhắn gần nhất của người được trích dẫn (quoteOwnerId)
+   */
+  public findQuotedMessage(
+    threadId: string,
+    quoteMsgId?: string,
+    quoteOwnerId?: string,
+    quoteTs?: number
+  ): ChatMessageRecord | null {
+    if (!threadId) return null;
+
+    // 1. Thử tìm bằng quoteMsgId nếu có
+    if (quoteMsgId) {
+      const msg = this.getMessageById(quoteMsgId);
+      if (msg && msg.threadId === threadId) {
+        return msg;
+      }
+    }
+
+    // 2. Thử tìm tin nhắn theo senderId và timestamp xấp xỉ
+    if (quoteOwnerId && quoteTs) {
+      try {
+        const stmt = this.db.connection.prepare(`
+          SELECT 
+            id, thread_id as threadId, sender_id as senderId, sender_name as senderName,
+            role, content, media_type as mediaType, media_urls as mediaUrls,
+            has_quote as hasQuote, quote_text as quoteText,
+            quote_sender_name as quoteSenderName, quote_sender_id as quoteSenderId,
+            is_group as isGroup, timestamp
+          FROM chat_messages
+          WHERE thread_id = ? AND sender_id = ? AND abs(timestamp - ?) < 30000
+          ORDER BY abs(timestamp - ?) ASC
+          LIMIT 1
+        `);
+        const row = stmt.get(threadId, quoteOwnerId, quoteTs, quoteTs) as any;
+        if (row) return this.mapMessageRow(row);
+      } catch {}
+    }
+
+    // 3. Fallback: Lấy tin nhắn gần nhất của người gửi đó trong thread
+    if (quoteOwnerId) {
+      try {
+        const stmt = this.db.connection.prepare(`
+          SELECT 
+            id, thread_id as threadId, sender_id as senderId, sender_name as senderName,
+            role, content, media_type as mediaType, media_urls as mediaUrls,
+            has_quote as hasQuote, quote_text as quoteText,
+            quote_sender_name as quoteSenderName, quote_sender_id as quoteSenderId,
+            is_group as isGroup, timestamp
+          FROM chat_messages
+          WHERE thread_id = ? AND sender_id = ?
+          ORDER BY timestamp DESC
+          LIMIT 1
+        `);
+        const row = stmt.get(threadId, quoteOwnerId) as any;
+        if (row) return this.mapMessageRow(row);
+      } catch {}
+    }
+
+    return null;
+  }
+
+  /**
+   * Cập nhật content và media_urls cho một tin nhắn đã lưu (sau khi AI phân tích xong)
+   */
+  public updateMessageContentAndMedia(
+    id: string,
+    content: string,
+    mediaUrls?: MediaItem[]
+  ): void {
+    if (!id) return;
+    try {
+      const stmt = this.db.connection.prepare(`
+        UPDATE chat_messages
+        SET content = ?, media_urls = ?
+        WHERE id = ?
+      `);
+      stmt.run(
+        content || "",
+        mediaUrls && mediaUrls.length > 0 ? JSON.stringify(mediaUrls) : null,
+        id
+      );
+    } catch (err) {
+      console.warn(`⚠️ Không thể cập nhật content/media cho message ${id}:`, err);
+    }
+  }
+
+  /**
    * Lấy danh sách tin nhắn cũ hơn một mốc thời gian (phục vụ Lazy Load)
    */
   public getHistoryBefore(

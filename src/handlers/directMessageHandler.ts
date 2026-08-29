@@ -104,27 +104,31 @@ export class DirectMessageHandler {
           item.description
         );
         console.log(`✅ [Sticker AI] Ý nghĩa nhãn dán: "${stickerMeaning}"`);
-        msg.text = `[🏷️ Nhãn dán / Sticker]: "${stickerMeaning}"`;
+        msg.text = `[🏷️ Sticker Emotion & Meaning]: "${stickerMeaning}"`;
         item.description = stickerMeaning;
 
-        // Lưu bản ghi hoàn chỉnh với stickerUrl và ý nghĩa vào ChatHistory
+        // Lưu/cập nhật bản ghi hoàn chỉnh với stickerUrl và ý nghĩa vào ChatHistory
         try {
-          this.chatHistoryRepo.addMessage({
-            id: String(msg.rawMessage?.data?.msgId || msg.rawMessage?.data?.cliMsgId || "") || undefined,
-            threadId: batch.threadId,
-            senderId: batch.senderId,
-            senderName: batch.senderName,
-            role: "user",
-            content: msg.text,
-            mediaType: "sticker",
-            mediaUrls: [item],
-            hasQuote: msg.hasQuote,
-            quoteText: msg.quoteText,
-            quoteSenderName: msg.quoteSenderName,
-            quoteSenderId: msg.quoteSenderId,
-            isGroup: false,
-            timestamp: msg.timestamp,
-          });
+          const msgId = String(msg.rawMessage?.data?.msgId || msg.rawMessage?.data?.cliMsgId || "");
+          if (msgId) {
+            this.chatHistoryRepo.updateMessageContentAndMedia(msgId, msg.text, [item]);
+          } else {
+            this.chatHistoryRepo.addMessage({
+              threadId: batch.threadId,
+              senderId: batch.senderId,
+              senderName: batch.senderName,
+              role: "user",
+              content: msg.text,
+              mediaType: "sticker",
+              mediaUrls: [item],
+              hasQuote: msg.hasQuote,
+              quoteText: msg.quoteText,
+              quoteSenderName: msg.quoteSenderName,
+              quoteSenderId: msg.quoteSenderId,
+              isGroup: false,
+              timestamp: msg.timestamp,
+            });
+          }
         } catch (err) {
           console.warn("⚠️ Lỗi lưu tin nhắn sticker vào chat_messages:", err);
         }
@@ -146,25 +150,31 @@ export class DirectMessageHandler {
         console.log(`🎙️ [AudioService] Đang phiên âm tin nhắn thoại từ [${batch.senderName}]...`);
         const transcribedText = await this.aiService.audio.transcribeAudio(item.url, companyHints);
         console.log(`✅ [Audio STT] Phiên âm: "${transcribedText}"`);
-        msg.text = `[🎙️ Tin nhắn thoại]: "${transcribedText}"`;
+        msg.text = `[🎙️ Voice Message Audio Transcription]: "${transcribedText}"`;
+        item.description = transcribedText;
 
         // Lưu/cập nhật bản ghi hoàn chỉnh với nội dung STT và voiceUrl vào ChatHistory
         try {
-          this.chatHistoryRepo.addMessage({
-            threadId: batch.threadId,
-            senderId: batch.senderId,
-            senderName: batch.senderName,
-            role: "user",
-            content: msg.text,
-            mediaType: "voice",
-            mediaUrls: [item],
-            hasQuote: msg.hasQuote,
-            quoteText: msg.quoteText,
-            quoteSenderName: msg.quoteSenderName,
-            quoteSenderId: msg.quoteSenderId,
-            isGroup: false,
-            timestamp: msg.timestamp,
-          });
+          const msgId = String(msg.rawMessage?.data?.msgId || msg.rawMessage?.data?.cliMsgId || "");
+          if (msgId) {
+            this.chatHistoryRepo.updateMessageContentAndMedia(msgId, msg.text, [item]);
+          } else {
+            this.chatHistoryRepo.addMessage({
+              threadId: batch.threadId,
+              senderId: batch.senderId,
+              senderName: batch.senderName,
+              role: "user",
+              content: msg.text,
+              mediaType: "voice",
+              mediaUrls: [item],
+              hasQuote: msg.hasQuote,
+              quoteText: msg.quoteText,
+              quoteSenderName: msg.quoteSenderName,
+              quoteSenderId: msg.quoteSenderId,
+              isGroup: false,
+              timestamp: msg.timestamp,
+            });
+          }
         } catch (err) {
           console.warn("⚠️ Lỗi lưu tin nhắn thoại vào chat_messages:", err);
         }
@@ -204,19 +214,90 @@ export class DirectMessageHandler {
       cccdResult = await this.aiService.analyzeCCCD(allImageUrls);
 
       if (cccdResult?.isCCCD) {
+        let cccdSummary = "";
         if (cccdResult.cards && cccdResult.cards.length > 0) {
+          const cardDescriptions = cccdResult.cards.map(
+            (c, idx) =>
+              `[CCCD Card #${idx + 1}]: Full Name: ${c.fullName || "Unknown"}, ID Number: ${c.idNumber || "Unknown"}, Gender: ${c.gender || "Unknown"}, DOB: ${c.dob || "Unknown"}, Origin: ${c.homeTown || "Unknown"}, Residence: ${c.residence || "Unknown"}`
+          );
+          cccdSummary = `[Citizen ID Card (CCCD) Documents (${cccdResult.cards.length} persons)]: ${cardDescriptions.join("; ")}`;
+
           for (const card of cccdResult.cards) {
             console.log(`✅ [CCCD] ${card.fullName || "Chưa rõ"} - ${card.idNumber || "Chưa rõ"} (${card.imageUrls.length} ảnh)`);
-            // Lưu vào context của đúng threadId:senderId này — không ảnh hưởng ứng viên khác
             this.userContextManager.addOrUpdateCCCD(
               batch.threadId, batch.senderId, batch.senderName, card, card.imageUrls
             );
           }
+
+          // Cập nhật description chi tiết của từng ảnh cụ thể vào SQLite
+          const cards = cccdResult.cards;
+          for (const msg of batch.messages) {
+            if (msg.mediaType === "photo" && msg.mediaUrls) {
+              const cardLines: string[] = [];
+              msg.mediaUrls.forEach((item, imgIdx) => {
+                const matchedCard = cards?.find((c) => c.imageUrls.includes(item.url));
+                if (matchedCard) {
+                  const cardDesc = `[Image #${imgIdx + 1} - CCCD Card]: Full Name: ${matchedCard.fullName || "Unknown"}, ID Number: ${matchedCard.idNumber || "Unknown"}, Gender: ${matchedCard.gender || "Unknown"}, DOB: ${matchedCard.dob || "Unknown"}, Origin: ${matchedCard.homeTown || "Unknown"}, Residence: ${matchedCard.residence || "Unknown"}`;
+                  item.description = cardDesc;
+                  cardLines.push(cardDesc);
+                } else {
+                  item.description = `[Image #${imgIdx + 1} - Attached CCCD Document]`;
+                  cardLines.push(item.description);
+                }
+              });
+
+              const summaryText = cardLines.join("\n");
+              msg.text = msg.text ? `${msg.text}\n${summaryText}` : summaryText;
+              const msgId = String(msg.rawMessage?.data?.msgId || msg.rawMessage?.data?.cliMsgId || "");
+              if (msgId) {
+                this.chatHistoryRepo.updateMessageContentAndMedia(msgId, msg.text, msg.mediaUrls);
+              }
+            }
+          }
         } else {
+          cccdSummary = `[Citizen ID Card (CCCD) Document]: Full Name: ${cccdResult.fullName || "Unknown"}, ID Number: ${cccdResult.idNumber || "Unknown"}, Gender: ${cccdResult.gender || "Unknown"}, DOB: ${cccdResult.dob || "Unknown"}, Origin: ${cccdResult.homeTown || "Unknown"}, Residence: ${cccdResult.residence || "Unknown"}`;
+
           console.log(`✅ [CCCD] ${cccdResult.fullName || "Chưa rõ"} - ${cccdResult.idNumber || "Chưa rõ"}`);
           this.userContextManager.addOrUpdateCCCD(
             batch.threadId, batch.senderId, batch.senderName, cccdResult, allImageUrls
           );
+
+          for (const msg of batch.messages) {
+            if (msg.mediaType === "photo" && msg.mediaUrls) {
+              msg.mediaUrls.forEach((item, imgIdx) => {
+                item.description = `[Image #${imgIdx + 1}]: ${cccdSummary}`;
+              });
+              msg.text = msg.text ? `${msg.text}\n${cccdSummary}` : cccdSummary;
+              const msgId = String(msg.rawMessage?.data?.msgId || msg.rawMessage?.data?.cliMsgId || "");
+              if (msgId) {
+                this.chatHistoryRepo.updateMessageContentAndMedia(msgId, msg.text, msg.mediaUrls);
+              }
+            }
+          }
+        }
+      } else {
+        // Ảnh thông thường (không phải CCCD) -> Trích xuất description từ Vision AI nếu có
+        const visionDesc = cccdResult?.description
+          ? `[Image Content]: ${cccdResult.description}`
+          : `[Attached Images (${allImageUrls.length} photos)]`;
+
+        for (const msg of batch.messages) {
+          if (msg.mediaType === "photo" && msg.mediaUrls) {
+            if (!msg.text || !msg.text.trim()) {
+              msg.text = visionDesc;
+            } else if (cccdResult?.description && !msg.text.includes(cccdResult.description)) {
+              msg.text = `${msg.text}\n${visionDesc}`;
+            }
+            msg.mediaUrls.forEach((item, imgIdx) => {
+              if (!item.description) {
+                item.description = `[Image #${imgIdx + 1}]: ${visionDesc}`;
+              }
+            });
+            const msgId = String(msg.rawMessage?.data?.msgId || msg.rawMessage?.data?.cliMsgId || "");
+            if (msgId) {
+              this.chatHistoryRepo.updateMessageContentAndMedia(msgId, msg.text, msg.mediaUrls);
+            }
+          }
         }
       }
 
@@ -246,45 +327,75 @@ export class DirectMessageHandler {
 
     // 5. Gom nội dung text có timestamp và ngữ cảnh quote
     const textLines: string[] = [];
+    const allQuotedImageUrls: string[] = [];
     let lastQuote: string | undefined;
     let lastQuoteSender: string | undefined;
 
     for (const msg of batch.messages) {
+      if (msg.hasQuote) {
+        // Tra cứu tin nhắn gốc được trích dẫn trong database để khôi phục description và ảnh gốc
+        const quotedMsg = this.chatHistoryRepo.findQuotedMessage(
+          batch.threadId,
+          msg.quoteData?.msgId,
+          msg.quoteSenderId,
+          msg.timestamp
+        );
+
+        if (quotedMsg) {
+          if (quotedMsg.content && quotedMsg.content.trim()) {
+            msg.quoteText = quotedMsg.content.trim();
+          } else if (quotedMsg.mediaUrls?.[0]?.description) {
+            msg.quoteText = quotedMsg.mediaUrls[0].description;
+          }
+
+          if (quotedMsg.mediaType === "photo" && quotedMsg.mediaUrls) {
+            for (const item of quotedMsg.mediaUrls) {
+              if (item.url && !allQuotedImageUrls.includes(item.url)) {
+                allQuotedImageUrls.push(item.url);
+              }
+            }
+          }
+        }
+      }
+
       if (msg.text) {
         const timeStr = this.aiService.formatTimestamp(msg.timestamp);
         if (msg.hasQuote && msg.quoteText) {
-          const qSender = msg.quoteSenderName || (msg.quoteSenderId === config.hrRecipientId ? "Admin" : "Tin nhắn trước");
-          textLines.push(`[Gửi lúc ${timeStr}]: (↪️ Trả lời [${qSender}]: "${msg.quoteText}") ${msg.text}`);
+          const qSender = msg.quoteSenderName || (msg.quoteSenderId === config.hrRecipientId ? "Recruiter" : "Previous message");
+          textLines.push(`[Sent at ${timeStr}]: (↪️ In reply to [${qSender}]: "${msg.quoteText}") ${msg.text}`);
         } else {
-          textLines.push(`[Gửi lúc ${timeStr}]: ${msg.text}`);
+          textLines.push(`[Sent at ${timeStr}]: ${msg.text}`);
         }
       }
-      if (msg.quoteText) { lastQuote = msg.quoteText; lastQuoteSender = msg.quoteSenderName; }
+      if (msg.quoteText) {
+        lastQuote = msg.quoteText;
+        lastQuoteSender = msg.quoteSenderName;
+      }
     }
 
-    // Thêm thông tin CCCD vào text context
+    // Thêm thông tin CCCD vào text context nếu vừa phân tích
     if (cccdResult?.isCCCD) {
       if (cccdResult.cards && cccdResult.cards.length > 0) {
         const descList = cccdResult.cards.map(
-          (c, idx) => `  [Ứng viên ${idx + 1}]: ${c.fullName || "Chưa rõ"}, CCCD: ${c.idNumber || "Chưa rõ"}, Giới tính: ${c.gender || "Chưa rõ"}, Ngày sinh: ${c.dob || "Chưa rõ"}`
+          (c, idx) => `  [Candidate #${idx + 1}]: ${c.fullName || "Unknown"}, CCCD: ${c.idNumber || "Unknown"}, Gender: ${c.gender || "Unknown"}, DOB: ${c.dob || "Unknown"}`
         );
-        textLines.push(`[Hệ thống OCR CCCD]: ${cccdResult.cards.length} người:\n${descList.join("\n")}`);
+        textLines.push(`[System OCR CCCD Extraction]: ${cccdResult.cards.length} person(s):\n${descList.join("\n")}`);
       } else {
         textLines.push(
-          `[Hệ thống OCR CCCD]: Họ tên: ${cccdResult.fullName || "Chưa rõ"}, CCCD: ${cccdResult.idNumber || "Chưa rõ"}, Giới tính: ${cccdResult.gender || "Chưa rõ"}, Năm sinh: ${cccdResult.dob || "Chưa rõ"}.`
+          `[System OCR CCCD Extraction]: Full Name: ${cccdResult.fullName || "Unknown"}, CCCD: ${cccdResult.idNumber || "Unknown"}, Gender: ${cccdResult.gender || "Unknown"}, DOB: ${cccdResult.dob || "Unknown"}.`
         );
       }
     }
 
     let formattedText = textLines.join("\n");
     if (!formattedText && allImageUrls.length > 0) {
-      formattedText = "[Ứng viên gửi hình ảnh đính kèm]";
+      formattedText = "[Candidate attached image(s)]";
     }
     if (!formattedText && allImageUrls.length === 0) return;
 
     console.log(`📥 [DM: "${batch.senderName}"] ${formattedText.length > 100 ? formattedText.slice(0, 100) + "..." : formattedText}`);
 
-    // 6. Gọi AI generateReply — context hoàn toàn riêng theo threadId (không share)
+    // 6. Gọi AI generateReply — truyền đầy đủ description, ảnh kèm theo và ảnh trích dẫn (Quoted Images)
     try {
       const aiReply = await this.aiService.generateReply(
         batch.threadId,
@@ -296,6 +407,7 @@ export class DirectMessageHandler {
           quoteContext: lastQuote,
           quoteSenderName: lastQuoteSender,
           imageUrls: allImageUrls.length > 0 ? allImageUrls : undefined,
+          quotedImageUrls: allQuotedImageUrls.length > 0 ? allQuotedImageUrls : undefined,
           userContextText,
           onToolCall: async (toolName, args) => {
             const res = await this.toolExecutor.execute(toolName, args, {

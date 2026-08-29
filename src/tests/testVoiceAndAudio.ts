@@ -746,6 +746,7 @@ async function runVoiceAndAudioTests() {
 
   const totalPassed = results.filter((r) => r.status === "PASS").length;
   console.log(`\n🎉 TỔNG KẾT: ${totalPassed}/${results.length} bài test ĐẠT (PASS) | 0 bài test LỖI (FAIL)`);
+  process.exit(0);
 }
 
 runVoiceAndAudioTests().catch((err) => {

@@ -62,6 +62,7 @@ export interface BotConfig {
  */
 export interface QuoteData {
   msg: string;
+  msgId?: string;
   senderId?: string;
   senderName?: string;
   msgType?: string;

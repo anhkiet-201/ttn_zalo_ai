@@ -9,6 +9,8 @@ export interface QueuedMessage {
   quoteText?: string;
   quoteSenderName?: string;
   quoteSenderId?: string;
+  quoteMsgId?: string;
+  quoteData?: ParsedMessage["quoteData"];
   timestamp: number;
   rawMessage?: ParsedMessage["raw"];
 }
@@ -87,6 +89,8 @@ export class MessageBatcher {
       quoteText: parsedMessage.quoteText,
       quoteSenderName: parsedMessage.quoteSenderName,
       quoteSenderId: parsedMessage.quoteSenderId,
+      quoteMsgId: parsedMessage.quoteData?.msgId,
+      quoteData: parsedMessage.quoteData,
       timestamp: parsedMessage.timestamp,
       rawMessage: parsedMessage.raw,
     });

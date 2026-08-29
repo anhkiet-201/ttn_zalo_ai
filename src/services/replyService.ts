@@ -119,12 +119,12 @@ export class ReplyService {
         let resolvedName = rec.senderName || "";
         if (rec.role === "user") {
           if (!isGroup) {
-            resolvedName = senderName || resolvedName || "Ứng viên";
+            resolvedName = senderName || resolvedName || "Candidate";
           } else {
             if (rec.senderId === senderId && senderName) {
               resolvedName = senderName;
             } else if (!resolvedName) {
-              resolvedName = `Thành viên ${rec.senderId}`;
+              resolvedName = `Member ${rec.senderId}`;
             }
           }
         }
@@ -132,14 +132,41 @@ export class ReplyService {
         const prefix =
           rec.role === "user"
             ? isGroup
-              ? `[${timeStr}] [Thành viên: ${resolvedName}]`
-              : `[${timeStr}] [${resolvedName}]`
-            : `[${timeStr}] [Bot]`;
+              ? `[${timeStr}] [Group Member: ${resolvedName}]`
+              : `[${timeStr}] [Candidate: ${resolvedName}]`
+            : `[${timeStr}] [Recruiter / Bot]`;
 
         let msgBody = rec.content;
+
+        // Nếu msgBody rỗng, kiểm tra xem có media không và trích xuất description
+        if (!msgBody || !msgBody.trim()) {
+          if (rec.mediaUrls && rec.mediaUrls.length > 0) {
+            const firstDesc = rec.mediaUrls[0]?.description;
+            if (firstDesc) {
+              msgBody = firstDesc;
+            } else if (rec.mediaType === "photo") {
+              msgBody = `[Attached Images (${rec.mediaUrls.length} photos)]`;
+            } else if (rec.mediaType === "voice") {
+              msgBody = `[Voice Message Audio]`;
+            } else if (rec.mediaType === "sticker") {
+              msgBody = `[Sticker]`;
+            }
+          }
+        }
+
+        // Bổ sung mô tả chi tiết nếu có mediaUrls chứa description chưa nằm trong msgBody
+        if (rec.mediaUrls && rec.mediaUrls.length > 0) {
+          const descriptions = rec.mediaUrls
+            .map((m) => m.description)
+            .filter((d): d is string => Boolean(d && d.trim()));
+          if (descriptions.length > 0 && !descriptions.some((d) => msgBody.includes(d))) {
+            msgBody += ` (Details: ${descriptions.join("; ")})`;
+          }
+        }
+
         if (rec.hasQuote && rec.quoteText) {
-          const qSender = rec.quoteSenderName || (rec.quoteSenderId === config.hrRecipientId ? "Admin" : "Tin nhắn trước");
-          msgBody = `(↪️ Trả lời [${qSender}]: "${rec.quoteText}") ${msgBody}`;
+          const qSender = rec.quoteSenderName || (rec.quoteSenderId === config.hrRecipientId ? "Recruiter" : "Previous message");
+          msgBody = `(↪️ In reply to [${qSender}]: "${rec.quoteText}") ${msgBody}`;
         }
 
         return {
@@ -152,33 +179,60 @@ export class ReplyService {
       const timeContext = this.getCurrentDateTimeContext();
       const currentTimeStr = this.formatTimestamp();
       const senderHeader = isGroup
-        ? `[Thành viên Nhóm: ${senderName} (ID: ${senderId})]`
-        : `[Người dùng: ${senderName}]`;
+        ? `[Group Member: ${senderName} (ID: ${senderId})]`
+        : `[Candidate: ${senderName}]`;
 
       let promptText = `[${currentTimeStr}] ${senderHeader}:\n${userText}`;
-      if (quoteContext && !userText.includes("↪️ Trả lời")) {
-        const qSender = quoteSenderName || "Tin nhắn trước";
-        promptText = `[↪️ Đang trả lời tin nhắn của [${qSender}]: "${quoteContext}"]\n${promptText}`;
+      if (quoteContext && !userText.includes("↪️")) {
+        const qSender = quoteSenderName || "Previous message";
+        promptText = `[↪️ In reply to message from [${qSender}]: "${quoteContext}"]\n${promptText}`;
       }
 
       const userParts: ChatMessagePart[] = [{ text: promptText }];
+      const quotedImageUrls = options?.quotedImageUrls || [];
 
-      // Tải song song tất cả các hình ảnh gửi kèm nếu có
-      if (imageUrls.length > 0) {
-        console.log(`🖼️ [ReplyService] Đang tải song song ${imageUrls.length} hình ảnh gửi kèm...`);
-        const downloadResults = await Promise.all(
-          imageUrls.map((url) => downloadImageAsBase64(url))
-        );
+      // Tải song song tất cả các hình ảnh gửi kèm hoặc được trích dẫn (Quote) nếu có
+      if (imageUrls.length > 0 || quotedImageUrls.length > 0) {
+        if (imageUrls.length > 0) {
+          console.log(`🖼️ [ReplyService] Đang tải song song ${imageUrls.length} hình ảnh gửi kèm...`);
+          const downloadResults = await Promise.all(
+            imageUrls.map((url) => downloadImageAsBase64(url))
+          );
 
-        for (const imgData of downloadResults) {
-          if (imgData) {
-            userParts.push({
-              inlineData: {
-                mimeType: imgData.mimeType,
-                data: imgData.data,
-              },
-            });
-          }
+          downloadResults.forEach((imgData, idx) => {
+            if (imgData) {
+              userParts.push({
+                text: `[Attached Image #${idx + 1}]:`,
+              });
+              userParts.push({
+                inlineData: {
+                  mimeType: imgData.mimeType,
+                  data: imgData.data,
+                },
+              });
+            }
+          });
+        }
+
+        if (quotedImageUrls.length > 0) {
+          console.log(`🖼️ [ReplyService] Đang tải song song ${quotedImageUrls.length} hình ảnh được trích dẫn (Quote)...`);
+          const quotedDownloadResults = await Promise.all(
+            quotedImageUrls.map((url) => downloadImageAsBase64(url))
+          );
+
+          quotedDownloadResults.forEach((imgData, idx) => {
+            if (imgData) {
+              userParts.push({
+                text: `[Quoted Image via Reply #${idx + 1}]:`,
+              });
+              userParts.push({
+                inlineData: {
+                  mimeType: imgData.mimeType,
+                  data: imgData.data,
+                },
+              });
+            }
+          });
         }
       }
 
@@ -204,7 +258,7 @@ export class ReplyService {
       if (userContextText) {
         fullSystemInstruction += `\n\n${userContextText}`;
       }
-      fullSystemInstruction += `\n\n--- BẮT ĐẦU NGỮ CẢNH (RAG CONTEXT) ---\n${ragContext}\n--- KẾT THÚC NGỮ CẢNH ---`;
+      fullSystemInstruction += `\n\n--- BEGIN RAG CONTEXT (KNOWLEDGE BASE) ---\n${ragContext}\n--- END RAG CONTEXT ---`;
       const contents: Content[] = [...history, userContent];
 
       const timeoutMs = 45000;
