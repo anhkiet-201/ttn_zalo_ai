@@ -502,14 +502,18 @@ async function runComprehensiveTests() {
     assert.ok(cssContent.includes(".zalo-sticker-caption-badge"), "CSS có .zalo-sticker-caption-badge");
     assert.ok(cssContent.includes(".dark-mode .zalo-sticker-caption-badge"), "CSS có dark-mode cho Sticker badge");
     assert.ok(cssContent.includes(".dark-mode .zalo-sticker-skeleton"), "CSS có dark-mode cho Shimmer");
+    assert.ok(cssContent.includes(".msg-images-grid"), "CSS có .msg-images-grid");
+    assert.ok(cssContent.includes(".msg-image-thumb"), "CSS có .msg-image-thumb");
+    assert.ok(cssContent.includes(".smart-image-wrapper"), "CSS có .smart-image-wrapper");
+    assert.ok(cssContent.includes(".dark-mode .smart-image-wrapper"), "CSS có dark mode cho smart-image-wrapper");
 
     const duration = performance.now() - start;
     results.push({
       module: "Giao Diện UI",
-      test: "Test 10: Tương Thích Giao Diện Sáng / Tối (Dark Mode)",
+      test: "Test 10: Tương Thích Giao Diện Sáng / Tối (Dark Mode) & Album Grid",
       status: "PASS",
       durationMs: duration,
-      details: "Tất cả class UI Sticker & Voice đều có định nghĩa Dark Mode tương phản cao",
+      details: "Tất cả class UI Sticker, Image Album Grid & Voice đều có định nghĩa Dark Mode tương phản cao",
     });
   }
 

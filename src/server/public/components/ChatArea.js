@@ -7,30 +7,54 @@ const html = htm.bind(React.createElement);
 /**
  * Tự động nhóm các tin nhắn ảnh thuần túy gửi gần nhau (trong vòng 15 giây) thành 1 Album ảnh
  */
+function isStickerContent(content) {
+  if (!content || typeof content !== 'string') return false;
+  return (
+    content === '[Sticker]' ||
+    content === '[Nhãn dán]' ||
+    content.includes('[Sticker]') ||
+    content.startsWith('[🏷️ Nhãn dán / Sticker]:') ||
+    content.startsWith('[🏷️ Sticker]:') ||
+    content.startsWith('[Nhãn dán]:')
+  );
+}
+
+function isPureImageMessage(msg) {
+  if (!msg) return false;
+  const isVoice = Boolean(msg.hasVoice || msg.voiceUrl);
+  const isSticker = Boolean(msg.hasSticker || msg.stickerUrl || msg.stickerId || isStickerContent(msg.content));
+  if (isVoice || isSticker) return false;
+
+  const hasImages = Boolean(
+    (msg.hasImage || (Array.isArray(msg.imageUrls) && msg.imageUrls.length > 0)) &&
+    Array.isArray(msg.imageUrls) &&
+    msg.imageUrls.length > 0
+  );
+
+  const hasRealText = Boolean(
+    msg.content &&
+      msg.content.trim() &&
+      msg.content !== '[Hình ảnh đính kèm]' &&
+      msg.content !== '[Hình ảnh]' &&
+      msg.content !== '[Sticker]' &&
+      msg.content !== '[Nhãn dán]' &&
+      msg.content !== '[Tin nhắn thoại]' &&
+      !isStickerContent(msg.content)
+  );
+
+  return hasImages && !hasRealText && !msg.hasQuote;
+}
+
 function groupConsecutiveImageMessages(messages) {
   if (!messages || !messages.length) return [];
 
   const grouped = [];
   for (let i = 0; i < messages.length; i++) {
     const msg = messages[i];
-    const hasRealText = Boolean(
-      msg.content &&
-        msg.content.trim() &&
-        msg.content !== '[Hình ảnh đính kèm]' &&
-        msg.content !== '[Hình ảnh]' &&
-        msg.content !== '[Sticker]'
-    );
-    const isPureImg = Boolean(msg.hasImage && msg.imageUrls?.length > 0 && !hasRealText && !msg.hasQuote);
+    const isPureImg = isPureImageMessage(msg);
 
     const prev = grouped.length > 0 ? grouped[grouped.length - 1] : null;
-    const prevHasRealText = Boolean(
-      prev?.content &&
-        prev.content.trim() &&
-        prev.content !== '[Hình ảnh đính kèm]' &&
-        prev.content !== '[Hình ảnh]' &&
-        prev.content !== '[Sticker]'
-    );
-    const prevIsPureImg = Boolean(prev?.hasImage && prev?.imageUrls?.length > 0 && !prevHasRealText && !prev?.hasQuote);
+    const prevIsPureImg = isPureImageMessage(prev);
 
     // Điều kiện group: cả 2 đều là pure image, cùng người gửi/role, gửi cách nhau <= 15 giây (15000ms)
     const sameSender = prev && (prev.senderId === msg.senderId || prev.role === msg.role);
@@ -45,7 +69,7 @@ function groupConsecutiveImageMessages(messages) {
     } else {
       grouped.push({
         ...msg,
-        imageUrls: msg.imageUrls ? [...msg.imageUrls] : [],
+        imageUrls: Array.isArray(msg.imageUrls) ? [...msg.imageUrls] : [],
       });
     }
   }

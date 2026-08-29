@@ -60,28 +60,78 @@ export function isAudioUrl(urlString: unknown): boolean {
 }
 
 /**
+ * Kiểm tra xem một URL có phải là nhãn dán / sticker của Zalo hay không
+ */
+export function isStickerUrl(urlString: unknown): boolean {
+  if (!urlString || typeof urlString !== "string") return false;
+  const lower = urlString.toLowerCase();
+  return (
+    lower.includes("/emoticon/sticker") ||
+    lower.includes("stickers.zaloapp.com") ||
+    lower.includes("/sticker/")
+  );
+}
+
+/**
  * Trích xuất URL hình ảnh có chất lượng tốt nhất từ object attachment (ưu tiên hdUrl > url > normalUrl > href > thumb)
  */
 export function extractBestImageUrl(obj: Record<string, unknown>): string | null {
-  // Nếu object là voice/audio message, bỏ qua không trích xuất thành ảnh
-  if (obj.voiceUrl || obj.m4aUrl || obj.audioUrl || obj.msgType === "chat.voice" || obj.msgType === "chat.audio") {
+  // Nếu object là voice/audio/sticker message, bỏ qua hoàn toàn không trích xuất thành ảnh
+  if (
+    obj.voiceUrl ||
+    obj.m4aUrl ||
+    obj.audioUrl ||
+    obj.msgType === "chat.voice" ||
+    obj.msgType === "chat.audio" ||
+    obj.msgType === "chat.sticker" ||
+    obj.containType === 36 ||
+    obj.stickerId ||
+    obj.stickerCateId ||
+    obj.spriteUrl ||
+    obj.cateId ||
+    obj.catId
+  ) {
     return null;
   }
 
   const candidates = [
     obj.hdUrl,
+    obj.hd_url,
+    obj.highQualityUrl,
+    obj.high_quality_url,
     obj.url,
     obj.normalUrl,
+    obj.normal_url,
+    obj.originUrl,
+    obj.origin_url,
+    obj.origUrl,
+    obj.rawUrl,
+    obj.photoUrl,
+    obj.photo_url,
+    obj.imageUrl,
+    obj.image_url,
     obj.href,
-    obj.thumb,
-    obj.spriteUrl,
-    obj.webUrl,
+    obj.downloadUrl,
+    obj.download_url,
     obj.fullUrl,
-    obj.stickerUrl,
+    obj.full_url,
     obj.previewUrl,
+    obj.preview_url,
+    obj.thumb,
+    obj.thumbUrl,
+    obj.thumb_url,
+    obj.thumbnail,
+    obj.thumbnailUrl,
+    obj.thumbnail_url,
+    obj.webUrl,
   ];
+
   for (const candidate of candidates) {
-    if (isValidHttpUrl(candidate) && !isAudioUrl(candidate)) {
+    if (
+      isValidHttpUrl(candidate) &&
+      !isAudioUrl(candidate) &&
+      !isStickerUrl(candidate)
+    ) {
       return (candidate as string).trim();
     }
   }
@@ -99,25 +149,72 @@ export function extractAllImageUrls(obj: unknown): string[] {
     for (const item of obj) {
       urls.push(...extractAllImageUrls(item));
     }
-    return urls.filter((u) => !isAudioUrl(u));
+    return Array.from(new Set(urls.filter((u) => isValidHttpUrl(u) && !isAudioUrl(u) && !isStickerUrl(u))));
   }
 
   if (typeof obj === "object" && obj !== null) {
     const record = obj as Record<string, unknown>;
-    const best = extractBestImageUrl(record);
-    if (best && !isAudioUrl(best)) urls.push(best);
 
-    const listKeys = ["attachments", "photos", "images", "items", "list", "grid", "media", "subImages", "elements"];
+    // Nếu đây là sticker, bỏ qua hoàn toàn không trích xuất thành ảnh
+    if (
+      record.msgType === "chat.sticker" ||
+      record.containType === 36 ||
+      record.stickerId ||
+      record.stickerCateId ||
+      record.cateId ||
+      record.catId ||
+      record.spriteUrl
+    ) {
+      return urls;
+    }
+
+    const best = extractBestImageUrl(record);
+    if (best && !isAudioUrl(best) && !isStickerUrl(best)) {
+      urls.push(best);
+    }
+
+    const listKeys = [
+      "attachments",
+      "photos",
+      "images",
+      "items",
+      "list",
+      "grid",
+      "media",
+      "subImages",
+      "sub_images",
+      "elements",
+      "album",
+      "files",
+      "attach",
+      "data",
+      "rows",
+      "cards",
+    ];
     for (const key of listKeys) {
       if (Array.isArray(record[key])) {
         urls.push(...extractAllImageUrls(record[key]));
+      } else if (record[key] && typeof record[key] === "object") {
+        urls.push(...extractAllImageUrls(record[key]));
       }
     }
-  } else if (typeof obj === "string" && isValidHttpUrl(obj) && !isAudioUrl(obj)) {
-    urls.push(obj.trim());
+  } else if (typeof obj === "string") {
+    const trimmed = obj.trim();
+    if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        urls.push(...extractAllImageUrls(parsed));
+      } catch {
+        if (isValidHttpUrl(trimmed) && !isAudioUrl(trimmed) && !isStickerUrl(trimmed)) {
+          urls.push(trimmed);
+        }
+      }
+    } else if (isValidHttpUrl(trimmed) && !isAudioUrl(trimmed) && !isStickerUrl(trimmed)) {
+      urls.push(trimmed);
+    }
   }
 
-  return urls.filter((u) => !isAudioUrl(u));
+  return Array.from(new Set(urls.filter((u) => isValidHttpUrl(u) && !isAudioUrl(u) && !isStickerUrl(u))));
 }
 
 /**

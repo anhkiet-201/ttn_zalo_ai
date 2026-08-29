@@ -302,11 +302,11 @@ export function MessageBubble({ message, ownId, isGroup, onImageClick }) {
   const avatarLetter = (message.senderName || 'U').trim().charAt(0).toUpperCase();
 
   const images = Array.isArray(message.imageUrls) ? message.imageUrls.filter(Boolean) : [];
-  const hasImages = !message.hasVoice && message.hasImage && images.length > 0;
 
   const hasVoice = Boolean(
     message.hasVoice &&
-    (isValidVoiceUrl(message.voiceUrl) || images.length === 0)
+    isValidVoiceUrl(message.voiceUrl) &&
+    images.length === 0
   );
 
   const hasSticker = Boolean(
@@ -322,6 +322,13 @@ export function MessageBubble({ message, ownId, isGroup, onImageClick }) {
         message.content.startsWith('[🏷️ Sticker]:') ||
         message.content.startsWith('[Nhãn dán]:')
       )))
+  );
+
+  const hasImages = Boolean(
+    !hasVoice &&
+    !hasSticker &&
+    (message.hasImage || images.length > 0) &&
+    images.length > 0
   );
 
   const hasRealText = Boolean(

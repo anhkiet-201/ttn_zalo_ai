@@ -788,13 +788,23 @@ body {
   overflow: hidden;
 }
 
+.msg-images-grid {
+  display: grid;
+  gap: 4px;
+  border-radius: 6px;
+  overflow: hidden;
+  margin-top: 6px;
+}
+
 /* Album 1 ảnh */
-.msg-pure-images-container.grid-1 {
+.msg-pure-images-container.grid-1,
+.msg-images-grid.grid-1 {
   grid-template-columns: 1fr;
   max-width: 360px;
 }
 
-.msg-pure-images-container.grid-1 .pure-image-img {
+.msg-pure-images-container.grid-1 .pure-image-img,
+.msg-images-grid.grid-1 .msg-image-thumb {
   max-width: 100%;
   max-height: 420px;
   width: auto;
@@ -805,51 +815,78 @@ body {
 }
 
 /* Album 2 ảnh */
-.msg-pure-images-container.grid-2 {
+.msg-pure-images-container.grid-2,
+.msg-images-grid.grid-2 {
   grid-template-columns: repeat(2, 1fr);
   max-width: 440px;
 }
 
-.msg-pure-images-container.grid-2 .smart-image-wrapper {
+.msg-pure-images-container.grid-2 .smart-image-wrapper,
+.msg-images-grid.grid-2 .smart-image-wrapper {
   height: 180px;
 }
 
-.msg-pure-images-container.grid-2 .pure-image-img {
+.msg-pure-images-container.grid-2 .pure-image-img,
+.msg-images-grid.grid-2 .msg-image-thumb {
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
 
 /* Album 3-4 ảnh */
-.msg-pure-images-container.grid-4 {
+.msg-pure-images-container.grid-4,
+.msg-images-grid.grid-4 {
   grid-template-columns: repeat(2, 1fr);
   max-width: 440px;
 }
 
-.msg-pure-images-container.grid-4 .smart-image-wrapper {
+.msg-pure-images-container.grid-4 .smart-image-wrapper,
+.msg-images-grid.grid-4 .smart-image-wrapper {
   height: 140px;
 }
 
-.msg-pure-images-container.grid-4 .pure-image-img {
+.msg-pure-images-container.grid-4 .pure-image-img,
+.msg-images-grid.grid-4 .msg-image-thumb {
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
 
-/* Album nhiều ảnh */
-.msg-pure-images-container.grid-multi {
+/* Album nhiều ảnh (5+ ảnh) */
+.msg-pure-images-container.grid-multi,
+.msg-images-grid.grid-multi {
   grid-template-columns: repeat(3, 1fr);
   max-width: 460px;
 }
 
-.msg-pure-images-container.grid-multi .smart-image-wrapper {
+.msg-pure-images-container.grid-multi .smart-image-wrapper,
+.msg-images-grid.grid-multi .smart-image-wrapper {
   height: 120px;
 }
 
-.msg-pure-images-container.grid-multi .pure-image-img {
+.msg-pure-images-container.grid-multi .pure-image-img,
+.msg-images-grid.grid-multi .msg-image-thumb {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+.dark-mode .smart-image-wrapper {
+  background: #1e293b;
+}
+
+.dark-mode .image-shimmer-placeholder {
+  background: linear-gradient(90deg, #1e293b 0%, #334155 50%, #1e293b 100%);
+  background-size: 200% 100%;
+}
+
+.dark-mode .shimmer-text {
+  color: #94a3b8;
+}
+
+.dark-mode .image-error-placeholder {
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
 }
 
 .msg-meta-row {
