@@ -40,9 +40,32 @@ export function isValidHttpUrl(urlString: unknown): boolean {
 }
 
 /**
+ * Kiểm tra xem một URL có phải là file âm thanh (Audio/Voice) hay không
+ */
+export function isAudioUrl(urlString: unknown): boolean {
+  if (!urlString || typeof urlString !== "string") return false;
+  const lower = urlString.toLowerCase();
+  return (
+    lower.endsWith(".m4a") ||
+    lower.endsWith(".aac") ||
+    lower.endsWith(".mp3") ||
+    lower.endsWith(".wav") ||
+    lower.endsWith(".amr") ||
+    lower.endsWith(".ogg") ||
+    lower.includes("/voice/") ||
+    lower.includes("voicemsg")
+  );
+}
+
+/**
  * Trích xuất URL hình ảnh có chất lượng tốt nhất từ object attachment (ưu tiên hdUrl > url > normalUrl > href > thumb)
  */
 export function extractBestImageUrl(obj: Record<string, unknown>): string | null {
+  // Nếu object là voice/audio message, bỏ qua không trích xuất thành ảnh
+  if (obj.voiceUrl || obj.m4aUrl || obj.audioUrl || obj.msgType === "chat.voice" || obj.msgType === "chat.audio") {
+    return null;
+  }
+
   const candidates = [
     obj.hdUrl,
     obj.url,
@@ -56,7 +79,7 @@ export function extractBestImageUrl(obj: Record<string, unknown>): string | null
     obj.previewUrl,
   ];
   for (const candidate of candidates) {
-    if (isValidHttpUrl(candidate)) {
+    if (isValidHttpUrl(candidate) && !isAudioUrl(candidate)) {
       return (candidate as string).trim();
     }
   }
@@ -74,13 +97,13 @@ export function extractAllImageUrls(obj: unknown): string[] {
     for (const item of obj) {
       urls.push(...extractAllImageUrls(item));
     }
-    return urls;
+    return urls.filter((u) => !isAudioUrl(u));
   }
 
   if (typeof obj === "object" && obj !== null) {
     const record = obj as Record<string, unknown>;
     const best = extractBestImageUrl(record);
-    if (best) urls.push(best);
+    if (best && !isAudioUrl(best)) urls.push(best);
 
     const listKeys = ["attachments", "photos", "images", "items", "list", "grid", "media", "subImages", "elements"];
     for (const key of listKeys) {
@@ -88,11 +111,11 @@ export function extractAllImageUrls(obj: unknown): string[] {
         urls.push(...extractAllImageUrls(record[key]));
       }
     }
-  } else if (typeof obj === "string" && isValidHttpUrl(obj)) {
+  } else if (typeof obj === "string" && isValidHttpUrl(obj) && !isAudioUrl(obj)) {
     urls.push(obj.trim());
   }
 
-  return urls;
+  return urls.filter((u) => !isAudioUrl(u));
 }
 
 /**
@@ -311,9 +334,6 @@ export class EventDispatcher {
       }
     }
 
-    // Lọc trùng lặp URL và chỉ giữ các URL hợp lệ
-    const imageUrls = Array.from(new Set(rawImageUrls)).filter((u) => isValidHttpUrl(u));
-
     const msgType = String(rawMessage.data?.msgType || "");
     const isPhoto = msgType === "chat.photo";
     const isVoice = msgType === "chat.voice" || msgType === "chat.audio" || Boolean(voiceUrl);
@@ -322,7 +342,14 @@ export class EventDispatcher {
       msgType === "chat.sticker" ||
       msgType.includes("sticker") ||
       rawMessage.data?.paramsExt?.containType === 36;
-    const hasImage = isPhoto || isSticker || imageUrls.length > 0;
+
+    // Lọc trùng lặp URL và chỉ giữ các URL hình ảnh hợp lệ (loại bỏ voiceUrl và file âm thanh)
+    const validImageUrls = isVoice
+      ? []
+      : Array.from(new Set(rawImageUrls)).filter((u) => isValidHttpUrl(u) && !isAudioUrl(u) && u !== voiceUrl);
+
+    const hasImage = !isVoice && (isPhoto || isSticker || validImageUrls.length > 0);
+    const imageUrls = validImageUrls;
 
     // Nếu là sticker mà không có text và không trích xuất được image URL:
     if (isSticker && !text && imageUrls.length === 0) {

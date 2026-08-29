@@ -1,4 +1,4 @@
-import React, { useState } from 'https://esm.sh/react@19';
+import React, { useState, useRef, useEffect } from 'https://esm.sh/react@19';
 import htm from 'https://esm.sh/htm';
 
 const html = htm.bind(React.createElement);
@@ -11,6 +11,177 @@ function formatTime(timestamp) {
   const hours = String(date.getHours()).padStart(2, '0');
   const minutes = String(date.getMinutes()).padStart(2, '0');
   return `${hours}:${minutes}`;
+}
+
+function formatVoiceTime(seconds) {
+  if (isNaN(seconds) || seconds < 0) return '00:00';
+  const m = String(Math.floor(seconds / 60)).padStart(2, '0');
+  const s = String(Math.floor(seconds % 60)).padStart(2, '0');
+  return `${m}:${s}`;
+}
+
+// Biến toàn cục lưu audio đang phát để tự động dừng khi phát audio khác
+let currentlyPlayingAudio = null;
+
+// Độ cao mô phỏng cột sóng âm thanh chính xác theo giao diện Zalo
+const WAVEFORM_HEIGHTS = [
+  6, 8, 10, 14, 20, 22, 18, 14, 10, 8, 6, 6, 8, 12, 18, 22, 24, 20, 16, 12, 8, 6, 6, 6, 6, 6, 6, 6
+];
+
+/**
+ * ZaloVoicePlayer: Trình phát tin nhắn thoại chuẩn phong cách Zalo PC & Mobile
+ */
+export function ZaloVoicePlayer({ message, isOutgoing }) {
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(
+    message.voiceDuration ? Math.round(message.voiceDuration / 1000) : 0
+  );
+  const [showStt, setShowStt] = useState(true);
+  const audioRef = useRef(null);
+
+  // Trích xuất nội dung phiên âm (nếu có)
+  let sttText = '';
+  if (message.content) {
+    if (message.content.startsWith('[🎙️ Tin nhắn thoại]:')) {
+      sttText = message.content.replace('[🎙️ Tin nhắn thoại]:', '').trim().replace(/^["\s]+|["\s]+$/g, '');
+    } else if (
+      message.content !== '[Tin nhắn thoại]' &&
+      message.content !== '[Tin nhắn thoại: Không có URL âm thanh hợp lệ]' &&
+      message.content !== '[Tin nhắn thoại: Không thể tải tệp âm thanh]'
+    ) {
+      sttText = message.content.trim();
+    }
+  }
+
+  const togglePlay = (e) => {
+    e.stopPropagation();
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    if (audio.paused) {
+      if (currentlyPlayingAudio && currentlyPlayingAudio !== audio) {
+        currentlyPlayingAudio.pause();
+      }
+      currentlyPlayingAudio = audio;
+      audio.play().catch((err) => console.warn('Lỗi phát âm thanh:', err));
+    } else {
+      audio.pause();
+    }
+  };
+
+  const handleSeek = (e) => {
+    e.stopPropagation();
+    const audio = audioRef.current;
+    if (!audio) return;
+    const waveformEl = e.currentTarget;
+    const rect = waveformEl.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const percent = Math.max(0, Math.min(1, clickX / rect.width));
+    const totalDur = audio.duration || duration || 0;
+    if (totalDur > 0) {
+      audio.currentTime = percent * totalDur;
+      setCurrentTime(audio.currentTime);
+    }
+  };
+
+  const activeCount = duration > 0 ? Math.round((currentTime / duration) * WAVEFORM_HEIGHTS.length) : 0;
+  const progressPercent = duration > 0 ? Math.min(100, Math.max(0, (currentTime / duration) * 100)) : 0;
+
+  return html`
+    <div className=${`zalo-voice-msg-card ${isOutgoing ? 'is-outgoing' : 'is-incoming'}`}>
+      <!-- Hàng trên: Trình phát Audio -->
+      <div className="zalo-voice-top-row">
+        <!-- Nút Play Tròn Xanh Zalo -->
+        <button
+          type="button"
+          className="zalo-voice-play-circle"
+          onClick=${togglePlay}
+          title=${isPlaying ? 'Tạm dừng' : 'Phát'}
+        >
+          ${isPlaying ? html`
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor">
+              <rect x="6" y="4" width="4" height="16" rx="1.5"></rect>
+              <rect x="14" y="4" width="4" height="16" rx="1.5"></rect>
+            </svg>
+          ` : html`
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" style=${{ marginLeft: '2px' }}>
+              <polygon points="6 3 20 12 6 21 6 3"></polygon>
+            </svg>
+          `}
+        </button>
+
+        <!-- Khu vực Waveform & Thời gian -->
+        <div className="zalo-voice-track-wrapper">
+          <div className="zalo-voice-waveform-track" onClick=${handleSeek} title="Tua âm thanh">
+            <!-- Vạch chỉ báo vị trí phát (Scrubber Bar) -->
+            <div
+              className="zalo-voice-scrubber"
+              style=${{ left: `${progressPercent}%` }}
+            ></div>
+
+            <!-- Các cột sóng âm -->
+            <div className="zalo-voice-bars">
+              ${WAVEFORM_HEIGHTS.map((h, idx) => html`
+                <span
+                  key=${idx}
+                  className=${`zalo-waveform-dot ${idx < activeCount ? 'is-active' : ''}`}
+                  style=${{ height: `${h}px` }}
+                ></span>
+              `)}
+            </div>
+          </div>
+
+          <!-- Bộ đếm thời gian dưới vạch phát -->
+          <div className="zalo-voice-time-label">
+            ${formatVoiceTime(currentTime > 0 ? currentTime : duration)}
+          </div>
+        </div>
+
+        <!-- Nút thu gọn / mở rộng STT (Chevron) -->
+        ${sttText && html`
+          <button
+            type="button"
+            className=${`zalo-voice-chevron-btn ${showStt ? 'is-expanded' : ''}`}
+            onClick=${() => setShowStt(!showStt)}
+            title=${showStt ? 'Thu gọn văn bản' : 'Xem nội dung văn bản'}
+          >
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="18 15 12 9 6 15"></polyline>
+            </svg>
+          </button>
+        `}
+      </div>
+
+      <!-- Hàng dưới: Nội dung phiên âm STT -->
+      ${sttText && showStt && html`
+        <div className="zalo-voice-stt-row">
+          <div className="zalo-voice-stt-line"></div>
+          <div className="zalo-voice-stt-text">${sttText}</div>
+        </div>
+      `}
+
+      <!-- Audio Element ngầm -->
+      <audio
+        ref=${audioRef}
+        src=${message.voiceUrl}
+        preload="metadata"
+        onPlay=${() => setIsPlaying(true)}
+        onPause=${() => setIsPlaying(false)}
+        onEnded=${() => {
+          setIsPlaying(false);
+          setCurrentTime(0);
+          if (currentlyPlayingAudio === audioRef.current) currentlyPlayingAudio = null;
+        }}
+        onTimeUpdate=${(e) => setCurrentTime(e.target.currentTime)}
+        onLoadedMetadata=${(e) => {
+          if (e.target.duration && !isNaN(e.target.duration)) {
+            setDuration(e.target.duration);
+          }
+        }}
+      ></audio>
+    </div>
+  `;
 }
 
 /**
@@ -55,17 +226,21 @@ export function MessageBubble({ message, ownId, isGroup, onImageClick }) {
 
   const avatarLetter = (message.senderName || 'U').trim().charAt(0).toUpperCase();
 
+  const hasVoice = Boolean(message.hasVoice || message.voiceUrl);
+
   const hasRealText = Boolean(
+    !hasVoice &&
     message.content &&
       message.content.trim() &&
       message.content !== '[Hình ảnh đính kèm]' &&
       message.content !== '[Hình ảnh]' &&
-      message.content !== '[Sticker]'
+      message.content !== '[Sticker]' &&
+      message.content !== '[Tin nhắn thoại]'
   );
 
   const images = Array.isArray(message.imageUrls) ? message.imageUrls.filter(Boolean) : [];
-  const hasImages = message.hasImage && images.length > 0;
-  const isPureImage = hasImages && !hasRealText && !message.hasQuote;
+  const hasImages = !hasVoice && message.hasImage && images.length > 0;
+  const isPureImage = hasImages && !hasRealText && !message.hasQuote && !hasVoice;
 
   const imageGridClass =
     images.length === 1
@@ -112,6 +287,10 @@ export function MessageBubble({ message, ownId, isGroup, onImageClick }) {
                 </span>
                 <div className="quote-text-preview">${message.quoteText}</div>
               </div>
+            `}
+
+            ${hasVoice && html`
+              <${ZaloVoicePlayer} message=${message} isOutgoing=${isOutgoing} />
             `}
 
             ${hasRealText && html`
