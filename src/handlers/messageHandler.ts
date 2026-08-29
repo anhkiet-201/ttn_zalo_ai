@@ -61,7 +61,8 @@ export class MessageHandler {
       resolvedHRNotifier,
       resolvedToolExecutor,
       resolvedUserCtxMgr,
-      this.threadMetaRepo
+      this.threadMetaRepo,
+      this.chatHistoryRepo
     );
 
     this.groupHandler = new GroupMessageHandler(
@@ -103,7 +104,7 @@ export class MessageHandler {
       parsedMessage.text === "[Sticker]" ||
       Boolean(parsedMessage.text && parsedMessage.text.includes("[Sticker]"));
 
-    if (!parsedMessage.text && !parsedMessage.hasImage && !isSticker) return;
+    if (!parsedMessage.text && !parsedMessage.hasImage && !isSticker && !parsedMessage.hasVoice) return;
 
     try {
       this.chatHistoryRepo.addMessage({
@@ -119,9 +120,18 @@ export class MessageHandler {
         role: parsedMessage.isSelf ? "model" : "user",
         content:
           parsedMessage.text ||
-          (isSticker ? "[Sticker]" : parsedMessage.hasImage ? "[Hình ảnh đính kèm]" : ""),
+          (parsedMessage.hasVoice
+            ? "[Tin nhắn thoại]"
+            : isSticker
+            ? "[Sticker]"
+            : parsedMessage.hasImage
+            ? "[Hình ảnh đính kèm]"
+            : ""),
         hasImage: parsedMessage.hasImage,
         imageUrls: parsedMessage.imageUrls,
+        hasVoice: parsedMessage.hasVoice,
+        voiceUrl: parsedMessage.voiceUrl,
+        voiceDuration: parsedMessage.voiceDuration,
         hasQuote: parsedMessage.hasQuote,
         quoteText: parsedMessage.quoteText,
         quoteSenderName: parsedMessage.quoteSenderName,

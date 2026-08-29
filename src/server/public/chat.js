@@ -275,7 +275,11 @@
         const avatarClass = t.isGroup ? "thread-item-avatar is-group" : "thread-item-avatar";
         const isSelfLast = t.lastRole === "model";
         const previewPrefix = isSelfLast ? "Bạn: " : "";
-        const rawPreviewText = t.lastHasImage ? "🖼️ [Hình ảnh]" : (t.lastContent || "Bắt đầu cuộc trò chuyện");
+        const rawPreviewText = t.lastHasImage
+          ? "🖼️ [Hình ảnh]"
+          : (t.lastHasVoice || (t.lastContent && t.lastContent.includes("[🎙️ Tin nhắn thoại]")))
+          ? "🎙️ [Tin nhắn thoại]"
+          : (t.lastContent || "Bắt đầu cuộc trò chuyện");
         const safeName = escapeHtml(t.threadName || t.threadId);
         const safePreview = escapeHtml(previewPrefix + rawPreviewText);
         const safeCompany = t.targetCompany ? escapeHtml(t.targetCompany) : "";
@@ -324,7 +328,11 @@
         if (previewEl) {
           const isSelfLast = t.lastRole === "model";
           const previewPrefix = isSelfLast ? "Bạn: " : "";
-          const previewText = t.lastHasImage ? "🖼️ [Hình ảnh]" : (t.lastContent || "Đoạn chat");
+          const previewText = t.lastHasImage
+            ? "🖼️ [Hình ảnh]"
+            : (t.lastHasVoice || (t.lastContent && t.lastContent.includes("[🎙️ Tin nhắn thoại]")))
+            ? "🎙️ [Tin nhắn thoại]"
+            : (t.lastContent || "Đoạn chat");
           previewEl.textContent = previewPrefix + previewText;
           if (isSelfLast) previewEl.classList.add("is-self");
           else previewEl.classList.remove("is-self");
@@ -409,12 +417,183 @@
         zaloSidebar.classList.remove("hide-mobile");
       });
 
+      // Quản lý audio đang phát để tự động dừng khi phát audio khác
+      let currentlyPlayingAudio = null;
+
+      function formatAudioDuration(seconds) {
+        if (isNaN(seconds) || seconds < 0) return "0:00";
+        const m = Math.floor(seconds / 60);
+        const s = Math.floor(seconds % 60);
+        return `${m}:${s < 10 ? '0' : ''}${s}`;
+      }
+
+      // Chiều cao mô phỏng dạng sóng âm thanh chuẩn Zalo (28 cột sóng)
+      const WAVEFORM_HEIGHTS = [
+        6, 12, 18, 10, 14, 22, 16, 8, 12, 20, 24, 18, 14, 22,
+        20, 16, 12, 18, 24, 16, 10, 14, 20, 16, 12, 8, 14, 6
+      ];
+
+      /**
+       * Xây dựng Widget Voice Message chuẩn phong cách Zalo
+       */
+      function buildZaloVoiceWidget(msg, isSelf) {
+        const container = document.createElement("div");
+        container.className = "zalo-voice-card " + (isSelf ? "is-self" : "is-other");
+
+        const initialDur = msg.voiceDuration ? Math.round(msg.voiceDuration / 1000) : 0;
+        const initialDurStr = initialDur > 0 ? formatAudioDuration(initialDur) : "0:00";
+
+        container.innerHTML = `
+          <button class="zalo-voice-play-btn" type="button" title="Phát tin nhắn thoại">
+            <svg class="voice-icon-play" viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+              <polygon points="6 3 20 12 6 21 6 3"></polygon>
+            </svg>
+            <svg class="voice-icon-pause" viewBox="0 0 24 24" width="16" height="16" fill="currentColor" style="display:none;">
+              <rect x="6" y="4" width="4" height="16" rx="1"></rect>
+              <rect x="14" y="4" width="4" height="16" rx="1"></rect>
+            </svg>
+            <div class="voice-spinner" style="display:none;"></div>
+          </button>
+          <div class="zalo-voice-content">
+            <div class="zalo-voice-waveform" title="Tua âm thanh">
+              ${WAVEFORM_HEIGHTS.map((h, i) => `<span class="waveform-bar" data-idx="${i}" style="height:${h}px"></span>`).join("")}
+            </div>
+            <div class="zalo-voice-meta">
+              <span class="zalo-voice-time">${initialDurStr}</span>
+              <button class="zalo-voice-speed-btn" type="button" title="Tốc độ phát">1x</button>
+            </div>
+          </div>
+          <audio class="zalo-voice-audio-el" preload="metadata" src="${escapeHtml(msg.voiceUrl)}"></audio>
+        `;
+
+        const playBtn = container.querySelector(".zalo-voice-play-btn");
+        const iconPlay = container.querySelector(".voice-icon-play");
+        const iconPause = container.querySelector(".voice-icon-pause");
+        const spinner = container.querySelector(".voice-spinner");
+        const waveform = container.querySelector(".zalo-voice-waveform");
+        const bars = container.querySelectorAll(".waveform-bar");
+        const timeLabel = container.querySelector(".zalo-voice-time");
+        const speedBtn = container.querySelector(".zalo-voice-speed-btn");
+        const audio = container.querySelector(".zalo-voice-audio-el");
+
+        let isPlaying = false;
+        let currentSpeedIdx = 0;
+        const speeds = [1.0, 1.5, 2.0];
+
+        function updateProgress() {
+          const dur = audio.duration || initialDur || 1;
+          const cur = audio.currentTime || 0;
+          const progress = Math.min(cur / dur, 1);
+          
+          const activeCount = Math.round(progress * bars.length);
+          bars.forEach((bar, idx) => {
+            if (idx < activeCount) {
+              bar.classList.add("active");
+            } else {
+              bar.classList.remove("active");
+            }
+          });
+
+          if (isPlaying) {
+            timeLabel.textContent = `${formatAudioDuration(cur)} / ${formatAudioDuration(dur)}`;
+          } else {
+            timeLabel.textContent = formatAudioDuration(dur);
+          }
+        }
+
+        function setPlayingState(playing) {
+          isPlaying = playing;
+          if (playing) {
+            iconPlay.style.display = "none";
+            iconPause.style.display = "block";
+            playBtn.classList.add("playing");
+          } else {
+            iconPlay.style.display = "block";
+            iconPause.style.display = "none";
+            playBtn.classList.remove("playing");
+          }
+        }
+
+        playBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          if (audio.paused) {
+            if (currentlyPlayingAudio && currentlyPlayingAudio !== audio) {
+              currentlyPlayingAudio.pause();
+            }
+            currentlyPlayingAudio = audio;
+            audio.play().catch(err => console.warn("Lỗi phát audio:", err));
+          } else {
+            audio.pause();
+          }
+        });
+
+        waveform.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const rect = waveform.getBoundingClientRect();
+          const clickX = e.clientX - rect.left;
+          const percent = Math.max(0, Math.min(1, clickX / rect.width));
+          const dur = audio.duration || initialDur || 0;
+          if (dur > 0) {
+            audio.currentTime = percent * dur;
+            updateProgress();
+          }
+        });
+
+        speedBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          currentSpeedIdx = (currentSpeedIdx + 1) % speeds.length;
+          const speed = speeds[currentSpeedIdx];
+          audio.playbackRate = speed;
+          speedBtn.textContent = `${speed}x`;
+        });
+
+        audio.addEventListener("play", () => {
+          setPlayingState(true);
+        });
+
+        audio.addEventListener("pause", () => {
+          setPlayingState(false);
+          updateProgress();
+        });
+
+        audio.addEventListener("ended", () => {
+          setPlayingState(false);
+          audio.currentTime = 0;
+          bars.forEach(b => b.classList.remove("active"));
+          const dur = audio.duration || initialDur || 0;
+          timeLabel.textContent = formatAudioDuration(dur);
+          if (currentlyPlayingAudio === audio) currentlyPlayingAudio = null;
+        });
+
+        audio.addEventListener("timeupdate", updateProgress);
+
+        audio.addEventListener("loadedmetadata", () => {
+          if (!isPlaying) {
+            timeLabel.textContent = formatAudioDuration(audio.duration || initialDur);
+          }
+        });
+
+        audio.addEventListener("waiting", () => {
+          spinner.style.display = "block";
+          iconPlay.style.display = "none";
+          iconPause.style.display = "none";
+        });
+
+        audio.addEventListener("playing", () => {
+          spinner.style.display = "none";
+          setPlayingState(true);
+        });
+
+        return container;
+      }
+
       // Tạo một bubble tin nhắn
       function createMessageElement(msg, isOptimistic = false) {
         const cleanText = sanitizeContent(msg.content);
         const hasValidImages = Boolean(msg.hasImage && msg.imageUrls && Array.isArray(msg.imageUrls) && msg.imageUrls.length > 0);
+        const hasValidVoice = Boolean(msg.hasVoice && msg.voiceUrl);
 
-        if (!cleanText && !hasValidImages) return null;
+        if (!cleanText && !hasValidImages && !hasValidVoice) return null;
 
         const isSelf = msg.role === "model" || (currentOwnId && msg.senderId === currentOwnId) || msg.senderId === "admin";
         const row = document.createElement("div");
@@ -455,7 +634,7 @@
         }
 
         // Ảnh
-        if (hasValidImages && !cleanText) {
+        if (hasValidImages && !cleanText && !hasValidVoice) {
           if (quoteCardEl) {
             bodyWrapper.appendChild(quoteCardEl);
           }
@@ -503,10 +682,18 @@
             bubble.appendChild(quoteCardEl);
           }
 
+          if (hasValidVoice) {
+            bubble.appendChild(buildZaloVoiceWidget(msg, isSelf));
+          }
+
           if (cleanText) {
             const textEl = document.createElement("div");
             if (cleanText === "[Sticker]") {
               textEl.innerHTML = '<span style="display:inline-flex;align-items:center;gap:6px;font-style:italic;color:#475569;">🏷️ [Nhãn dán / Sticker]</span>';
+            } else if (cleanText.startsWith("[🎙️ Tin nhắn thoại]:")) {
+              const sttContent = cleanText.replace("[🎙️ Tin nhắn thoại]:", "").trim().replace(/^["\s]+|["\s]+$/g, "");
+              textEl.className = "msg-stt-box";
+              textEl.innerHTML = `<div class="msg-stt-title">📝 Nội dung phiên âm:</div><div class="msg-stt-body">${escapeHtml(sttContent)}</div>`;
             } else {
               textEl.textContent = cleanText;
             }
@@ -516,7 +703,7 @@
           if (hasValidImages) {
             const imagesContainer = document.createElement("div");
             imagesContainer.className = "msg-images";
-            imagesContainer.style.marginTop = cleanText ? "8px" : "0";
+            imagesContainer.style.marginTop = (cleanText || hasValidVoice) ? "8px" : "0";
 
             msg.imageUrls.forEach(url => {
               if (!url) return;

@@ -14,6 +14,9 @@ export interface ChatMessageRecord {
   content: string;
   hasImage?: boolean;
   imageUrls?: string[];
+  hasVoice?: boolean;
+  voiceUrl?: string;
+  voiceDuration?: number;
   hasQuote?: boolean;
   quoteText?: string;
   quoteSenderName?: string;
@@ -28,6 +31,7 @@ export interface ThreadListItem {
   senderId: string;
   lastContent: string;
   lastHasImage: boolean;
+  lastHasVoice?: boolean;
   lastTimestamp: number;
   lastRole: "user" | "model";
   isGroup: boolean;
@@ -51,7 +55,7 @@ export class ChatHistoryRepository {
    * Lưu một tin nhắn mới vào SQLite và phát sự kiện Realtime tới Web Chat
    */
   public addMessage(record: ChatMessageRecord): void {
-    // Chống duplicate: kiểm tra xem tin nhắn cùng thread, cùng role và nội dung/ảnh đã tồn tại chưa
+    // Chống duplicate: kiểm tra xem tin nhắn cùng thread, cùng role và nội dung/ảnh/voice đã tồn tại chưa
     try {
       let existing: { id: string } | undefined = undefined;
       if (record.hasImage && record.imageUrls && record.imageUrls.length > 0) {
@@ -65,6 +69,19 @@ export class ChatHistoryRepository {
           record.threadId,
           record.role,
           JSON.stringify(record.imageUrls),
+          record.timestamp
+        ) as { id: string } | undefined;
+      } else if (record.hasVoice && record.voiceUrl) {
+        // Chống trùng lặp tin nhắn thoại cùng URL voice trong vòng 5 giây
+        const checkVoiceStmt = this.db.connection.prepare(`
+          SELECT id FROM chat_messages 
+          WHERE thread_id = ? AND role = ? AND has_voice = 1 AND voice_url = ? AND abs(timestamp - ?) < 5000 
+          LIMIT 1
+        `);
+        existing = checkVoiceStmt.get(
+          record.threadId,
+          record.role,
+          record.voiceUrl,
           record.timestamp
         ) as { id: string } | undefined;
       } else if (record.content && record.content.trim()) {
@@ -94,9 +111,11 @@ export class ChatHistoryRepository {
     const stmt = this.db.connection.prepare(`
       INSERT INTO chat_messages (
         id, thread_id, sender_id, sender_name, role, content, has_image, image_urls,
+        has_voice, voice_url, voice_duration,
         has_quote, quote_text, quote_sender_name, quote_sender_id, is_group, timestamp
       ) VALUES (
         @id, @thread_id, @sender_id, @sender_name, @role, @content, @has_image, @image_urls,
+        @has_voice, @voice_url, @voice_duration,
         @has_quote, @quote_text, @quote_sender_name, @quote_sender_id, @is_group, @timestamp
       )
     `);
@@ -110,6 +129,9 @@ export class ChatHistoryRepository {
       content: record.content,
       has_image: record.hasImage ? 1 : 0,
       image_urls: record.imageUrls ? JSON.stringify(record.imageUrls) : null,
+      has_voice: record.hasVoice ? 1 : 0,
+      voice_url: record.voiceUrl || null,
+      voice_duration: record.voiceDuration || 0,
       has_quote: record.hasQuote ? 1 : 0,
       quote_text: record.quoteText || null,
       quote_sender_name: record.quoteSenderName || null,
@@ -155,6 +177,7 @@ export class ChatHistoryRepository {
       SELECT 
         id, thread_id as threadId, sender_id as senderId, sender_name as senderName,
         role, content, has_image as hasImage, image_urls as imageUrls,
+        has_voice as hasVoice, voice_url as voiceUrl, voice_duration as voiceDuration,
         has_quote as hasQuote, quote_text as quoteText,
         quote_sender_name as quoteSenderName, quote_sender_id as quoteSenderId,
         is_group as isGroup, timestamp
@@ -173,6 +196,9 @@ export class ChatHistoryRepository {
       content: string;
       hasImage: number;
       imageUrls: string | null;
+      hasVoice?: number;
+      voiceUrl?: string | null;
+      voiceDuration?: number | null;
       hasQuote: number;
       quoteText: string | null;
       quoteSenderName: string | null;
@@ -196,6 +222,7 @@ export class ChatHistoryRepository {
       SELECT 
         id, thread_id as threadId, sender_id as senderId, sender_name as senderName,
         role, content, has_image as hasImage, image_urls as imageUrls,
+        has_voice as hasVoice, voice_url as voiceUrl, voice_duration as voiceDuration,
         has_quote as hasQuote, quote_text as quoteText,
         quote_sender_name as quoteSenderName, quote_sender_id as quoteSenderId,
         is_group as isGroup, timestamp
@@ -214,6 +241,9 @@ export class ChatHistoryRepository {
       content: string;
       hasImage: number;
       imageUrls: string | null;
+      hasVoice?: number;
+      voiceUrl?: string | null;
+      voiceDuration?: number | null;
       hasQuote: number;
       quoteText: string | null;
       quoteSenderName: string | null;
@@ -242,6 +272,7 @@ export class ChatHistoryRepository {
         m.sender_id as senderId,
         m.content as lastContent,
         m.has_image as lastHasImage,
+        m.has_voice as lastHasVoice,
         m.timestamp as lastTimestamp,
         m.role as lastRole,
         COALESCE(tm.is_group, m.is_group) as isGroup,
@@ -251,7 +282,7 @@ export class ChatHistoryRepository {
         c.phone_number as phoneNumber
       FROM (
         SELECT 
-          id, thread_id, sender_id, sender_name, content, has_image,
+          id, thread_id, sender_id, sender_name, content, has_image, has_voice,
           MAX(timestamp) as timestamp, role, is_group
         FROM chat_messages
         GROUP BY thread_id
@@ -324,6 +355,7 @@ export class ChatHistoryRepository {
       senderId: string;
       lastContent: string;
       lastHasImage: number;
+      lastHasVoice?: number;
       lastTimestamp: number;
       lastRole: "user" | "model";
       isGroup: number;
@@ -339,6 +371,7 @@ export class ChatHistoryRepository {
       senderId: r.senderId || "",
       lastContent: r.lastContent || "",
       lastHasImage: Boolean(r.lastHasImage),
+      lastHasVoice: Boolean(r.lastHasVoice),
       lastTimestamp: r.lastTimestamp,
       lastRole: r.lastRole,
       isGroup: Boolean(r.isGroup),
@@ -428,6 +461,9 @@ export class ChatHistoryRepository {
     content: string;
     hasImage: number;
     imageUrls: string | null;
+    hasVoice?: number;
+    voiceUrl?: string | null;
+    voiceDuration?: number | null;
     hasQuote?: number;
     quoteText?: string | null;
     quoteSenderName?: string | null;
@@ -456,6 +492,9 @@ export class ChatHistoryRepository {
       content: row.content || "",
       hasImage: Boolean(row.hasImage),
       imageUrls: parsedUrls,
+      hasVoice: Boolean(row.hasVoice),
+      voiceUrl: row.voiceUrl || undefined,
+      voiceDuration: row.voiceDuration || undefined,
       hasQuote: Boolean(row.hasQuote),
       quoteText: row.quoteText || undefined,
       quoteSenderName: row.quoteSenderName || undefined,

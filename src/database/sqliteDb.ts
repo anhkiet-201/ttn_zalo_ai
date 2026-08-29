@@ -62,6 +62,9 @@ export class SQLiteDatabase {
         content TEXT NOT NULL,
         has_image INTEGER DEFAULT 0,
         image_urls TEXT,
+        has_voice INTEGER DEFAULT 0,
+        voice_url TEXT,
+        voice_duration INTEGER DEFAULT 0,
         has_quote INTEGER DEFAULT 0,
         quote_text TEXT,
         quote_sender_name TEXT,
@@ -147,6 +150,15 @@ export class SQLiteDatabase {
       }
       if (!msgColNames.includes("quote_sender_id")) {
         this.db.exec("ALTER TABLE chat_messages ADD COLUMN quote_sender_id TEXT");
+      }
+      if (!msgColNames.includes("has_voice")) {
+        this.db.exec("ALTER TABLE chat_messages ADD COLUMN has_voice INTEGER DEFAULT 0");
+      }
+      if (!msgColNames.includes("voice_url")) {
+        this.db.exec("ALTER TABLE chat_messages ADD COLUMN voice_url TEXT");
+      }
+      if (!msgColNames.includes("voice_duration")) {
+        this.db.exec("ALTER TABLE chat_messages ADD COLUMN voice_duration INTEGER DEFAULT 0");
       }
       if (!msgColNames.includes("is_group")) {
         this.db.exec("ALTER TABLE chat_messages ADD COLUMN is_group INTEGER DEFAULT 0");

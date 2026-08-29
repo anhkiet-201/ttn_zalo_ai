@@ -5,6 +5,7 @@ import { ChatHistoryRepository } from "../database/index.js";
 import { CCCDService } from "./cccdService.js";
 import { ReplyService } from "./replyService.js";
 import { GroupAnalysisService } from "./groupAnalysisService.js";
+import { AudioService } from "./audioService.js";
 import { type HRNotifier } from "./hrNotifier.js";
 import { type GroupQueuedMessage } from "../handlers/groupMessageBatcher.js";
 import { type ZaloService } from "./zaloService.js";
@@ -26,10 +27,13 @@ export {
   groupRagTools,
 } from "../types/ai.types.js";
 
+export { AudioService } from "./audioService.js";
+
 /**
  * AIService: Gateway tích hợp AI tổng thể.
  * SRP: Quản lý vòng đời GoogleGenAI client và điều phối đến các sub-services chuyên biệt:
  *   - CCCDService: Xử lý OCR và trích xuất CCCD
+ *   - AudioService: Xử lý Speech-to-Text cho tin nhắn thoại
  *   - ReplyService: Xử lý ngữ cảnh và sinh câu trả lời cho ứng viên/nhóm
  *   - GroupAnalysisService: Xử lý phân tích nhóm & cập nhật RAG
  */
@@ -39,6 +43,7 @@ export class AIService {
   private readonly chatHistoryRepo: ChatHistoryRepository;
 
   private readonly cccdService: CCCDService;
+  private readonly audioService: AudioService;
   private readonly replyService: ReplyService;
   private readonly groupAnalysisService: GroupAnalysisService;
 
@@ -61,6 +66,7 @@ export class AIService {
 
     // Dependency Injection cho các sub-services chuyên biệt
     this.cccdService = new CCCDService(this.ai);
+    this.audioService = new AudioService(this.ai);
     this.replyService = new ReplyService(
       this.ai,
       this.ragService,
@@ -72,6 +78,10 @@ export class AIService {
 
   public setZaloService(service: ZaloService): void {
     this.replyService.setZaloService(service);
+  }
+
+  public get audio(): AudioService {
+    return this.audioService;
   }
 
   public get rag(): RAGService {

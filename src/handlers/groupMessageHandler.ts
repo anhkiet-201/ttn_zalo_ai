@@ -36,14 +36,16 @@ export class GroupMessageHandler {
     const senderInfo = `${parsedMessage.senderName} (${parsedMessage.senderId})`;
     const groupInfo = parsedMessage.threadId;
 
-    // Bỏ qua sticker / voice / reaction (text rỗng)
-    if (!parsedMessage.text) return;
+    // Bỏ qua sticker / reaction (text rỗng và không có voice)
+    if (!parsedMessage.text && !parsedMessage.hasVoice) return;
 
-    // Lọc từ khóa nội bộ hoặc tin nhắn quá ngắn (bỏ qua im lặng)
-    const lowerText = parsedMessage.text.toLowerCase().trim();
-    const matchedKeyword = config.groupIgnoreKeywords.find((kw) => lowerText.includes(kw));
-    if (matchedKeyword || lowerText.length < 25) {
-      return;
+    // Lọc từ khóa nội bộ hoặc tin nhắn văn bản quá ngắn (bỏ qua im lặng)
+    if (parsedMessage.text) {
+      const lowerText = parsedMessage.text.toLowerCase().trim();
+      const matchedKeyword = config.groupIgnoreKeywords.find((kw) => lowerText.includes(kw));
+      if (matchedKeyword || lowerText.length < 25) {
+        return;
+      }
     }
 
     // Kiểm tra chế độ Manual (-M) của nhóm (bỏ qua im lặng)
@@ -54,7 +56,7 @@ export class GroupMessageHandler {
       return;
     }
 
-    console.log(`👥 [Nhóm: "${groupName}"] ${senderInfo}: "${parsedMessage.text.length > 80 ? parsedMessage.text.slice(0, 80) + "..." : parsedMessage.text}"`);
+    console.log(`👥 [Nhóm: "${groupName}"] ${senderInfo}: "${parsedMessage.text.length > 80 ? parsedMessage.text.slice(0, 80) + "..." : parsedMessage.text || "[Tin nhắn thoại]"}"`);
 
     this.groupBatcher.enqueue(parsedMessage, groupName);
   }
@@ -65,6 +67,17 @@ export class GroupMessageHandler {
    * Callback sau debounce: gọi AI analyzeGroupBatch để phân tích và cập nhật RAG
    */
   private async processGroupBatch(batch: GroupMessageBatch): Promise<void> {
+    // Phiên âm các tin nhắn thoại trong nhóm nếu có
+    const companyHints = this.ragService.getCompanyHints();
+    for (const msg of batch.messages) {
+      if (msg.hasVoice && msg.voiceUrl) {
+        try {
+          const transcribed = await this.aiService.audio.transcribeAudio(msg.voiceUrl, companyHints);
+          msg.text = `[Tin nhắn thoại]: ${transcribed}`;
+        } catch {}
+      }
+    }
+
     console.log(
       `🚀 [Nhóm-RAG] Đang phân tích ${batch.messages.length} tin nhắn từ nhóm: "${batch.groupName}"`
     );

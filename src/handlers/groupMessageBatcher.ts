@@ -1,10 +1,15 @@
 import { type ParsedMessage } from "../types/zalo.types.js";
+import { config } from "../config/index.js";
 
 export interface GroupQueuedMessage {
   text: string;
   senderName: string;
   senderId: string;
   timestamp: number;
+  hasVoice?: boolean;
+  voiceUrl?: string;
+  voiceUrls?: string[];
+  voiceDuration?: number;
   rawMessage?: ParsedMessage["raw"];
 }
 
@@ -28,13 +33,13 @@ export class GroupMessageBatcher {
 
   constructor(
     private readonly processor: GroupBatchProcessor,
-    debounceSeconds: number = 30
+    debounceSeconds: number = config.groupDebounceSeconds
   ) {
     this.debounceMs = debounceSeconds * 1000;
   }
 
   /**
-   * Đưa tin nhắn vào hàng đợi của nhóm tương ứng
+   * Đưa tin nhắn nhóm vào hàng đợi gom batch theo từng groupId (threadId)
    */
   public enqueue(parsedMessage: ParsedMessage, groupName?: string): void {
     const threadId = parsedMessage.threadId;
@@ -58,6 +63,10 @@ export class GroupMessageBatcher {
       senderName: parsedMessage.senderName,
       senderId: parsedMessage.senderId,
       timestamp: parsedMessage.timestamp,
+      hasVoice: parsedMessage.hasVoice,
+      voiceUrl: parsedMessage.voiceUrl,
+      voiceUrls: parsedMessage.voiceUrls,
+      voiceDuration: parsedMessage.voiceDuration,
       rawMessage: parsedMessage.raw,
     });
 

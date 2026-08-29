@@ -262,6 +262,27 @@ export class RAGService {
   }
 
   /**
+   * Lấy danh sách tên công ty và các tên viết tắt / bí danh để hỗ trợ nhận diện giọng nói (Audio STT)
+   */
+  public getCompanyHints(): string[] {
+    const jobs = this.getJobRag();
+    const hints = new Set<string>();
+    for (const job of jobs) {
+      if (job.title && typeof job.title === "string") {
+        hints.add(job.title.trim());
+      }
+      if (Array.isArray(job.aliases)) {
+        for (const alias of job.aliases) {
+          if (alias && typeof alias === "string") {
+            hints.add(alias.trim());
+          }
+        }
+      }
+    }
+    return Array.from(hints);
+  }
+
+  /**
    * Thực thi lệnh cập nhật RAG khi Gemini fire tool call "update_rag".
    * Hỗ trợ cả 3 RAG file: job_rag, policy_rag, location_rag.
    * Sau khi ghi file thành công, cache sẽ tự động được invalidate bởi fs.watch.

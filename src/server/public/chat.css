@@ -1186,3 +1186,229 @@ body {
     max-width: 85%;
   }
 }
+
+/* ==========================================================================
+   Custom Zalo Voice Message Player Widget
+   ========================================================================== */
+
+.zalo-voice-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 220px;
+  max-width: 320px;
+  padding: 4px 2px;
+  user-select: none;
+}
+
+/* Nút Play / Pause tròn */
+.zalo-voice-play-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: none;
+  background: var(--zalo-primary);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: transform 0.15s ease, background-color 0.2s ease, box-shadow 0.2s ease;
+  box-shadow: 0 2px 6px rgba(0, 104, 255, 0.25);
+  position: relative;
+}
+
+.zalo-voice-play-btn:hover {
+  transform: scale(1.05);
+  background: var(--zalo-hover, #0056d6);
+}
+
+.zalo-voice-play-btn:active {
+  transform: scale(0.95);
+}
+
+/* Biến thể cho tin nhắn Đi (Outgoing / Self) */
+.zalo-voice-card.is-self .zalo-voice-play-btn {
+  background: #ffffff;
+  color: var(--zalo-primary);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+}
+
+.zalo-voice-card.is-self .zalo-voice-play-btn:hover {
+  background: #f0f7ff;
+}
+
+.zalo-voice-play-btn svg {
+  transition: transform 0.1s ease;
+}
+
+.zalo-voice-play-btn .voice-icon-play {
+  margin-left: 2px; /* Cân tâm visual cho icon tam giác */
+}
+
+/* Spinner khi đang buffer audio */
+.voice-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #ffffff;
+  border-radius: 50%;
+  animation: voiceSpin 0.8s linear infinite;
+}
+
+.zalo-voice-card.is-self .voice-spinner {
+  border-color: rgba(0, 104, 255, 0.3);
+  border-top-color: var(--zalo-primary);
+}
+
+@keyframes voiceSpin {
+  to { transform: rotate(360deg); }
+}
+
+/* Thân voice: Waveform + Meta */
+.zalo-voice-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* Dải sóng âm thanh (Waveform) */
+.zalo-voice-waveform {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  height: 26px;
+  cursor: pointer;
+  padding: 2px 0;
+}
+
+.waveform-bar {
+  flex: 1;
+  min-width: 2px;
+  max-width: 4px;
+  background: rgba(148, 163, 184, 0.45);
+  border-radius: 4px;
+  transition: background-color 0.12s ease, transform 0.12s ease;
+}
+
+.zalo-voice-waveform:hover .waveform-bar {
+  background: rgba(148, 163, 184, 0.7);
+}
+
+/* Sóng âm khi đã phát qua (Active) */
+.waveform-bar.active {
+  background: var(--zalo-primary);
+}
+
+/* Khi tin nhắn Đi (Outgoing Bubble) */
+.zalo-voice-card.is-self .waveform-bar {
+  background: rgba(255, 255, 255, 0.4);
+}
+
+.zalo-voice-card.is-self .zalo-voice-waveform:hover .waveform-bar {
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.zalo-voice-card.is-self .waveform-bar.active {
+  background: #ffffff;
+}
+
+/* Thông tin thời gian và tốc độ phát */
+.zalo-voice-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  line-height: 1;
+}
+
+.zalo-voice-time {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary, #64748b);
+  font-weight: 500;
+}
+
+.zalo-voice-card.is-self .zalo-voice-time {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+/* Nút tốc độ phát 1x / 1.5x / 2x */
+.zalo-voice-speed-btn {
+  background: rgba(0, 0, 0, 0.05);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 12px;
+  padding: 2px 7px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-secondary, #475569);
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.zalo-voice-speed-btn:hover {
+  background: rgba(0, 0, 0, 0.1);
+  color: var(--text-primary);
+}
+
+.zalo-voice-card.is-self .zalo-voice-speed-btn {
+  background: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.3);
+  color: #ffffff;
+}
+
+.zalo-voice-card.is-self .zalo-voice-speed-btn:hover {
+  background: rgba(255, 255, 255, 0.35);
+}
+
+/* Thẻ audio ẩn */
+.zalo-voice-audio-el {
+  display: none;
+}
+
+/* Transcribed STT Box inside Bubble */
+.msg-stt-box {
+  margin-top: 8px;
+  padding: 8px 10px;
+  background: rgba(0, 0, 0, 0.04);
+  border-left: 3px solid var(--zalo-primary);
+  border-radius: 6px;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.zalo-voice-card.is-self + .msg-stt-box,
+.outgoing .msg-stt-box {
+  background: rgba(255, 255, 255, 0.15);
+  border-left: 3px solid #ffffff;
+  color: #ffffff;
+}
+
+.outgoing .msg-stt-box .msg-stt-title {
+  color: #ffffff;
+  opacity: 0.9;
+}
+
+.outgoing .msg-stt-box .msg-stt-body {
+  color: #ffffff;
+}
+
+.dark-mode .msg-stt-box {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.msg-stt-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--zalo-primary);
+  margin-bottom: 2px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.msg-stt-body {
+  color: var(--text-primary);
+  word-break: break-word;
+}

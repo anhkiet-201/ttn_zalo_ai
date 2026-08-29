@@ -88,6 +88,10 @@ export interface ParsedMessage {
   args: string[];
   hasImage?: boolean;
   imageUrls?: string[];
+  hasVoice?: boolean;
+  voiceUrl?: string;
+  voiceUrls?: string[];
+  voiceDuration?: number;
 }
 
 /**

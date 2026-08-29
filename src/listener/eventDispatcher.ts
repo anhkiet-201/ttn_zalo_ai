@@ -96,6 +96,55 @@ export function extractAllImageUrls(obj: unknown): string[] {
 }
 
 /**
+ * Trích xuất URL âm thanh (Voice Message) và thời lượng từ payload Zalo
+ */
+function extractVoiceInfo(data: any): { voiceUrl?: string; duration?: number } {
+  if (!data) return {};
+
+  let voiceUrl: string | undefined = undefined;
+  let duration: number | undefined = undefined;
+
+  // Nếu data là chuỗi JSON
+  let target = data;
+  if (typeof data === "string" && data.trim().startsWith("{") && data.trim().endsWith("}")) {
+    try {
+      target = JSON.parse(data.trim());
+    } catch {
+      target = data;
+    }
+  }
+
+  if (typeof target === "object" && target !== null) {
+    const urlKeys = [
+      "voiceUrl",
+      "voice_url",
+      "m4aUrl",
+      "m4a_url",
+      "audioUrl",
+      "audio_url",
+      "href",
+      "url",
+      "directUrl",
+    ];
+
+    for (const key of urlKeys) {
+      if (typeof target[key] === "string" && isValidHttpUrl(target[key])) {
+        voiceUrl = target[key].trim();
+        break;
+      }
+    }
+
+    if (typeof target.duration === "number") {
+      duration = target.duration;
+    } else if (typeof target.duration === "string" && !isNaN(Number(target.duration))) {
+      duration = Number(target.duration);
+    }
+  }
+
+  return { voiceUrl, duration };
+}
+
+/**
  * EventDispatcher: Nhận và định tuyến các sự kiện từ Zalo Listener tới các Handler
  */
 export class EventDispatcher {
@@ -236,11 +285,39 @@ export class EventDispatcher {
       rawImageUrls.push(...extractAllImageUrls(rawData.paramsExt));
     }
 
+    // Trích xuất thông tin Voice / Audio nếu có
+    let voiceUrl: string | undefined = undefined;
+    let voiceDuration: number | undefined = undefined;
+
+    const voiceFromContent = extractVoiceInfo(rawMessage.data.content);
+    if (voiceFromContent.voiceUrl) {
+      voiceUrl = voiceFromContent.voiceUrl;
+      voiceDuration = voiceFromContent.duration;
+    }
+
+    if (!voiceUrl && rawData?.params) {
+      const voiceFromParams = extractVoiceInfo(rawData.params);
+      if (voiceFromParams.voiceUrl) {
+        voiceUrl = voiceFromParams.voiceUrl;
+        voiceDuration = voiceFromParams.duration;
+      }
+    }
+
+    if (!voiceUrl && rawData?.paramsExt) {
+      const voiceFromParamsExt = extractVoiceInfo(rawData.paramsExt);
+      if (voiceFromParamsExt.voiceUrl) {
+        voiceUrl = voiceFromParamsExt.voiceUrl;
+        voiceDuration = voiceFromParamsExt.duration;
+      }
+    }
+
     // Lọc trùng lặp URL và chỉ giữ các URL hợp lệ
     const imageUrls = Array.from(new Set(rawImageUrls)).filter((u) => isValidHttpUrl(u));
 
     const msgType = String(rawMessage.data?.msgType || "");
     const isPhoto = msgType === "chat.photo";
+    const isVoice = msgType === "chat.voice" || msgType === "chat.audio" || Boolean(voiceUrl);
+    const hasVoice = Boolean(voiceUrl);
     const isSticker =
       msgType === "chat.sticker" ||
       msgType.includes("sticker") ||
@@ -292,12 +369,14 @@ export class EventDispatcher {
         quoteSenderName = isGroup ? `Thành viên (${quoteSenderId})` : "Ứng viên";
       }
 
-      // Nếu tin nhắn gốc là ảnh/sticker mà msg rỗng
+      // Nếu tin nhắn gốc là ảnh/sticker/voice mà msg rỗng
       if (!quoteText) {
         if (quoteMsgType === "chat.photo" || rawQuote.attach) {
           quoteText = "[Hình ảnh]";
         } else if (quoteMsgType === "chat.sticker") {
           quoteText = "[Nhãn dán / Sticker]";
+        } else if (quoteMsgType === "chat.voice" || quoteMsgType === "chat.audio") {
+          quoteText = "[Tin nhắn thoại]";
         }
       }
     }
@@ -326,6 +405,10 @@ export class EventDispatcher {
       args,
       hasImage,
       imageUrls: imageUrls.length > 0 ? imageUrls : undefined,
+      hasVoice,
+      voiceUrl,
+      voiceUrls: voiceUrl ? [voiceUrl] : undefined,
+      voiceDuration,
     };
   }
 

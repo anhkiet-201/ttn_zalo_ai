@@ -9,6 +9,10 @@ export interface QueuedMessage {
   quoteSenderId?: string;
   timestamp: number;
   imageUrls?: string[];
+  hasVoice?: boolean;
+  voiceUrl?: string;
+  voiceUrls?: string[];
+  voiceDuration?: number;
   rawMessage?: ParsedMessage["raw"];
 }
 
@@ -88,6 +92,10 @@ export class MessageBatcher {
       quoteSenderId: parsedMessage.quoteSenderId,
       timestamp: parsedMessage.timestamp,
       imageUrls: parsedMessage.imageUrls,
+      hasVoice: parsedMessage.hasVoice,
+      voiceUrl: parsedMessage.voiceUrl,
+      voiceUrls: parsedMessage.voiceUrls,
+      voiceDuration: parsedMessage.voiceDuration,
       rawMessage: parsedMessage.raw,
     });
 

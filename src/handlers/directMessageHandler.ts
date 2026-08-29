@@ -1,7 +1,7 @@
 import { type ParsedMessage, ThreadType, Reactions } from "../types/zalo.types.js";
 import { type ZaloService } from "../services/zaloService.js";
 import { type AIService, type CCCDAnalysisResult } from "../services/aiService.js";
-import { CandidateRepository, ThreadMetadataRepository, type CandidateRecord } from "../database/index.js";
+import { CandidateRepository, ThreadMetadataRepository, ChatHistoryRepository, type CandidateRecord } from "../database/index.js";
 import { type HRNotifier } from "../services/hrNotifier.js";
 import { type ToolExecutor } from "../services/toolExecutor.js";
 import { UserContextManager } from "../services/userContextManager.js";
@@ -15,6 +15,7 @@ import { config } from "../config/index.js";
  */
 export class DirectMessageHandler {
   private readonly batcher: MessageBatcher;
+  private readonly chatHistoryRepo: ChatHistoryRepository;
 
   constructor(
     private readonly zaloService: ZaloService,
@@ -23,8 +24,10 @@ export class DirectMessageHandler {
     private readonly hrNotifier: HRNotifier,
     private readonly toolExecutor: ToolExecutor,
     private readonly userContextManager: UserContextManager,
-    private readonly threadMetaRepo: ThreadMetadataRepository
+    private readonly threadMetaRepo: ThreadMetadataRepository,
+    chatHistoryRepo?: ChatHistoryRepository
   ) {
+    this.chatHistoryRepo = chatHistoryRepo || new ChatHistoryRepository();
     // Mỗi DirectMessageHandler có batcher riêng — batch được phân vùng theo threadId
     // nên phiên của từng ứng viên hoàn toàn độc lập
     this.batcher = new MessageBatcher(async (batch) => this.processBatch(batch));
@@ -61,10 +64,14 @@ export class DirectMessageHandler {
       return;
     }
 
-    if (!parsedMessage.text && !parsedMessage.hasImage) return;
+    if (!parsedMessage.text && !parsedMessage.hasImage && !parsedMessage.hasVoice) return;
 
     if (parsedMessage.hasImage && parsedMessage.imageUrls?.length) {
       console.log(`🖼️ [Ảnh Cá Nhân] Nhận ${parsedMessage.imageUrls.length} hình ảnh từ ${senderInfo}`);
+    }
+
+    if (parsedMessage.hasVoice && parsedMessage.voiceUrl) {
+      console.log(`🎙️ [Tin Nhắn Thoại] Nhận ghi âm (${parsedMessage.voiceDuration || 0}ms) từ ${senderInfo}`);
     }
 
     // Enqueue vào batcher — mỗi threadId có 1 batch riêng biệt
@@ -74,9 +81,49 @@ export class DirectMessageHandler {
   // ── Batch processing ────────────────────────────────────────────────────
 
   /**
-   * Callback sau debounce: xử lý batch tin nhắn, OCR CCCD, gọi AI, gửi reply
+   * Callback sau debounce: xử lý batch tin nhắn, phiên âm Voice STT, OCR CCCD, gọi AI, gửi reply
    */
   private async processBatch(batch: MessageBatch): Promise<void> {
+    // 0. Xử lý phiên âm tin nhắn thoại (Audio Speech-to-Text) nếu có
+    const companyHints = this.aiService.rag.getCompanyHints();
+    for (const msg of batch.messages) {
+      if (msg.hasVoice && msg.voiceUrl) {
+        console.log(`🎙️ [AudioService] Đang phiên âm tin nhắn thoại từ [${batch.senderName}]...`);
+        const transcribedText = await this.aiService.audio.transcribeAudio(msg.voiceUrl, companyHints);
+        console.log(`✅ [Audio STT] Phiên âm: "${transcribedText}"`);
+        msg.text = `[🎙️ Tin nhắn thoại]: "${transcribedText}"`;
+
+        // Lưu/cập nhật bản ghi hoàn chỉnh với nội dung STT và voiceUrl vào ChatHistory
+        try {
+          this.chatHistoryRepo.addMessage({
+            threadId: batch.threadId,
+            senderId: batch.senderId,
+            senderName: batch.senderName,
+            role: "user",
+            content: msg.text,
+            hasVoice: true,
+            voiceUrl: msg.voiceUrl,
+            voiceDuration: msg.voiceDuration,
+            hasQuote: msg.hasQuote,
+            quoteText: msg.quoteText,
+            quoteSenderName: msg.quoteSenderName,
+            quoteSenderId: msg.quoteSenderId,
+            isGroup: false,
+            timestamp: msg.timestamp,
+          });
+        } catch (err) {
+          console.warn("⚠️ Lỗi lưu tin nhắn thoại vào chat_messages:", err);
+        }
+
+        // Thả tim xác nhận đã nhận tin nhắn thoại
+        if (msg.rawMessage) {
+          try {
+            await this.zaloService.sendReaction(msg.rawMessage, Reactions.HEART);
+          } catch {}
+        }
+      }
+    }
+
     // Thu thập tất cả hình ảnh từ batch
     const allImageUrls: string[] = [];
     for (const msg of batch.messages) {
