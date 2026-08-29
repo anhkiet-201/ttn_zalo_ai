@@ -204,10 +204,20 @@ export const groupRagTools: FunctionDeclaration[] = [
           description:
             'File RAG mục tiêu: "job_rag" (tuyển dụng, số lượng người, link map, địa chỉ), "policy_rag" (chính sách, quy định), "location_rag" (địa điểm).',
         },
+        matchedCompanyName: {
+          type: Type.STRING,
+          description:
+            'Tên công ty hoặc đối tượng xác định được từ Tên Nhóm hoặc Nội dung tin nhắn (vd: "Công ty Leader - Sông Mây", "Công ty Sanaky", "Gỗ Wangshun").',
+        },
         targetId: {
           type: Type.STRING,
           description:
-            'ID của entry cần cập nhật khi action="update_existing" (ví dụ: "job_13" cho Công ty ADC, "job_06" cho Sanaky). Bỏ qua nếu action="create_new".',
+            'BẮT BUỘC ĐỐI CHIẾU ID TỪ BẢNG TRA CỨU: ID của entry tương ứng với matchedCompanyName khi action="update_existing" (vd: "job_04" cho Leader, "job_06" cho Sanaky, "job_01" cho Wangshun). Tuyệt đối không chọn bừa job_01!',
+        },
+        matchingReason: {
+          type: Type.STRING,
+          description:
+            'Giải trình logic vì sao chọn targetId này (vd: "Tên nhóm là CÔNG TY LEADER KCN SÔNG MÂY -> Khớp với Công ty Leader ID job_04").',
         },
         updatedFields: {
           type: Type.OBJECT,

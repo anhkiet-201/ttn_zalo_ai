@@ -33,8 +33,8 @@ export class GroupAnalysisService {
     }
     if (messages.length === 0) return false;
 
-    // 1. Đọc RAG context hiện tại để AI biết các entry id đã tồn tại
-    const ragContext = ragService.buildPromptContext();
+    // 1. Đọc Bảng danh mục tra cứu tóm tắt ID và thông tin cốt lõi
+    const directoryIndex = ragService.buildDirectoryIndex();
 
     // 2. Build prompt từ danh sách tin nhắn
     const timeFormatter = (ts: number) =>
@@ -49,21 +49,27 @@ export class GroupAnalysisService {
       .join("\n");
 
     const systemInstruction =
-      `Bạn là AI chuyên trách tự động phân tích tin nhắn nhóm Zalo nội bộ để cập nhật cơ sở dữ liệu tuyển dụng (RAG) qua tool call 'update_rag'.\n` +
-      `\nQUY TẮC CỐT LÕI (BẮT BUỘC PHẢI GỌI TOOL KHI CÓ DỮ LIỆU):\n` +
-      `1. TÊN NHÓM CUNG CẤP TÊN CÔNG TY / ĐỐI TƯỢNG: Luôn kết hợp Tên nhóm ("${groupName}") và nội dung tin nhắn để xác định công ty tuyển dụng.\n` +
-      `2. KHI CÔNG TY ĐÃ CÓ TRONG KHO RAG: Nếu tin nhắn gửi link Google Maps, địa chỉ, bổ sung số lượng tuyển, hoặc lịch hẹn -> BẮT BUỘC dùng action='update_existing', targetFile='job_rag', targetId='id của công ty trong RAG', và truyền các trường cần cập nhật.\n` +
+      `Bạn là AI chuyên gia phân tích tin nhắn nhóm Zalo nội bộ để cập nhật cơ sở dữ liệu tuyển dụng (RAG) qua tool call 'update_rag'.\n` +
+      `\nQUY TẮC CỐT LÕI VỀ SUY LUẬN ĐỐI CHIẾU CÔNG TY & CHỌN TARGET ID (BẮT BUỘC TUÂN THỦ 100%):\n` +
+      `1. SUY LUẬN 2 BƯỚC ĐỂ CHỌN TARGET ID CHUẨN XÁC:\n` +
+      `   - Bước 1 (Xác định tên công ty): Đọc Tên nhóm ("${groupName}") và nội dung tin nhắn để xác định công ty/đối tượng đang được đề cập (vd: "Leader", "Wangshun", "Chervon", "Kaiser", "Sanaky"...). Lưu ý: Tên nhóm là ngữ cảnh mạnh nhất xác định công ty của nhóm đó!\n` +
+      `   - Bước 2 (Tra cứu ID trong BẢNG TRA CỨU): Tìm dòng có tên công ty/khu vực tương ứng trong BẢNG TRA CỨU ID để lấy đúng targetId. TUYỆT ĐỐI KHÔNG CHỌN BỪA 'job_01' nếu công ty không phải là Wangshun!\n` +
+      `     Ví dụ: Tên nhóm có chữ LEADER hoặc SÔNG MÂY -> BẮT BUỘC chọn ID 'job_04' (Công ty Leader – Sông Mây). CẤM chọn job_01!\n` +
+      `     Ví dụ: Tên nhóm có chữ WANGSHUN -> Chọn ID 'job_01' (Công ty Wangshun).\n` +
+      `     Ví dụ: Tên nhóm có chữ SANAKY -> Chọn ID 'job_06' (Công ty Sanaky).\n` +
+      `     Ví dụ: Tên nhóm có chữ CHERVON -> Chọn ID 'job_03' (Công ty Chervon).\n` +
+      `2. KHI CÔNG TY ĐÃ CÓ TRONG KHO RAG: Dùng action='update_existing', targetFile='job_rag', targetId='id chính xác', matchedCompanyName='tên công ty', matchingReason='lý do chọn ID'.\n` +
       `3. QUY TẮC VỀ TRẠNG THÁI TUYỂN DỤNG & CHỈ TIÊU (vacancies):\n` +
       `   - Khi tin nhắn báo "tạm ngưng tuyển", "ngưng tuyển", "đủ người", "hết chỗ": BẮT BUỘC phải truyền 'vacancies': 0 trong updatedFields!\n` +
-      `   - Khi tin nhắn thông báo tuyển lại: BẮT BUỘC cập nhật 'vacancies' thành số nguyên tương ứng.\n` +
+      `   - Khi tin nhắn thông báo tuyển lại hoặc nhận việc bình thường: Cập nhật 'vacancies' tương ứng (> 0).\n` +
       `4. KHI CÔNG TY HOÀN TOÀN MỚI: Dùng action='create_new', targetFile='job_rag', trích xuất đầy đủ các trường.\n` +
-      `5. CHỈ BỎ QUA KHÔNG GỌI TOOL khi tin nhắn hoàn toàn là tán gẫu, xã giao.`;
+      `5. CHỈ BỎ QUA KHÔNG GỌI TOOL khi tin nhắn hoàn toàn là tán gẫu, xã giao không chứa dữ liệu tuyển dụng.`;
 
     const userPrompt =
       `[TÊN NHÓM]: "${groupName}"\n` +
       `[DANH SÁCH TIN NHẮN]:\n${messagesText}\n\n` +
-      `[KHO DỮ LIỆU RAG HIỆN TẠI (Tra cứu ID để dùng update_existing)]:\n${ragContext}\n\n` +
-      `Hãy phân tích ngay và gọi tool 'update_rag' để cập nhật dữ liệu nếu có thông tin tuyển dụng/link map/địa chỉ/chính sách/địa điểm!`;
+      `${directoryIndex}\n\n` +
+      `Hãy phân tích ngay và gọi tool 'update_rag' với matchedCompanyName, targetId (tra cứu chính xác từ Bảng tra cứu) và matchingReason!`;
 
     const contents: Content[] = [{ role: "user", parts: [{ text: userPrompt }] }];
 
@@ -221,7 +227,7 @@ export class GroupAnalysisService {
       };
     }
 
-    const ragContext = ragService.buildPromptContext();
+    const directoryIndex = ragService.buildDirectoryIndex();
 
     const systemInstruction =
       `Bạn là AI chuyên gia tự động phân loại và cập nhật cơ sở dữ liệu tuyển dụng (RAG) qua tool call 'update_rag'.\n` +
@@ -230,13 +236,13 @@ export class GroupAnalysisService {
       `2. 'policy_rag': Khi nội dung là quy định chính sách chung, chế độ bảo hiểm, hồ sơ, độ tuổi, ứng lương...\n` +
       `3. 'location_rag': Khi nội dung là thông tin khu vực địa lý, khu công nghiệp, tuyến đường, lân cận...\n` +
       `\nQUY TẮC BẮT BUỘC:\n` +
-      `- Nếu đối tượng ĐÃ CÓ trong RAG -> dùng action='update_existing', targetId, updatedFields.\n` +
+      `- Nếu đối tượng ĐÃ CÓ trong RAG -> BẮT BUỘC tra cứu đúng ID từ BẢNG TRA CỨU ID, dùng action='update_existing', targetId, matchedCompanyName, matchingReason, updatedFields.\n` +
       `- Nếu đối tượng HOÀN TOÀN MỚI -> dùng action='create_new', newEntry.\n` +
       `- BẮT BUỘC PHẢI GỌI TOOL 'update_rag' để thực hiện lưu dữ liệu.`;
 
     const userPrompt =
       `[NỘI DUNG TUYỂN DỤNG / QUY ĐỊNH / ĐỊA BÀN CẦN CẬP NHẬT RAG TỪ HR]:\n${rawText}\n\n` +
-      `[KHO DỮ LIỆU RAG HIỆN TẠI (Để tra cứu ID nếu đã tồn tại)]:\n${ragContext}\n\n` +
+      `${directoryIndex}\n\n` +
       `Hãy phân tích ngay, tự động phân loại chính xác và gọi tool 'update_rag' để cập nhật dữ liệu!`;
 
     const contents: Content[] = [{ role: "user", parts: [{ text: userPrompt }] }];

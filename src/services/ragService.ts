@@ -48,12 +48,75 @@ export function loadRagContext(baseDir: string = process.cwd()): string {
   }
 }
 
+export function buildRagDirectoryIndex(baseDir: string = process.cwd()): string {
+  try {
+    const dataDir = path.join(baseDir, "data");
+    const jobData: Record<string, any>[] = JSON.parse(
+      fs.readFileSync(path.join(dataDir, "job_rag.json"), "utf-8")
+    );
+    const policyData: Record<string, any>[] = JSON.parse(
+      fs.readFileSync(path.join(dataDir, "policy_rag.json"), "utf-8")
+    );
+    const locationData: Record<string, any>[] = JSON.parse(
+      fs.readFileSync(path.join(dataDir, "location_rag.json"), "utf-8")
+    );
+
+    const lines: string[] = [];
+    lines.push("📋 [BẢNG TRA CỨU TOÀN DIỆN KHO DỮ LIỆU RAG] (BẮT BUỘC ĐỐI CHIẾU ID TẠI ĐÂY):");
+    
+    lines.push("\n--- 1. CÔNG TY TUYỂN DỤNG (targetFile: 'job_rag') ---");
+    for (const item of jobData) {
+      const aliases = Array.isArray(item.aliases) ? item.aliases.join(", ") : "";
+      const loc = item.location ? ` | Địa chỉ: ${item.location}` : "";
+      const map = item.map_url ? ` | Map: ${item.map_url}` : "";
+      const schedule = item.interview_schedule ? ` | Hẹn: ${item.interview_schedule}` : "";
+      const vacancies = item.vacancies !== undefined ? ` | Chỉ tiêu: ${item.vacancies}` : "";
+      const jobType = item.job_type ? ` | Ngành: ${item.job_type}` : "";
+      lines.push(`• ID [${item.id}]: ${item.title || "Chưa có tên"}${loc}${map}${schedule}${jobType} | Aliases: [${aliases}]${vacancies}`);
+    }
+
+    lines.push("\n--- 2. CHÍNH SÁCH & QUY ĐỊNH CHUNG (targetFile: 'policy_rag') ---");
+    for (const item of policyData) {
+      const aliases = Array.isArray(item.aliases) ? item.aliases.join(", ") : "";
+      let detailStr = "";
+      if (item.details && typeof item.details === "object") {
+        detailStr = Object.entries(item.details)
+          .map(([k, v]) => `${k}: ${typeof v === "object" ? JSON.stringify(v) : v}`)
+          .join(" ; ");
+      } else if (item.raw_content) {
+        detailStr = String(item.raw_content);
+      }
+      lines.push(`• ID [${item.id}]: ${item.title || "Chính sách"} | Nội dung quy định: [${detailStr}] | Từ khóa/Aliases: [${aliases}]`);
+    }
+
+    lines.push("\n--- 3. ĐỊA ĐIỂM & KHU CÔNG NGHIỆP (targetFile: 'location_rag') ---");
+    for (const item of locationData) {
+      const aliases = Array.isArray(item.aliases) ? item.aliases.join(", ") : "";
+      const loc = ` | Tỉnh/Huyện: ${item.district || ""}, ${item.province || ""}`;
+      const nearby = Array.isArray(item.nearby_suggestions) && item.nearby_suggestions.length > 0
+        ? ` | Khu lân cận: [${item.nearby_suggestions.join(", ")}]`
+        : "";
+      const kcn = Array.isArray(item.notable_kcn) && item.notable_kcn.length > 0
+        ? ` | KCN tiêu biểu: [${item.notable_kcn.join(", ")}]`
+        : "";
+      const desc = item.description ? ` | Mô tả: ${item.description}` : item.raw_content ? ` | Chi tiết: ${item.raw_content}` : "";
+      lines.push(`• ID [${item.id}]: ${item.title || item.location_name || "Địa điểm"}${loc}${desc}${nearby}${kcn} | Aliases: [${aliases}]`);
+    }
+
+    return lines.join("\n");
+  } catch (error) {
+    return `Lỗi tạo Directory Index: ${error}`;
+  }
+}
+
 export type RagTargetFile = "job_rag" | "policy_rag" | "location_rag";
 
 export interface RagUpdateArgs {
   action: "update_existing" | "create_new";
   targetFile: RagTargetFile;
   targetId?: string;
+  matchedCompanyName?: string;
+  matchingReason?: string;
   updatedFields?: Record<string, unknown>;
   newEntry?: Record<string, unknown>;
   reason: string;
@@ -171,6 +234,13 @@ export class RAGService {
     const context = loadRagContext(this.baseDir);
     this.cachedContext = context;
     return context;
+  }
+
+  /**
+   * Tạo bảng tóm tắt danh mục toàn bộ ID, tên công ty và từ khóa để AI tra cứu đối chiếu chuẩn xác
+   */
+  public buildDirectoryIndex(): string {
+    return buildRagDirectoryIndex(this.baseDir);
   }
 
   /**
