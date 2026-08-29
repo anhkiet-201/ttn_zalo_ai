@@ -17,6 +17,11 @@ export interface ChatMessageRecord {
   hasVoice?: boolean;
   voiceUrl?: string;
   voiceDuration?: number;
+  hasSticker?: boolean;
+  stickerId?: string;
+  stickerCateId?: string;
+  stickerUrl?: string;
+  stickerText?: string;
   hasQuote?: boolean;
   quoteText?: string;
   quoteSenderName?: string;
@@ -32,6 +37,7 @@ export interface ThreadListItem {
   lastContent: string;
   lastHasImage: boolean;
   lastHasVoice?: boolean;
+  lastHasSticker?: boolean;
   lastTimestamp: number;
   lastRole: "user" | "model";
   isGroup: boolean;
@@ -55,7 +61,7 @@ export class ChatHistoryRepository {
    * Lưu một tin nhắn mới vào SQLite và phát sự kiện Realtime tới Web Chat
    */
   public addMessage(record: ChatMessageRecord): void {
-    // Chống duplicate: kiểm tra xem tin nhắn cùng thread, cùng role và nội dung/ảnh/voice đã tồn tại chưa
+    // Chống duplicate: kiểm tra xem tin nhắn cùng thread, cùng role và nội dung/ảnh/voice/sticker đã tồn tại chưa
     try {
       let existing: { id: string } | undefined = undefined;
       if (record.hasImage && record.imageUrls && record.imageUrls.length > 0) {
@@ -82,6 +88,20 @@ export class ChatHistoryRepository {
           record.threadId,
           record.role,
           record.voiceUrl,
+          record.timestamp
+        ) as { id: string } | undefined;
+      } else if (record.hasSticker && (record.stickerUrl || record.stickerId)) {
+        // Chống trùng lặp sticker trong vòng 5 giây
+        const checkStickerStmt = this.db.connection.prepare(`
+          SELECT id FROM chat_messages 
+          WHERE thread_id = ? AND role = ? AND has_sticker = 1 AND (sticker_url = ? OR sticker_id = ?) AND abs(timestamp - ?) < 5000 
+          LIMIT 1
+        `);
+        existing = checkStickerStmt.get(
+          record.threadId,
+          record.role,
+          record.stickerUrl || "",
+          record.stickerId || "",
           record.timestamp
         ) as { id: string } | undefined;
       } else if (record.content && record.content.trim()) {
@@ -112,10 +132,12 @@ export class ChatHistoryRepository {
       INSERT INTO chat_messages (
         id, thread_id, sender_id, sender_name, role, content, has_image, image_urls,
         has_voice, voice_url, voice_duration,
+        has_sticker, sticker_id, sticker_cate_id, sticker_url, sticker_text,
         has_quote, quote_text, quote_sender_name, quote_sender_id, is_group, timestamp
       ) VALUES (
         @id, @thread_id, @sender_id, @sender_name, @role, @content, @has_image, @image_urls,
         @has_voice, @voice_url, @voice_duration,
+        @has_sticker, @sticker_id, @sticker_cate_id, @sticker_url, @sticker_text,
         @has_quote, @quote_text, @quote_sender_name, @quote_sender_id, @is_group, @timestamp
       )
     `);
@@ -132,6 +154,11 @@ export class ChatHistoryRepository {
       has_voice: record.hasVoice ? 1 : 0,
       voice_url: record.voiceUrl || null,
       voice_duration: record.voiceDuration || 0,
+      has_sticker: record.hasSticker ? 1 : 0,
+      sticker_id: record.stickerId || null,
+      sticker_cate_id: record.stickerCateId || null,
+      sticker_url: record.stickerUrl || null,
+      sticker_text: record.stickerText || null,
       has_quote: record.hasQuote ? 1 : 0,
       quote_text: record.quoteText || null,
       quote_sender_name: record.quoteSenderName || null,
@@ -178,6 +205,8 @@ export class ChatHistoryRepository {
         id, thread_id as threadId, sender_id as senderId, sender_name as senderName,
         role, content, has_image as hasImage, image_urls as imageUrls,
         has_voice as hasVoice, voice_url as voiceUrl, voice_duration as voiceDuration,
+        has_sticker as hasSticker, sticker_id as stickerId, sticker_cate_id as stickerCateId,
+        sticker_url as stickerUrl, sticker_text as stickerText,
         has_quote as hasQuote, quote_text as quoteText,
         quote_sender_name as quoteSenderName, quote_sender_id as quoteSenderId,
         is_group as isGroup, timestamp
@@ -199,6 +228,11 @@ export class ChatHistoryRepository {
       hasVoice?: number;
       voiceUrl?: string | null;
       voiceDuration?: number | null;
+      hasSticker?: number;
+      stickerId?: string | null;
+      stickerCateId?: string | null;
+      stickerUrl?: string | null;
+      stickerText?: string | null;
       hasQuote: number;
       quoteText: string | null;
       quoteSenderName: string | null;
@@ -223,6 +257,8 @@ export class ChatHistoryRepository {
         id, thread_id as threadId, sender_id as senderId, sender_name as senderName,
         role, content, has_image as hasImage, image_urls as imageUrls,
         has_voice as hasVoice, voice_url as voiceUrl, voice_duration as voiceDuration,
+        has_sticker as hasSticker, sticker_id as stickerId, sticker_cate_id as stickerCateId,
+        sticker_url as stickerUrl, sticker_text as stickerText,
         has_quote as hasQuote, quote_text as quoteText,
         quote_sender_name as quoteSenderName, quote_sender_id as quoteSenderId,
         is_group as isGroup, timestamp
@@ -244,6 +280,11 @@ export class ChatHistoryRepository {
       hasVoice?: number;
       voiceUrl?: string | null;
       voiceDuration?: number | null;
+      hasSticker?: number;
+      stickerId?: string | null;
+      stickerCateId?: string | null;
+      stickerUrl?: string | null;
+      stickerText?: string | null;
       hasQuote: number;
       quoteText: string | null;
       quoteSenderName: string | null;
@@ -273,6 +314,7 @@ export class ChatHistoryRepository {
         m.content as lastContent,
         m.has_image as lastHasImage,
         m.has_voice as lastHasVoice,
+        m.has_sticker as lastHasSticker,
         m.timestamp as lastTimestamp,
         m.role as lastRole,
         COALESCE(tm.is_group, m.is_group) as isGroup,
@@ -282,7 +324,7 @@ export class ChatHistoryRepository {
         c.phone_number as phoneNumber
       FROM (
         SELECT 
-          id, thread_id, sender_id, sender_name, content, has_image, has_voice,
+          id, thread_id, sender_id, sender_name, content, has_image, has_voice, has_sticker,
           MAX(timestamp) as timestamp, role, is_group
         FROM chat_messages
         GROUP BY thread_id
@@ -356,6 +398,7 @@ export class ChatHistoryRepository {
       lastContent: string;
       lastHasImage: number;
       lastHasVoice?: number;
+      lastHasSticker?: number;
       lastTimestamp: number;
       lastRole: "user" | "model";
       isGroup: number;
@@ -372,6 +415,7 @@ export class ChatHistoryRepository {
       lastContent: r.lastContent || "",
       lastHasImage: Boolean(r.lastHasImage),
       lastHasVoice: Boolean(r.lastHasVoice),
+      lastHasSticker: Boolean(r.lastHasSticker),
       lastTimestamp: r.lastTimestamp,
       lastRole: r.lastRole,
       isGroup: Boolean(r.isGroup),
@@ -464,6 +508,11 @@ export class ChatHistoryRepository {
     hasVoice?: number;
     voiceUrl?: string | null;
     voiceDuration?: number | null;
+    hasSticker?: number;
+    stickerId?: string | null;
+    stickerCateId?: string | null;
+    stickerUrl?: string | null;
+    stickerText?: string | null;
     hasQuote?: number;
     quoteText?: string | null;
     quoteSenderName?: string | null;
@@ -495,6 +544,11 @@ export class ChatHistoryRepository {
       hasVoice: Boolean(row.hasVoice),
       voiceUrl: row.voiceUrl || undefined,
       voiceDuration: row.voiceDuration || undefined,
+      hasSticker: Boolean(row.hasSticker),
+      stickerId: row.stickerId || undefined,
+      stickerCateId: row.stickerCateId || undefined,
+      stickerUrl: row.stickerUrl || undefined,
+      stickerText: row.stickerText || undefined,
       hasQuote: Boolean(row.hasQuote),
       quoteText: row.quoteText || undefined,
       quoteSenderName: row.quoteSenderName || undefined,

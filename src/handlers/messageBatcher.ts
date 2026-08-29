@@ -13,6 +13,12 @@ export interface QueuedMessage {
   voiceUrl?: string;
   voiceUrls?: string[];
   voiceDuration?: number;
+  hasSticker?: boolean;
+  isSticker?: boolean;
+  stickerId?: string;
+  stickerCateId?: string;
+  stickerUrl?: string;
+  stickerText?: string;
   rawMessage?: ParsedMessage["raw"];
 }
 
@@ -96,6 +102,12 @@ export class MessageBatcher {
       voiceUrl: parsedMessage.voiceUrl,
       voiceUrls: parsedMessage.voiceUrls,
       voiceDuration: parsedMessage.voiceDuration,
+      hasSticker: parsedMessage.hasSticker,
+      isSticker: parsedMessage.isSticker,
+      stickerId: parsedMessage.stickerId,
+      stickerCateId: parsedMessage.stickerCateId,
+      stickerUrl: parsedMessage.stickerUrl,
+      stickerText: parsedMessage.stickerText,
       rawMessage: parsedMessage.raw,
     });
 

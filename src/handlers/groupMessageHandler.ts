@@ -37,10 +37,10 @@ export class GroupMessageHandler {
     const groupInfo = parsedMessage.threadId;
 
     // Bỏ qua sticker / reaction (text rỗng và không có voice)
-    if (!parsedMessage.text && !parsedMessage.hasVoice) return;
+    if (!parsedMessage.text && !parsedMessage.hasVoice && !parsedMessage.hasSticker) return;
 
     // Lọc từ khóa nội bộ hoặc tin nhắn văn bản quá ngắn (bỏ qua im lặng)
-    if (parsedMessage.text) {
+    if (parsedMessage.text && !parsedMessage.hasSticker) {
       const lowerText = parsedMessage.text.toLowerCase().trim();
       const matchedKeyword = config.groupIgnoreKeywords.find((kw) => lowerText.includes(kw));
       if (matchedKeyword || lowerText.length < 25) {
@@ -56,7 +56,7 @@ export class GroupMessageHandler {
       return;
     }
 
-    console.log(`👥 [Nhóm: "${groupName}"] ${senderInfo}: "${parsedMessage.text.length > 80 ? parsedMessage.text.slice(0, 80) + "..." : parsedMessage.text || "[Tin nhắn thoại]"}"`);
+    console.log(`👥 [Nhóm: "${groupName}"] ${senderInfo}: "${parsedMessage.text.length > 80 ? parsedMessage.text.slice(0, 80) + "..." : parsedMessage.text || (parsedMessage.hasSticker ? "[Nhãn dán / Sticker]" : "[Tin nhắn thoại]")}"`);
 
     this.groupBatcher.enqueue(parsedMessage, groupName);
   }
@@ -67,6 +67,16 @@ export class GroupMessageHandler {
    * Callback sau debounce: gọi AI analyzeGroupBatch để phân tích và cập nhật RAG
    */
   private async processGroupBatch(batch: GroupMessageBatch): Promise<void> {
+    // Đọc hiểu nhãn dán trong nhóm nếu có
+    for (const msg of batch.messages) {
+      if (msg.hasSticker && (msg.stickerUrl || msg.stickerId || msg.stickerText)) {
+        try {
+          const meaning = await this.aiService.sticker.understandSticker(msg.stickerUrl, msg.stickerText);
+          msg.text = `[Nhãn dán]: ${meaning}`;
+        } catch {}
+      }
+    }
+
     // Phiên âm các tin nhắn thoại trong nhóm nếu có
     const companyHints = this.ragService.getCompanyHints();
     for (const msg of batch.messages) {

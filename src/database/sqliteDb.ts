@@ -65,6 +65,11 @@ export class SQLiteDatabase {
         has_voice INTEGER DEFAULT 0,
         voice_url TEXT,
         voice_duration INTEGER DEFAULT 0,
+        has_sticker INTEGER DEFAULT 0,
+        sticker_id TEXT,
+        sticker_cate_id TEXT,
+        sticker_url TEXT,
+        sticker_text TEXT,
         has_quote INTEGER DEFAULT 0,
         quote_text TEXT,
         quote_sender_name TEXT,
@@ -159,6 +164,21 @@ export class SQLiteDatabase {
       }
       if (!msgColNames.includes("voice_duration")) {
         this.db.exec("ALTER TABLE chat_messages ADD COLUMN voice_duration INTEGER DEFAULT 0");
+      }
+      if (!msgColNames.includes("has_sticker")) {
+        this.db.exec("ALTER TABLE chat_messages ADD COLUMN has_sticker INTEGER DEFAULT 0");
+      }
+      if (!msgColNames.includes("sticker_id")) {
+        this.db.exec("ALTER TABLE chat_messages ADD COLUMN sticker_id TEXT");
+      }
+      if (!msgColNames.includes("sticker_cate_id")) {
+        this.db.exec("ALTER TABLE chat_messages ADD COLUMN sticker_cate_id TEXT");
+      }
+      if (!msgColNames.includes("sticker_url")) {
+        this.db.exec("ALTER TABLE chat_messages ADD COLUMN sticker_url TEXT");
+      }
+      if (!msgColNames.includes("sticker_text")) {
+        this.db.exec("ALTER TABLE chat_messages ADD COLUMN sticker_text TEXT");
       }
       if (!msgColNames.includes("is_group")) {
         this.db.exec("ALTER TABLE chat_messages ADD COLUMN is_group INTEGER DEFAULT 0");

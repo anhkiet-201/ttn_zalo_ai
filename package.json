@@ -11,7 +11,8 @@
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "test:voice": "tsx src/tests/testVoiceAndAudio.ts",
-    "test:benchmark": "tsx src/tests/runBenchmark.ts"
+    "test:benchmark": "tsx src/tests/runBenchmark.ts",
+    "test:comprehensive": "tsx src/tests/testComprehensiveFeatureAndUI.ts"
   },
   "keywords": [
     "zalo",

@@ -185,6 +185,60 @@ export function ZaloVoicePlayer({ message, isOutgoing }) {
 }
 
 /**
+ * ZaloSticker: Component hiển thị Nhãn dán / Sticker chuẩn phong cách Zalo PC
+ */
+export function ZaloSticker({ message, isOutgoing }) {
+  const [loaded, setLoaded] = useState(false);
+  const [hasError, setHasError] = useState(false);
+
+  let caption = message.stickerText || '';
+  if (!caption && message.content) {
+    if (message.content.startsWith('[🏷️ Nhãn dán / Sticker]:')) {
+      caption = message.content.replace('[🏷️ Nhãn dán / Sticker]:', '').trim().replace(/^["\s]+|["\s]+$/g, '');
+    } else if (message.content.startsWith('[🏷️ Sticker]:')) {
+      caption = message.content.replace('[🏷️ Sticker]:', '').trim().replace(/^["\s]+|["\s]+$/g, '');
+    } else if (message.content.startsWith('[Nhãn dán]:')) {
+      caption = message.content.replace('[Nhãn dán]:', '').trim().replace(/^["\s]+|["\s]+$/g, '');
+    }
+  }
+
+  const stickerUrl = message.stickerUrl || (message.stickerId ? `https://zalo-api.zadn.vn/api/emoticon/sticker/webpc?id=${message.stickerId}` : '');
+
+  if (!stickerUrl || hasError) {
+    return html`
+      <div className="zalo-sticker-fallback">
+        <span className="zalo-sticker-fallback-icon">🏷️</span>
+        <span className="zalo-sticker-fallback-text">${caption || 'Nhãn dán'}</span>
+      </div>
+    `;
+  }
+
+  return html`
+    <div className="zalo-sticker-container">
+      <div className=${`zalo-sticker-wrapper ${loaded ? 'is-loaded' : 'is-loading'}`}>
+        ${!loaded && html`
+          <div className="zalo-sticker-skeleton"></div>
+        `}
+        <img
+          src=${stickerUrl}
+          alt=${caption || 'Sticker Zalo'}
+          className="zalo-sticker-img"
+          loading="lazy"
+          onLoad=${() => setLoaded(true)}
+          onError=${() => setHasError(true)}
+        />
+      </div>
+      ${caption && html`
+        <div className="zalo-sticker-caption-badge" title="Ý nghĩa nhãn dán">
+          <span className="sticker-badge-dot"></span>
+          ${caption}
+        </div>
+      `}
+    </div>
+  `;
+}
+
+/**
  * SmartImage: Placeholder Shimmer Loading & Spinner mảnh tinh tế
  */
 export function SmartImage({ src, alt, className, onClick }) {
@@ -227,20 +281,36 @@ export function MessageBubble({ message, ownId, isGroup, onImageClick }) {
   const avatarLetter = (message.senderName || 'U').trim().charAt(0).toUpperCase();
 
   const hasVoice = Boolean(message.hasVoice || message.voiceUrl);
+  const hasSticker = Boolean(
+    message.hasSticker ||
+    message.stickerUrl ||
+    message.stickerId ||
+    (message.content && (
+      message.content.startsWith('[🏷️ Nhãn dán / Sticker]:') ||
+      message.content.startsWith('[🏷️ Sticker]:') ||
+      message.content.startsWith('[Nhãn dán]:')
+    ))
+  );
 
   const hasRealText = Boolean(
     !hasVoice &&
+    !hasSticker &&
     message.content &&
       message.content.trim() &&
       message.content !== '[Hình ảnh đính kèm]' &&
       message.content !== '[Hình ảnh]' &&
       message.content !== '[Sticker]' &&
-      message.content !== '[Tin nhắn thoại]'
+      message.content !== '[Nhãn dán]' &&
+      message.content !== '[Tin nhắn thoại]' &&
+      !message.content.startsWith('[🏷️ Nhãn dán / Sticker]:') &&
+      !message.content.startsWith('[🏷️ Sticker]:') &&
+      !message.content.startsWith('[Nhãn dán]:')
   );
 
   const images = Array.isArray(message.imageUrls) ? message.imageUrls.filter(Boolean) : [];
-  const hasImages = !hasVoice && message.hasImage && images.length > 0;
-  const isPureImage = hasImages && !hasRealText && !message.hasQuote && !hasVoice;
+  const hasImages = !hasVoice && !hasSticker && message.hasImage && images.length > 0;
+  const isPureImage = hasImages && !hasRealText && !message.hasQuote && !hasVoice && !hasSticker;
+  const isPureSticker = hasSticker && !hasVoice && !hasImages && !message.hasQuote;
 
   const imageGridClass =
     images.length === 1
@@ -252,7 +322,7 @@ export function MessageBubble({ message, ownId, isGroup, onImageClick }) {
       : 'grid-multi';
 
   return html`
-    <div className=${`message-row ${isOutgoing ? 'outgoing' : 'incoming'} ${isPureImage ? 'is-pure-image-row' : ''}`}>
+    <div className=${`message-row ${isOutgoing ? 'outgoing' : 'incoming'} ${isPureImage || isPureSticker ? 'is-pure-image-row' : ''}`}>
       ${!isOutgoing && html`
         <div className="msg-sender-avatar" title=${message.senderName || 'Người gửi'}>
           ${avatarLetter}
@@ -264,7 +334,12 @@ export function MessageBubble({ message, ownId, isGroup, onImageClick }) {
           <div className="msg-sender-label">${message.senderName}</div>
         `}
 
-        ${isPureImage ? html`
+        ${isPureSticker ? html`
+          <!-- Pure Sticker Mode chuẩn Zalo PC -->
+          <div className="msg-pure-sticker-wrapper">
+            <${ZaloSticker} message=${message} isOutgoing=${isOutgoing} />
+          </div>
+        ` : isPureImage ? html`
           <!-- Album ảnh nhóm lại hiển thị trực tiếp chuẩn Zalo PC -->
           <div className=${`msg-pure-images-container ${imageGridClass}`}>
             ${images.map((url, idx) => html`
@@ -291,6 +366,10 @@ export function MessageBubble({ message, ownId, isGroup, onImageClick }) {
 
             ${hasVoice && html`
               <${ZaloVoicePlayer} message=${message} isOutgoing=${isOutgoing} />
+            `}
+
+            ${hasSticker && html`
+              <${ZaloSticker} message=${message} isOutgoing=${isOutgoing} />
             `}
 
             ${hasRealText && html`

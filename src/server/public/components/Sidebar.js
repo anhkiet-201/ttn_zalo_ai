@@ -135,9 +135,15 @@ export function Sidebar({
 
           const snippet = thread.lastHasVoice
             ? '🎙️ [Tin nhắn thoại]'
+            : thread.lastHasSticker
+            ? '🏷️ [Nhãn dán]'
             : thread.lastContent
             ? (thread.lastContent.startsWith('[🎙️ Tin nhắn thoại]:')
                 ? '🎙️ ' + thread.lastContent.replace('[🎙️ Tin nhắn thoại]:', '').trim().replace(/^["\s]+|["\s]+$/g, '')
+                : thread.lastContent.startsWith('[🏷️ Nhãn dán / Sticker]:')
+                ? '🏷️ ' + thread.lastContent.replace('[🏷️ Nhãn dán / Sticker]:', '').trim().replace(/^["\s]+|["\s]+$/g, '')
+                : thread.lastContent.startsWith('[🏷️ Sticker]:')
+                ? '🏷️ ' + thread.lastContent.replace('[🏷️ Sticker]:', '').trim().replace(/^["\s]+|["\s]+$/g, '')
                 : thread.lastContent)
             : thread.lastHasImage
             ? '[Hình ảnh]'

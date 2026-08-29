@@ -168,6 +168,91 @@ function extractVoiceInfo(data: any): { voiceUrl?: string; duration?: number } {
 }
 
 /**
+ * Trích xuất thông tin Nhãn dán / Sticker (Sticker ID, Category, URL, Description) từ payload Zalo
+ */
+export function extractStickerInfo(
+  content: any,
+  params: any,
+  paramsExt: any,
+  msgType: string
+): {
+  isSticker: boolean;
+  stickerId?: string;
+  stickerCateId?: string;
+  stickerUrl?: string;
+  stickerText?: string;
+} {
+  let isSticker =
+    msgType === "chat.sticker" ||
+    msgType.includes("sticker") ||
+    paramsExt?.containType === 36 ||
+    params?.type === "chat.sticker";
+
+  let target = content;
+  if (typeof content === "string" && content.trim().startsWith("{") && content.trim().endsWith("}")) {
+    try {
+      target = JSON.parse(content.trim());
+    } catch {
+      target = content;
+    }
+  }
+
+  const sources = [
+    typeof target === "object" && target !== null ? target : {},
+    typeof params === "object" && params !== null ? params : {},
+    typeof paramsExt === "object" && paramsExt !== null ? paramsExt : {},
+  ];
+
+  let stickerId: string | undefined = undefined;
+  let stickerCateId: string | undefined = undefined;
+  let stickerUrl: string | undefined = undefined;
+  let stickerText: string | undefined = undefined;
+
+  for (const src of sources) {
+    if (!stickerId && (src.id || src.stickerId || src.sticker_id)) {
+      stickerId = String(src.id || src.stickerId || src.sticker_id);
+    }
+    if (!stickerCateId && (src.cateId || src.cate_id || src.catId || src.categoryId)) {
+      stickerCateId = String(src.cateId || src.cate_id || src.catId || src.categoryId);
+    }
+    if (!stickerUrl) {
+      const urlCandidates = [src.stickerUrl, src.spriteUrl, src.url, src.webUrl, src.hdUrl, src.thumb, src.href];
+      for (const u of urlCandidates) {
+        if (typeof u === "string" && isValidHttpUrl(u) && !isAudioUrl(u)) {
+          stickerUrl = u.trim();
+          break;
+        }
+      }
+    }
+    if (!stickerText) {
+      const textCandidates = [src.text, src.description, src.caption, src.title, src.alt, src.stickerText];
+      for (const t of textCandidates) {
+        if (typeof t === "string" && t.trim() && t.trim() !== "[Sticker]" && t.trim() !== "[Nhãn dán]") {
+          stickerText = t.trim();
+          break;
+        }
+      }
+    }
+  }
+
+  // Nếu có stickerId mà chưa có URL, tạo URL Zalo Sticker CDN tiêu chuẩn
+  if (stickerId) {
+    isSticker = true;
+    if (!stickerUrl) {
+      stickerUrl = `https://zalo-api.zadn.vn/api/emoticon/sticker/webpc?id=${stickerId}`;
+    }
+  }
+
+  return {
+    isSticker,
+    stickerId,
+    stickerCateId,
+    stickerUrl,
+    stickerText,
+  };
+}
+
+/**
  * EventDispatcher: Nhận và định tuyến các sự kiện từ Zalo Listener tới các Handler
  */
 export class EventDispatcher {
@@ -338,22 +423,36 @@ export class EventDispatcher {
     const isPhoto = msgType === "chat.photo";
     const isVoice = msgType === "chat.voice" || msgType === "chat.audio" || Boolean(voiceUrl);
     const hasVoice = Boolean(voiceUrl);
-    const isSticker =
-      msgType === "chat.sticker" ||
-      msgType.includes("sticker") ||
-      rawMessage.data?.paramsExt?.containType === 36;
 
-    // Lọc trùng lặp URL và chỉ giữ các URL hình ảnh hợp lệ (loại bỏ voiceUrl và file âm thanh)
-    const validImageUrls = isVoice
+    // Trích xuất thông tin Sticker / Nhãn dán
+    const stickerInfo = extractStickerInfo(
+      rawMessage.data.content,
+      rawData?.params,
+      rawData?.paramsExt,
+      msgType
+    );
+    const isSticker = stickerInfo.isSticker;
+    const hasSticker = stickerInfo.isSticker;
+    const stickerId = stickerInfo.stickerId;
+    const stickerCateId = stickerInfo.stickerCateId;
+    const stickerUrl = stickerInfo.stickerUrl;
+    const stickerText = stickerInfo.stickerText;
+
+    // Lọc trùng lặp URL và chỉ giữ các URL hình ảnh hợp lệ (loại bỏ voiceUrl, stickerUrl và file âm thanh)
+    const validImageUrls = isVoice || isSticker
       ? []
-      : Array.from(new Set(rawImageUrls)).filter((u) => isValidHttpUrl(u) && !isAudioUrl(u) && u !== voiceUrl);
+      : Array.from(new Set(rawImageUrls)).filter((u) => isValidHttpUrl(u) && !isAudioUrl(u) && u !== voiceUrl && u !== stickerUrl);
 
-    const hasImage = !isVoice && (isPhoto || isSticker || validImageUrls.length > 0);
+    const hasImage = !isVoice && !isSticker && (isPhoto || validImageUrls.length > 0);
     const imageUrls = validImageUrls;
 
-    // Nếu là sticker mà không có text và không trích xuất được image URL:
-    if (isSticker && !text && imageUrls.length === 0) {
-      text = "[Sticker]";
+    // Nếu là sticker:
+    if (isSticker) {
+      if (stickerText) {
+        text = `[🏷️ Sticker]: "${stickerText}"`;
+      } else if (!text || text === "[Sticker]") {
+        text = "[🏷️ Sticker]";
+      }
     }
 
     // Nếu tin nhắn chỉ gửi ảnh mà không có chữ, giữ text rỗng hoặc theo mô tả ảnh
@@ -436,6 +535,12 @@ export class EventDispatcher {
       voiceUrl,
       voiceUrls: voiceUrl ? [voiceUrl] : undefined,
       voiceDuration,
+      hasSticker,
+      isSticker,
+      stickerId,
+      stickerCateId,
+      stickerUrl,
+      stickerText,
     };
   }
 

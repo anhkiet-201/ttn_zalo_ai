@@ -10,6 +10,12 @@ export interface GroupQueuedMessage {
   voiceUrl?: string;
   voiceUrls?: string[];
   voiceDuration?: number;
+  hasSticker?: boolean;
+  isSticker?: boolean;
+  stickerId?: string;
+  stickerCateId?: string;
+  stickerUrl?: string;
+  stickerText?: string;
   rawMessage?: ParsedMessage["raw"];
 }
 
@@ -39,7 +45,7 @@ export class GroupMessageBatcher {
   }
 
   /**
-   * Đưa tin nhắn nhóm vào hàng đợi gom batch theo từng groupId (threadId)
+   * Đưa tin nhắn nhóm vào hàng đợi gom batch theo từng threadId (nhóm)
    */
   public enqueue(parsedMessage: ParsedMessage, groupName?: string): void {
     const threadId = parsedMessage.threadId;
@@ -67,6 +73,12 @@ export class GroupMessageBatcher {
       voiceUrl: parsedMessage.voiceUrl,
       voiceUrls: parsedMessage.voiceUrls,
       voiceDuration: parsedMessage.voiceDuration,
+      hasSticker: parsedMessage.hasSticker,
+      isSticker: parsedMessage.isSticker,
+      stickerId: parsedMessage.stickerId,
+      stickerCateId: parsedMessage.stickerCateId,
+      stickerUrl: parsedMessage.stickerUrl,
+      stickerText: parsedMessage.stickerText,
       rawMessage: parsedMessage.raw,
     });
 

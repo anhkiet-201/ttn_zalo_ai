@@ -92,6 +92,12 @@ export interface ParsedMessage {
   voiceUrl?: string;
   voiceUrls?: string[];
   voiceDuration?: number;
+  hasSticker?: boolean;
+  isSticker?: boolean;
+  stickerId?: string;
+  stickerCateId?: string;
+  stickerUrl?: string;
+  stickerText?: string;
 }
 
 /**

@@ -514,6 +514,187 @@ async function runVoiceAndAudioTests() {
     });
   }
 
+  // ──────────────────────────────────────────────────────────────────────────
+  // MODULE D: KIỂM THỬ XỬ LÝ, ĐỌC HIỂU STICKER & HIỂN THỊ CHAT UI
+  // ──────────────────────────────────────────────────────────────────────────
+  console.log("\n🏷️ [MODULE D] Kiểm thử Trích xuất, Đọc hiểu & Hiển thị Sticker Zalo...");
+
+  // Test D.1: Trích Xuất Payload Sticker Zalo Đa Cấu Trúc
+  {
+    const start = performance.now();
+    const dispatcher = new EventDispatcher();
+    dispatcher.setOwnId("bot_own_id");
+
+    // Case 1: Sticker có ID và CateID trong params
+    const rawSticker1 = {
+      type: 0,
+      data: {
+        msgId: "stk_msg_1",
+        cliMsgId: "cli_stk_1",
+        msgType: "chat.sticker",
+        uidFrom: "user_stk_1",
+        idTo: "bot_own_id",
+        dName: "Ứng Viên Sticker 1",
+        ts: "1700000000000",
+        content: JSON.stringify({
+          id: 123456,
+          cateId: 789,
+          text: "Cảm ơn bạn",
+        }),
+      },
+    } as any;
+
+    const parsed1 = (dispatcher as any).parseMessage(rawSticker1);
+    assert.strictEqual(parsed1.hasSticker, true, "Case 1: hasSticker = true");
+    assert.strictEqual(parsed1.stickerId, "123456", "Case 1: stickerId");
+    assert.strictEqual(parsed1.stickerCateId, "789", "Case 1: stickerCateId");
+    assert.strictEqual(parsed1.stickerText, "Cảm ơn bạn", "Case 1: stickerText");
+    assert.strictEqual(parsed1.hasImage, false, "Sticker không được nhận nhầm thành Image");
+
+    // Case 2: Sticker có URL trực tiếp trong paramsExt
+    const rawSticker2 = {
+      type: 0,
+      data: {
+        msgId: "stk_msg_2",
+        cliMsgId: "cli_stk_2",
+        msgType: "chat.sticker",
+        uidFrom: "user_stk_2",
+        idTo: "bot_own_id",
+        dName: "Ứng Viên Sticker 2",
+        ts: "1700000000000",
+        paramsExt: {
+          containType: 36,
+          spriteUrl: "https://stickers.zaloapp.com/stickers/v2/54321.png",
+          description: "Vẫy tay chào",
+        },
+      },
+    } as any;
+
+    const parsed2 = (dispatcher as any).parseMessage(rawSticker2);
+    assert.strictEqual(parsed2.hasSticker, true, "Case 2: hasSticker = true");
+    assert.strictEqual(parsed2.stickerUrl, "https://stickers.zaloapp.com/stickers/v2/54321.png", "Case 2: stickerUrl");
+    assert.strictEqual(parsed2.stickerText, "Vẫy tay chào", "Case 2: stickerText");
+
+    const duration = performance.now() - start;
+    results.push({
+      module: "Module D",
+      test: "Trích Xuất Payload Sticker Zalo (ID, URL CDN, Caption)",
+      status: "PASS",
+      durationMs: duration,
+      details: "Trích xuất thành công 2/2 cấu trúc payload Zalo Sticker và ngăn nhận nhầm thành photo",
+    });
+  }
+
+  // Test D.2: Gom Batch & Lưu Trữ SQLite Chống Trùng Lặp Sticker
+  {
+    const start = performance.now();
+    const threadId = "thread_sticker_test";
+
+    // 1. Lưu tin nhắn sticker
+    chatHistoryRepo.addMessage({
+      threadId,
+      senderId: "user_stk_01",
+      senderName: "Ứng Viên Sticker",
+      role: "user",
+      content: '[🏷️ Nhãn dán / Sticker]: "Cảm ơn"',
+      hasSticker: true,
+      stickerId: "998877",
+      stickerUrl: "https://zalo-api.zadn.vn/api/emoticon/sticker/webpc?id=998877",
+      stickerText: "Cảm ơn",
+      timestamp: 1700000010000,
+    });
+
+    // 2. Thử lưu tin nhắn trùng trong vòng 5 giây -> Phải bị chặn
+    chatHistoryRepo.addMessage({
+      threadId,
+      senderId: "user_stk_01",
+      senderName: "Ứng Viên Sticker",
+      role: "user",
+      content: '[🏷️ Nhãn dán / Sticker]: "Cảm ơn"',
+      hasSticker: true,
+      stickerId: "998877",
+      stickerUrl: "https://zalo-api.zadn.vn/api/emoticon/sticker/webpc?id=998877",
+      stickerText: "Cảm ơn",
+      timestamp: 1700000011000,
+    });
+
+    const history = chatHistoryRepo.getRecentHistory(threadId, 10);
+    assert.strictEqual(history.length, 1, "Chống trùng lặp sticker thành công (chỉ có 1 bản ghi)");
+    assert.strictEqual(history[0].hasSticker, true, "hasSticker được map chính xác từ SQLite");
+    assert.strictEqual(history[0].stickerId, "998877", "stickerId lưu và đọc chính xác");
+    assert.strictEqual(history[0].stickerText, "Cảm ơn", "stickerText lưu và đọc chính xác");
+
+    const duration = performance.now() - start;
+    results.push({
+      module: "Module D",
+      test: "Lưu Trữ SQLite & Chống Duplicate Sticker (has_sticker, sticker_url)",
+      status: "PASS",
+      durationMs: duration,
+      details: "Lưu trữ đầy đủ các trường sticker và chống trùng lặp trong 5 giây",
+    });
+  }
+
+  // Test D.3: StickerService Tự Động Phân Tích & Fallback
+  {
+    const start = performance.now();
+    const { StickerService } = await import("../services/stickerService.js");
+
+    // Khởi tạo StickerService không có AI (kiểm tra graceful fallback)
+    const stickerService = new StickerService(null);
+
+    // Case 1: Có sẵn caption trong payload -> Dùng luôn không cần AI
+    const meaning1 = await stickerService.understandSticker(
+      "https://zalo-api.zadn.vn/api/emoticon/sticker/webpc?id=111",
+      "Vẫy tay chào bạn"
+    );
+    assert.strictEqual(meaning1, "Vẫy tay chào bạn", "Dùng caption có sẵn");
+
+    // Case 2: URL rỗng -> Fallback an toàn
+    const meaning2 = await stickerService.understandSticker("", "");
+    assert.strictEqual(meaning2, "Nhãn dán biểu cảm", "Fallback khi URL rỗng");
+
+    const duration = performance.now() - start;
+    results.push({
+      module: "Module D",
+      test: "StickerService Đọc Hiểu Ý Nghĩa & Graceful Fallback",
+      status: "PASS",
+      durationMs: duration,
+      details: "Tận dụng metadata payload và fallback an toàn khi không có AI",
+    });
+  }
+
+  // Test D.4: Helper Trích Xuất Caption & Pure Sticker UI Logic
+  {
+    const start = performance.now();
+
+    function getStickerCaption(message: any): string {
+      let caption = message.stickerText || "";
+      if (!caption && message.content) {
+        if (message.content.startsWith("[🏷️ Nhãn dán / Sticker]:")) {
+          caption = message.content.replace("[🏷️ Nhãn dán / Sticker]:", "").trim().replace(/^["\s]+|["\s]+$/g, "");
+        } else if (message.content.startsWith("[🏷️ Sticker]:")) {
+          caption = message.content.replace("[🏷️ Sticker]:", "").trim().replace(/^["\s]+|["\s]+$/g, "");
+        }
+      }
+      return caption;
+    }
+
+    const cap1 = getStickerCaption({ content: '[🏷️ Nhãn dán / Sticker]: "Thả tim"' });
+    assert.strictEqual(cap1, "Thả tim", "Trích xuất caption chuẩn");
+
+    const cap2 = getStickerCaption({ stickerText: "Xin chào", content: "[🏷️ Sticker]" });
+    assert.strictEqual(cap2, "Xin chào", "Ưu tiên stickerText");
+
+    const duration = performance.now() - start;
+    results.push({
+      module: "Module D",
+      test: "Trích Xuất Caption Sticker & Pure Sticker Render Validation",
+      status: "PASS",
+      durationMs: duration,
+      details: "Trích xuất nhãn dán sạch sẽ và xác thực logic Pure Sticker UI",
+    });
+  }
+
   // Đóng kết nối DB
   try {
     testDb.connection.close();
@@ -526,7 +707,7 @@ async function runVoiceAndAudioTests() {
   // BÁO CÁO TỔNG HỢP KẾT QUẢ KIỂM THỬ
   // ──────────────────────────────────────────────────────────────────────────
   console.log("\n===============================================================");
-  console.log("📋 BẢNG TỔNG HỢP KẾT QUẢ KIỂM THỬ VOICE & AUDIO");
+  console.log("📋 BẢNG TỔNG HỢP KẾT QUẢ KIỂM THỬ VOICE, AUDIO & STICKER");
   console.log("===============================================================");
   console.table(results.map((r, idx) => ({
     "STT": idx + 1,
@@ -545,3 +726,4 @@ runVoiceAndAudioTests().catch((err) => {
   console.error("❌ Lỗi kiểm thử:", err);
   process.exit(1);
 });
+

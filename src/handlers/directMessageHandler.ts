@@ -64,7 +64,7 @@ export class DirectMessageHandler {
       return;
     }
 
-    if (!parsedMessage.text && !parsedMessage.hasImage && !parsedMessage.hasVoice) return;
+    if (!parsedMessage.text && !parsedMessage.hasImage && !parsedMessage.hasVoice && !parsedMessage.hasSticker) return;
 
     if (parsedMessage.hasImage && parsedMessage.imageUrls?.length) {
       console.log(`🖼️ [Ảnh Cá Nhân] Nhận ${parsedMessage.imageUrls.length} hình ảnh từ ${senderInfo}`);
@@ -74,6 +74,10 @@ export class DirectMessageHandler {
       console.log(`🎙️ [Tin Nhắn Thoại] Nhận ghi âm (${parsedMessage.voiceDuration || 0}ms) từ ${senderInfo}`);
     }
 
+    if (parsedMessage.hasSticker) {
+      console.log(`🏷️ [Nhãn Dán / Sticker] Nhận sticker từ ${senderInfo}`);
+    }
+
     // Enqueue vào batcher — mỗi threadId có 1 batch riêng biệt
     this.batcher.enqueue(parsedMessage, ThreadType.User);
   }
@@ -81,10 +85,55 @@ export class DirectMessageHandler {
   // ── Batch processing ────────────────────────────────────────────────────
 
   /**
-   * Callback sau debounce: xử lý batch tin nhắn, phiên âm Voice STT, OCR CCCD, gọi AI, gửi reply
+   * Callback sau debounce: xử lý batch tin nhắn, phiên âm Voice STT, OCR CCCD, đọc hiểu Sticker, gọi AI, gửi reply
    */
   private async processBatch(batch: MessageBatch): Promise<void> {
-    // 0. Xử lý phiên âm tin nhắn thoại (Audio Speech-to-Text) nếu có
+    // 0.1 Xử lý phân tích nhãn dán Sticker nếu có
+    for (const msg of batch.messages) {
+      if (msg.hasSticker && (msg.stickerUrl || msg.stickerId || msg.stickerText)) {
+        console.log(`🏷️ [StickerService] Đang đọc hiểu ý nghĩa sticker từ [${batch.senderName}]...`);
+        const stickerMeaning = await this.aiService.sticker.understandSticker(
+          msg.stickerUrl,
+          msg.stickerText
+        );
+        console.log(`✅ [Sticker AI] Ý nghĩa nhãn dán: "${stickerMeaning}"`);
+        msg.text = `[🏷️ Nhãn dán / Sticker]: "${stickerMeaning}"`;
+        msg.stickerText = stickerMeaning;
+
+        // Lưu bản ghi hoàn chỉnh với stickerUrl và ý nghĩa vào ChatHistory
+        try {
+          this.chatHistoryRepo.addMessage({
+            threadId: batch.threadId,
+            senderId: batch.senderId,
+            senderName: batch.senderName,
+            role: "user",
+            content: msg.text,
+            hasSticker: true,
+            stickerId: msg.stickerId,
+            stickerCateId: msg.stickerCateId,
+            stickerUrl: msg.stickerUrl,
+            stickerText: stickerMeaning,
+            hasQuote: msg.hasQuote,
+            quoteText: msg.quoteText,
+            quoteSenderName: msg.quoteSenderName,
+            quoteSenderId: msg.quoteSenderId,
+            isGroup: false,
+            timestamp: msg.timestamp,
+          });
+        } catch (err) {
+          console.warn("⚠️ Lỗi lưu tin nhắn sticker vào chat_messages:", err);
+        }
+
+        // Thả tim xác nhận đã nhận sticker
+        if (msg.rawMessage) {
+          try {
+            await this.zaloService.sendReaction(msg.rawMessage, Reactions.HEART);
+          } catch {}
+        }
+      }
+    }
+
+    // 0.2 Xử lý phiên âm tin nhắn thoại (Audio Speech-to-Text) nếu có
     const companyHints = this.aiService.rag.getCompanyHints();
     for (const msg of batch.messages) {
       if (msg.hasVoice && msg.voiceUrl) {
