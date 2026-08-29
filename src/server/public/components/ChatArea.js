@@ -80,19 +80,18 @@ export function ChatArea({
     return groupConsecutiveImageMessages(historyData?.messages || []);
   }, [historyData?.messages]);
 
-  // Cuộn xuống tin nhắn mới nhất khi nhận tin mới
+  // Cuộn xuống tin nhắn mới nhất
   useEffect(() => {
     if (messagesEndRef.current && !loadingHistory) {
       messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [displayedMessages.length]);
 
-  // Tự động điều chỉnh chiều cao textarea
   const handleTextChange = (e) => {
     setInputText(e.target.value);
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
-      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 120)}px`;
+      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 100)}px`;
     }
   };
 
@@ -172,17 +171,21 @@ export function ChatArea({
     return html`
       <main className="zalo-chat-area">
         <div className="chat-welcome-view">
-          <div className="welcome-badge-icon">💬</div>
-          <h2 className="welcome-title">Chào mừng đến với Zalo AI Bot</h2>
+          <div className="welcome-badge-icon">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+            </svg>
+          </div>
+          <h2 className="welcome-title">Zalo AI Bot Assistant</h2>
           <p className="welcome-desc">
-            Chọn một cuộc trò chuyện từ danh sách bên trái hoặc nhấn dấu ＋ để mở đoạn chat mới.
+            Chọn một cuộc trò chuyện từ danh sách bên trái để xem tin nhắn và quản lý hội thoại.
           </p>
         </div>
       </main>
     `;
   }
 
-  const threadName = historyData?.threadName || activeThread.threadName || `Người dùng ${activeThread.threadId}`;
+  const threadName = historyData?.threadName || activeThread.threadName || `Khách ${activeThread.threadId.slice(-4)}`;
   const isGroup = Boolean(historyData ? historyData.isGroup : activeThread.isGroup);
   const isManual = Boolean(historyData ? historyData.isManual : activeThread.isManual);
   const candidate = historyData?.candidate;
@@ -190,81 +193,113 @@ export function ChatArea({
 
   return html`
     <main className="zalo-chat-area">
-      <!-- Chat Header -->
+      <!-- 1. Header Zalo PC -->
       <header className="chat-main-header">
         <div className="chat-header-left">
           <button className="btn-mobile-back" onClick=${onBackToSidebar} title="Quay lại">
-            ←
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="19" y1="12" x2="5" y2="12"></line>
+              <polyline points="12 19 5 12 12 5"></polyline>
+            </svg>
           </button>
 
           <div className=${`chat-header-avatar ${isGroup ? 'is-group' : ''}`}>
             ${isGroup ? '👥' : avatarLetter}
           </div>
 
-          <div className="chat-header-title-box">
-            <div className="chat-header-name-row">
-              <h2 className="chat-header-name" title=${threadName}>
+          <div className="chat-header-info">
+            <div className="chat-header-title-row">
+              <h2 className="chat-header-title" title=${threadName}>
                 ${threadName}
               </h2>
               <button
-                className="btn-rename-trigger"
-                title="Đổi tên hiển thị Zalo"
+                className="btn-icon-rename"
+                title="Đổi tên Zalo"
                 onClick=${onOpenRenameModal}
               >
-                ✏️
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 20h9"></path>
+                  <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+                </svg>
               </button>
             </div>
-            <div className="chat-header-subinfo">
+            <div className="chat-header-subtitle">
               ${isGroup ? 'Nhóm trò chuyện' : 'Cuộc trò chuyện cá nhân'} · ID: ${activeThread.threadId}
             </div>
           </div>
         </div>
 
         <div className="chat-header-right">
-          <!-- Nút Chuyển Đổi AI / Thủ Công: CHỈ HIỂN THỊ Ở CHAT CÁ NHÂN -->
+          <!-- Nút Switch Chế độ AI / Thủ Công (iOS Style Switch) - CHỈ CÁ NHÂN -->
           ${!isGroup && html`
-            <button
-              className=${`mode-toggle-switch ${isManual ? 'is-manual' : 'is-ai'}`}
+            <div
+              className="ios-mode-switch-wrapper"
               onClick=${handleModeClick}
-              disabled=${togglingMode}
-              title=${isManual ? 'Đang ở chế độ Thủ công (AI không trả lời). Bấm để bật AI' : 'Đang ở chế độ AI tự động. Bấm để chuyển sang Thủ công'}
+              title=${isManual ? 'Đang ở chế độ Thủ công. Bấm để bật AI tự động' : 'Đang ở chế độ AI tự động. Bấm để tắt AI (Thủ công)'}
             >
-              <span className="mode-pill-indicator"></span>
-              <span>${isManual ? '✋ Thủ công (-M)' : '🤖 AI Tự động'}</span>
-            </button>
+              <span className=${`ios-switch-label ${isManual ? 'is-manual' : 'is-ai'}`}>
+                ${isManual ? 'Thủ công (-M)' : 'AI Tự động'}
+              </span>
+
+              <label className="ios-switch-control" onClick=${(e) => e.stopPropagation()}>
+                <input
+                  type="checkbox"
+                  checked=${!isManual}
+                  disabled=${togglingMode}
+                  onChange=${handleModeClick}
+                />
+                <span className="ios-switch-slider"></span>
+              </label>
+            </div>
           `}
         </div>
       </header>
 
-      <!-- Candidate Intelligence Card -->
+      <!-- 2. Candidate Intelligence Banner (Flat Zalo PC) -->
       ${candidate && (candidate.fullName || candidate.phoneNumber || candidate.targetCompany) && html`
-        <div className="candidate-intel-banner">
-          <div className="candidate-intel-chips">
-            ${candidate.fullName && html`
-              <span className="candidate-chip">
-                👤 <strong>${candidate.fullName}</strong>
-              </span>
-            `}
-            ${candidate.phoneNumber && html`
-              <span className="candidate-chip">
-                📞 <strong>${candidate.phoneNumber}</strong>
-              </span>
-            `}
-            ${candidate.targetCompany && html`
-              <span className="candidate-chip">
-                🏢 <strong>${candidate.targetCompany}</strong>
-              </span>
-            `}
-            ${candidate.interviewTime && html`
-              <span className="candidate-chip">
-                📅 <strong>${candidate.interviewTime}</strong>
-              </span>
-            `}
-          </div>
+        <div className="candidate-banner-flat">
+          ${candidate.fullName && html`
+            <span className="candidate-banner-item">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                <circle cx="12" cy="7" r="4"></circle>
+              </svg>
+              <strong>${candidate.fullName}</strong>
+            </span>
+          `}
+          ${candidate.phoneNumber && html`
+            <span className="candidate-banner-item">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path>
+              </svg>
+              <strong>${candidate.phoneNumber}</strong>
+            </span>
+          `}
+          ${candidate.targetCompany && html`
+            <span className="candidate-banner-item">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="4" y="2" width="16" height="20" rx="2" ry="2"></rect>
+                <line x1="9" y1="22" x2="9" y2="22.01"></line>
+                <line x1="15" y1="22" x2="15" y2="22.01"></line>
+              </svg>
+              <strong>${candidate.targetCompany}</strong>
+            </span>
+          `}
+          ${candidate.interviewTime && html`
+            <span className="candidate-banner-item">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                <line x1="16" y1="2" x2="16" y2="6"></line>
+                <line x1="8" y1="2" x2="8" y2="6"></line>
+                <line x1="3" y1="10" x2="21" y2="10"></line>
+              </svg>
+              <strong>${candidate.interviewTime}</strong>
+            </span>
+          `}
         </div>
       `}
 
-      <!-- Messages Scroll Container -->
+      <!-- 3. Timeline Tin nhắn -->
       <div className="chat-messages-container">
         ${historyData?.hasMoreOlder && html`
           <div className="messages-load-more">
@@ -273,7 +308,7 @@ export function ChatArea({
               onClick=${onLoadOlderMessages}
               disabled=${loadingHistory}
             >
-              ${loadingHistory ? 'Đang tải tin nhắn cũ...' : '↑ Tải tin nhắn cũ hơn'}
+              ${loadingHistory ? 'Đang tải tin cũ...' : 'Tải tin nhắn cũ hơn'}
             </button>
           </div>
         `}
@@ -291,7 +326,7 @@ export function ChatArea({
         <div ref=${messagesEndRef} />
       </div>
 
-      <!-- Chat Input Wrapper -->
+      <!-- 4. Input Wrapper Zalo PC -->
       <footer className="chat-input-wrapper">
         ${selectedImages.length > 0 && html`
           <div className="upload-preview-bar">
@@ -307,15 +342,15 @@ export function ChatArea({
                     onClick=${() => removeSelectedImage(idx)}
                     style=${{
                       position: 'absolute',
-                      top: '-6px',
-                      right: '-6px',
-                      width: '18px',
-                      height: '18px',
+                      top: '-5px',
+                      right: '-5px',
+                      width: '16px',
+                      height: '16px',
                       borderRadius: '50%',
                       background: '#ef4444',
                       color: '#fff',
                       border: 'none',
-                      fontSize: '10px',
+                      fontSize: '9px',
                       cursor: 'pointer',
                       display: 'flex',
                       alignItems: 'center',
@@ -334,50 +369,68 @@ export function ChatArea({
               className="btn-cancel-upload"
               onClick=${() => setSelectedImages([])}
             >
-              ✕ Hủy tất cả
+              Hủy tất cả
             </button>
           </div>
         `}
 
-        <div className="chat-input-form">
+        <!-- Dải icon công cụ mảnh Zalo PC -->
+        <div className="chat-input-toolbar">
+          <input
+            type="file"
+            ref=${fileInputRef}
+            accept="image/*"
+            multiple
+            style=${{ display: 'none' }}
+            onChange=${handleFileChange}
+          />
+
+          <button
+            className="btn-tool-outline"
+            title="Gửi hình ảnh"
+            onClick=${() => fileInputRef.current?.click()}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+              <circle cx="8.5" cy="8.5" r="1.5"></circle>
+              <polyline points="21 15 16 10 5 21"></polyline>
+            </svg>
+          </button>
+
+          <button
+            className="btn-tool-outline"
+            title="Đính kèm tập tin"
+            onClick=${() => fileInputRef.current?.click()}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path>
+            </svg>
+          </button>
+        </div>
+
+        <!-- Khung soạn thảo text -->
+        <div className="chat-input-box-row">
           <textarea
             ref=${textareaRef}
-            className="chat-textarea"
-            placeholder="Nhập tin nhắn... (Enter để gửi, Shift+Enter xuống dòng)"
+            className="chat-textarea-native"
+            placeholder=${`Nhập tin nhắn gửi tới ${threadName}... (Enter để gửi)`}
             rows="1"
             value=${inputText}
             onInput=${handleTextChange}
             onKeyDown=${handleKeyDown}
           />
 
-          <div className="chat-input-actions">
-            <!-- Cho phép chọn nhiều ảnh (multiple) -->
-            <input
-              type="file"
-              ref=${fileInputRef}
-              accept="image/*"
-              multiple
-              style=${{ display: 'none' }}
-              onChange=${handleFileChange}
-            />
-
-            <button
-              className="btn-upload-trigger"
-              title="Đính kèm hình ảnh (có thể chọn nhiều ảnh)"
-              onClick=${() => fileInputRef.current?.click()}
-            >
-              🖼️
-            </button>
-
-            <button
-              className="btn-send-message"
-              title="Gửi tin nhắn"
-              onClick=${handleSubmit}
-              disabled=${sending || (!inputText.trim() && selectedImages.length === 0)}
-            >
-              ➤
-            </button>
-          </div>
+          <button
+            className="btn-native-send"
+            title="Gửi"
+            onClick=${handleSubmit}
+            disabled=${sending || (!inputText.trim() && selectedImages.length === 0)}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="22" y1="2" x2="11" y2="13"></line>
+              <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+            </svg>
+          </button>
         </div>
       </footer>
     </main>

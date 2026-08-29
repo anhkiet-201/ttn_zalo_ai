@@ -10,14 +10,11 @@ function formatTime(timestamp) {
 
   const hours = String(date.getHours()).padStart(2, '0');
   const minutes = String(date.getMinutes()).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-
-  return `${hours}:${minutes} · ${day}/${month}`;
+  return `${hours}:${minutes}`;
 }
 
 /**
- * SmartImage: Hiển thị placeholder shimmer và spinner khi đang tải ảnh
+ * SmartImage: Placeholder Shimmer Loading & Spinner mảnh tinh tế
  */
 export function SmartImage({ src, alt, className, onClick }) {
   const [loaded, setLoaded] = useState(false);
@@ -28,13 +25,13 @@ export function SmartImage({ src, alt, className, onClick }) {
       ${!loaded && !hasError && html`
         <div className="image-shimmer-placeholder">
           <div className="shimmer-spinner"></div>
-          <span className="shimmer-text">Đang tải ảnh...</span>
+          <span className="shimmer-text">Đang tải...</span>
         </div>
       `}
 
       ${hasError ? html`
         <div className="image-error-placeholder">
-          <span>🖼️ Không thể hiển thị ảnh</span>
+          <span>Không thể tải ảnh</span>
         </div>
       ` : html`
         <img
@@ -58,7 +55,6 @@ export function MessageBubble({ message, ownId, isGroup, onImageClick }) {
 
   const avatarLetter = (message.senderName || 'U').trim().charAt(0).toUpperCase();
 
-  // Kiểm tra xem tin nhắn có chứa nội dung văn bản thực tế hay chỉ là placeholder ảnh
   const hasRealText = Boolean(
     message.content &&
       message.content.trim() &&
@@ -94,7 +90,7 @@ export function MessageBubble({ message, ownId, isGroup, onImageClick }) {
         `}
 
         ${isPureImage ? html`
-          <!-- Album ảnh nhóm lại hiển thị trực tiếp KHÔNG CẦN KHUNG BỌC BÊN NGOÀI -->
+          <!-- Album ảnh nhóm lại hiển thị trực tiếp chuẩn Zalo PC -->
           <div className=${`msg-pure-images-container ${imageGridClass}`}>
             ${images.map((url, idx) => html`
               <${SmartImage}
@@ -107,12 +103,12 @@ export function MessageBubble({ message, ownId, isGroup, onImageClick }) {
             `)}
           </div>
         ` : html`
-          <!-- Hiển thị tin nhắn dạng Bubble thông thường -->
+          <!-- Bubble Tin Nhắn Zalo PC -->
           <div className="msg-bubble">
             ${message.hasQuote && message.quoteText && html`
               <div className="msg-quote-card">
                 <span className="quote-sender-name">
-                  ${message.quoteSenderName || 'Tin nhắn trích dẫn'}
+                  ${message.quoteSenderName || 'Trích dẫn'}
                 </span>
                 <div className="quote-text-preview">${message.quoteText}</div>
               </div>
@@ -125,7 +121,7 @@ export function MessageBubble({ message, ownId, isGroup, onImageClick }) {
             `}
 
             ${hasImages && html`
-              <div className=${`msg-images-grid ${imageGridClass}`}>
+              <div className=${`msg-images-grid ${imageGridClass}`} style=${{ marginTop: '6px' }}>
                 ${images.map((url, idx) => html`
                   <${SmartImage}
                     key=${idx}

@@ -1,57 +1,36 @@
 /* ==========================================================================
-   ZALO AI BOT - EXECUTIVE LIGHT DESIGN SYSTEM
-   Phong cách: Sang trọng, hiện đại, thanh lịch (Plus Jakarta Sans + Glass Light)
+   ZALO PC NATIVE EXECUTIVE DESIGN SYSTEM
+   Thiết kế: Chuẩn Zalo PC Desktop (Phẳng, Tinh Tế, Icon Mảnh, iOS Switch)
    ========================================================================== */
 
 :root {
-  /* Bảng màu chính */
+  /* Bảng màu chính Zalo PC */
+  --zalo-nav-bg: #0068ff;
+  --zalo-nav-hover: #0056d6;
+  --zalo-nav-active: #004ac0;
+
   --zalo-primary: #0068ff;
-  --zalo-primary-hover: #0056d6;
-  --zalo-primary-light: #e8f2ff;
-  --zalo-primary-glow: rgba(0, 104, 255, 0.16);
+  --zalo-primary-light: #e5efff;
+  --zalo-primary-border: #c8ddff;
 
-  /* Bảng màu bổ trợ & Trạng thái */
-  --accent-manual: #f59e0b;
-  --accent-manual-light: #fef3c7;
-  --accent-manual-border: #fde68a;
-  --accent-manual-text: #b45309;
+  --zalo-sidebar-bg: #ffffff;
+  --zalo-sidebar-hover: #f3f5f7;
+  --zalo-sidebar-active: #e5efff;
+  --zalo-border: #e8eaed;
 
-  --accent-company: #0284c7;
-  --accent-company-light: #e0f2fe;
-  --accent-company-text: #0369a1;
+  --zalo-chat-bg: #eef0f3;
+  --zalo-bubble-out: #e5efff;
+  --zalo-bubble-in: #ffffff;
 
-  --accent-online: #10b981;
-  --accent-online-glow: rgba(16, 185, 129, 0.25);
+  --ios-green: #34c759;
+  --ios-orange: #ff9500;
+  --ios-gray: #e5e5ea;
 
-  --accent-danger: #ef4444;
-  --accent-danger-light: #fee2e2;
+  --text-primary: #081c36;
+  --text-secondary: #5a6b82;
+  --text-muted: #8b98a9;
 
-  /* Bảng màu nền & Bề mặt (Light Theme Executive) */
-  --bg-app: #f1f4f9;
-  --bg-sidebar: #ffffff;
-  --bg-chat-area: #f8fafc;
-  --bg-surface: #ffffff;
-  --bg-surface-hover: #f1f5f9;
-  --bg-surface-active: #e8f2ff;
-  --bg-glass: rgba(255, 255, 255, 0.85);
-
-  /* Màu chữ & Viền */
-  --text-main: #0f172a;
-  --text-secondary: #475569;
-  --text-muted: #94a3b8;
-  --text-white: #ffffff;
-
-  --border-subtle: #e2e8f0;
-  --border-focus: #93c5fd;
-
-  /* Bóng đổ (Layered Shadows) */
-  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.02);
-  --shadow-md: 0 4px 12px -2px rgba(15, 23, 42, 0.06), 0 2px 6px -1px rgba(15, 23, 42, 0.04);
-  --shadow-lg: 0 10px 25px -3px rgba(15, 23, 42, 0.08), 0 4px 12px -2px rgba(15, 23, 42, 0.04);
-  --shadow-glow: 0 4px 16px var(--zalo-primary-glow);
-
-  /* Phông chữ */
-  --font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
 }
 
 * {
@@ -63,328 +42,387 @@
 
 body {
   font-family: var(--font-family);
-  background-color: var(--bg-app);
-  color: var(--text-main);
+  background-color: #ffffff;
+  color: var(--text-primary);
   height: 100vh;
   width: 100vw;
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
 }
-
-/* ==========================================================================
-   APP LAYOUT (2 CỘT ZALO EXECUTIVE)
-   ========================================================================== */
 
 .zalo-app-wrapper {
   display: flex;
   width: 100vw;
   height: 100vh;
-  background-color: var(--bg-app);
   overflow: hidden;
 }
 
 /* ==========================================================================
-   SIDEBAR: DANH SÁCH CUỘC TRÒ CHUYỆN
+   1. CỘT NAVIGATION BAR BÊN TRÁI (ZALO PC BLUE NAV BAR - 64px)
    ========================================================================== */
 
-.zalo-sidebar {
-  width: 380px;
-  min-width: 340px;
-  max-width: 440px;
-  height: 100%;
-  background: var(--bg-sidebar);
-  border-right: 1px solid var(--border-subtle);
+.zalo-nav-rail {
+  width: 64px;
+  background-color: var(--zalo-nav-bg);
   display: flex;
   flex-direction: column;
-  flex-shrink: 0;
-  z-index: 20;
-  box-shadow: var(--shadow-sm);
-  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.sidebar-header {
-  padding: 20px 20px 14px 20px;
-  background: var(--bg-sidebar);
-  border-bottom: 1px solid var(--border-subtle);
-}
-
-.sidebar-top-row {
-  display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 14px;
+  padding: 16px 0;
+  flex-shrink: 0;
+  z-index: 30;
 }
 
-.sidebar-brand {
+.nav-rail-top {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 10px;
-  text-decoration: none;
+  gap: 16px;
+  width: 100%;
 }
 
-.sidebar-brand-badge {
-  width: 38px;
-  height: 38px;
-  background: linear-gradient(135deg, var(--zalo-primary), #0052cc);
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #fff;
-  font-size: 18px;
-  box-shadow: 0 4px 12px var(--zalo-primary-glow);
-}
-
-.sidebar-brand-title {
-  font-size: 18px;
-  font-weight: 800;
-  color: var(--text-main);
-  letter-spacing: -0.3px;
-}
-
-.sidebar-brand-subtitle {
-  font-size: 11px;
-  font-weight: 600;
+.nav-avatar-btn {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: #ffffff;
   color: var(--zalo-primary);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.btn-icon-action {
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
-  border: 1px solid var(--border-subtle);
-  background: var(--bg-surface);
-  color: var(--text-secondary);
+  font-weight: 800;
+  font-size: 16px;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.btn-icon-action:hover {
-  background: var(--bg-surface-active);
-  color: var(--zalo-primary);
-  border-color: var(--border-focus);
-  transform: translateY(-1px);
-}
-
-/* Thanh tìm kiếm */
-.sidebar-search-box {
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+  border: 2px solid rgba(255, 255, 255, 0.8);
   position: relative;
-  margin-bottom: 12px;
+}
+
+.nav-avatar-online {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 11px;
+  height: 11px;
+  background: #10b981;
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+}
+
+.nav-item-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  position: relative;
+}
+
+.nav-item-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+}
+
+.nav-item-btn.active {
+  background: var(--zalo-nav-active);
+  color: #ffffff;
+}
+
+.nav-item-btn.active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 10px;
+  bottom: 10px;
+  width: 3px;
+  background: #ffffff;
+  border-radius: 0 4px 4px 0;
+}
+
+.nav-badge-count {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  background: #ef4444;
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 10px;
+  border: 1.5px solid var(--zalo-nav-bg);
+}
+
+.nav-rail-bottom {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+/* ==========================================================================
+   2. CỘT DANH SÁCH CUỘC TRÒ CHUYỆN (SIDEBAR - 340px)
+   ========================================================================== */
+
+.zalo-sidebar {
+  width: 340px;
+  height: 100%;
+  background: var(--zalo-sidebar-bg);
+  border-right: 1px solid var(--zalo-border);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  z-index: 20;
+}
+
+.sidebar-header {
+  padding: 14px 14px 8px 14px;
+  border-bottom: 1px solid var(--zalo-border);
+}
+
+/* Search Bar Zalo PC */
+.sidebar-search-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.sidebar-search-box {
+  flex: 1;
+  position: relative;
+  display: flex;
+  align-items: center;
 }
 
 .sidebar-search-icon {
   position: absolute;
-  left: 14px;
-  top: 50%;
-  transform: translateY(-50%);
+  left: 10px;
   color: var(--text-muted);
   pointer-events: none;
-  font-size: 14px;
+  display: flex;
+  align-items: center;
 }
 
 .sidebar-search-input {
   width: 100%;
-  height: 40px;
-  padding: 0 36px 0 38px;
-  border-radius: 12px;
-  border: 1px solid var(--border-subtle);
-  background: var(--bg-app);
-  font-size: 13.5px;
+  height: 32px;
+  padding: 0 28px 0 32px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: #eaedf0;
+  font-size: 13px;
   font-family: inherit;
-  color: var(--text-main);
+  color: var(--text-primary);
   outline: none;
-  transition: all 0.2s ease;
+  transition: all 0.15s ease;
 }
 
 .sidebar-search-input:focus {
   background: #ffffff;
   border-color: var(--zalo-primary);
-  box-shadow: 0 0 0 3px var(--zalo-primary-glow);
 }
 
 .sidebar-search-clear {
   position: absolute;
-  right: 10px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 22px;
-  height: 22px;
+  right: 6px;
+  width: 18px;
+  height: 18px;
   border: none;
-  background: var(--text-muted);
+  background: #94a3b8;
   color: #fff;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 11px;
+  font-size: 10px;
   cursor: pointer;
-  opacity: 0.7;
 }
 
-.sidebar-search-clear:hover {
-  opacity: 1;
-}
-
-/* Tabs phân loại */
-.filter-tabs-wrapper {
-  display: flex;
-  gap: 6px;
-  background: var(--bg-app);
-  padding: 4px;
-  border-radius: 12px;
-}
-
-.filter-tab-btn {
-  flex: 1;
-  padding: 6px 4px;
+.btn-sidebar-tool {
+  width: 32px;
+  height: 32px;
   border: none;
-  border-radius: 8px;
   background: transparent;
-  font-size: 12px;
+  color: var(--text-secondary);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-sidebar-tool:hover {
+  background: var(--zalo-sidebar-hover);
+  color: var(--zalo-primary);
+}
+
+/* Tabs phân loại chuẩn Zalo PC */
+.filter-tabs-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+}
+
+.filter-tab-pill {
+  padding: 4px 10px;
+  border: none;
+  background: transparent;
+  font-size: 12.5px;
   font-weight: 600;
   font-family: inherit;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-  text-align: center;
-  white-space: nowrap;
+  border-radius: 4px;
+  transition: all 0.15s ease;
 }
 
-.filter-tab-btn:hover {
-  color: var(--text-main);
+.filter-tab-pill:hover {
+  color: var(--text-primary);
 }
 
-.filter-tab-btn.active {
-  background: #ffffff;
+.filter-tab-pill.active {
   color: var(--zalo-primary);
-  box-shadow: var(--shadow-sm);
   font-weight: 700;
-}
-
-.filter-tab-btn.manual-tab.active {
-  color: var(--accent-manual-text);
-}
-
-/* Danh sách cuộn Threads */
-.sidebar-threads-scroll {
-  flex: 1;
-  overflow-y: auto;
-  padding: 10px 12px;
-}
-
-.sidebar-threads-scroll::-webkit-scrollbar {
-  width: 5px;
-}
-
-.sidebar-threads-scroll::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.4);
-  border-radius: 10px;
-}
-
-/* Thread Item Card */
-.thread-card {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 14px;
-  border-radius: 14px;
-  background: transparent;
-  cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-  margin-bottom: 4px;
-  border: 1px solid transparent;
   position: relative;
 }
 
-.thread-card:hover {
-  background: var(--bg-surface-hover);
-  border-color: rgba(226, 232, 240, 0.8);
+.filter-tab-pill.active::after {
+  content: '';
+  position: absolute;
+  bottom: -9px;
+  left: 8px;
+  right: 8px;
+  height: 2px;
+  background: var(--zalo-primary);
+  border-radius: 2px;
 }
 
-.thread-card.active {
-  background: var(--bg-surface-active);
-  border-color: rgba(0, 104, 255, 0.2);
-  box-shadow: 0 2px 8px var(--zalo-primary-glow);
+.filter-tab-pill.manual-tab.active {
+  color: var(--ios-orange);
 }
 
-.thread-avatar-box {
+.filter-tab-pill.manual-tab.active::after {
+  background: var(--ios-orange);
+}
+
+/* Threads Scroll List */
+.sidebar-threads-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+
+.sidebar-threads-scroll::-webkit-scrollbar {
+  width: 4px;
+}
+
+.sidebar-threads-scroll::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+/* Thread Item Card Zalo PC Flat */
+.thread-row-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  cursor: pointer;
+  transition: background-color 0.12s ease;
+  position: relative;
+}
+
+.thread-row-item:hover {
+  background-color: var(--zalo-sidebar-hover);
+}
+
+.thread-row-item.active {
+  background-color: var(--zalo-sidebar-active);
+}
+
+.thread-avatar-wrapper {
   position: relative;
   flex-shrink: 0;
 }
 
-.thread-avatar {
+.thread-avatar-circle {
   width: 46px;
   height: 46px;
-  border-radius: 16px;
-  background: linear-gradient(135deg, #0068ff, #3b82f6);
-  color: #fff;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #0068ff, #38bdf8);
+  color: #ffffff;
   font-size: 16px;
-  font-weight: 800;
+  font-weight: 700;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: var(--shadow-sm);
 }
 
-.thread-avatar.is-group {
+.thread-avatar-circle.is-group {
   background: linear-gradient(135deg, #10b981, #059669);
 }
 
-.thread-online-dot {
-  position: absolute;
-  right: -2px;
-  bottom: -2px;
-  width: 13px;
-  height: 13px;
-  background-color: var(--accent-online);
-  border: 2.5px solid #ffffff;
-  border-radius: 50%;
-  box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.3);
+.thread-avatar-circle.is-manual-avatar {
+  background: linear-gradient(135deg, #f59e0b, #d97706);
 }
 
-.thread-info-content {
+.thread-online-badge {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 12px;
+  height: 12px;
+  background: #10b981;
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+}
+
+.thread-meta-info {
   flex: 1;
   min-width: 0;
 }
 
-.thread-row-1 {
+.thread-header-line {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 4px;
+  margin-bottom: 3px;
 }
 
-.thread-name {
+.thread-title-text {
   font-size: 14px;
-  font-weight: 700;
-  color: var(--text-main);
+  font-weight: 600;
+  color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 190px;
 }
 
-.thread-time {
+.thread-time-label {
   font-size: 11px;
   color: var(--text-muted);
   font-weight: 500;
   flex-shrink: 0;
+  margin-left: 6px;
 }
 
-.thread-row-2 {
+.thread-snippet-line {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: 6px;
 }
 
-.thread-preview {
+.thread-snippet-text {
   font-size: 12.5px;
   color: var(--text-secondary);
   white-space: nowrap;
@@ -393,44 +431,42 @@ body {
   flex: 1;
 }
 
-.thread-preview.is-self {
+.thread-snippet-text.is-self {
   color: var(--zalo-primary);
-  font-weight: 500;
 }
 
-.thread-badge-container {
+.thread-tags-box {
   display: flex;
   align-items: center;
   gap: 4px;
   flex-shrink: 0;
 }
 
-.badge-manual {
+.tag-manual {
   font-size: 10px;
   font-weight: 800;
-  padding: 2px 6px;
-  background: var(--accent-manual-light);
-  color: var(--accent-manual-text);
-  border: 1px solid var(--accent-manual-border);
-  border-radius: 6px;
-  letter-spacing: 0.2px;
+  padding: 1px 5px;
+  background: #fef3c7;
+  color: #b45309;
+  border: 1px solid #fde68a;
+  border-radius: 4px;
 }
 
-.badge-company {
-  font-size: 10.5px;
-  font-weight: 700;
-  padding: 2px 7px;
-  background: var(--accent-company-light);
-  color: var(--accent-company-text);
-  border-radius: 6px;
-  max-width: 100px;
+.tag-company {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
+  background: #e0f2fe;
+  color: #0369a1;
+  border-radius: 4px;
+  max-width: 85px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 /* ==========================================================================
-   CHAT AREA: KHUNG NỘI DUNG CHAT CHÍNH
+   3. KHUNG CHAT CHÍNH (MAIN CHAT AREA)
    ========================================================================== */
 
 .zalo-chat-area {
@@ -438,211 +474,220 @@ body {
   display: flex;
   flex-direction: column;
   height: 100%;
-  background: var(--bg-chat-area);
+  background: var(--zalo-chat-bg);
   position: relative;
   min-width: 0;
 }
 
-/* Chat Header */
+/* Header Zalo PC */
 .chat-main-header {
-  height: 68px;
-  padding: 0 24px;
+  height: 64px;
+  padding: 0 20px;
   background: #ffffff;
-  border-bottom: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--zalo-border);
   display: flex;
   align-items: center;
   justify-content: space-between;
   flex-shrink: 0;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
   z-index: 10;
 }
 
 .chat-header-left {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
   min-width: 0;
 }
 
 .btn-mobile-back {
   display: none;
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
   border: none;
   background: transparent;
-  border-radius: 8px;
   color: var(--text-secondary);
-  font-size: 18px;
   cursor: pointer;
 }
 
 .chat-header-avatar {
-  width: 42px;
-  height: 42px;
-  border-radius: 14px;
-  background: linear-gradient(135deg, var(--zalo-primary), #3b82f6);
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #0068ff, #38bdf8);
   color: #fff;
-  font-size: 16px;
-  font-weight: 800;
+  font-size: 15px;
+  font-weight: 700;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: var(--shadow-sm);
 }
 
 .chat-header-avatar.is-group {
   background: linear-gradient(135deg, #10b981, #059669);
 }
 
-.chat-header-title-box {
+.chat-header-info {
   min-width: 0;
 }
 
-.chat-header-name-row {
+.chat-header-title-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
-.chat-header-name {
-  font-size: 16px;
-  font-weight: 800;
-  color: var(--text-main);
+.chat-header-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  letter-spacing: -0.2px;
 }
 
-.btn-rename-trigger {
+.btn-icon-rename {
   border: none;
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;
-  padding: 4px;
-  border-radius: 6px;
+  padding: 2px 4px;
+  border-radius: 4px;
   display: flex;
   align-items: center;
-  transition: all 0.2s;
 }
 
-.btn-rename-trigger:hover {
-  background: var(--bg-app);
+.btn-icon-rename:hover {
   color: var(--zalo-primary);
+  background: #f1f5f9;
 }
 
-.chat-header-subinfo {
-  font-size: 12px;
+.chat-header-subtitle {
+  font-size: 11.5px;
   color: var(--text-muted);
-  font-weight: 500;
 }
 
 /* Header Controls Right */
 .chat-header-right {
   display: flex;
   align-items: center;
-  gap: 12px;
-}
-
-/* Nút Toggle Switch AI / Thủ Công (CHỈ HIỂN THỊ Ở CHAT CÁ NHÂN) */
-.mode-toggle-switch {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 12px;
-  border-radius: 100px;
-  border: 1px solid var(--border-subtle);
-  background: #ffffff;
-  cursor: pointer;
-  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
-  box-shadow: var(--shadow-sm);
-  font-size: 12.5px;
-  font-weight: 700;
-  font-family: inherit;
-}
-
-.mode-toggle-switch.is-ai {
-  background: var(--zalo-primary-light);
-  border-color: rgba(0, 104, 255, 0.25);
-  color: var(--zalo-primary);
-}
-
-.mode-toggle-switch.is-manual {
-  background: var(--accent-manual-light);
-  border-color: var(--accent-manual-border);
-  color: var(--accent-manual-text);
-}
-
-.mode-toggle-switch:hover {
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-md);
-}
-
-.mode-pill-indicator {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-}
-
-.mode-toggle-switch.is-ai .mode-pill-indicator {
-  background: var(--zalo-primary);
-  box-shadow: 0 0 8px var(--zalo-primary);
-}
-
-.mode-toggle-switch.is-manual .mode-pill-indicator {
-  background: var(--accent-manual);
-  box-shadow: 0 0 8px var(--accent-manual);
-}
-
-/* Candidate Intelligence Card */
-.candidate-intel-banner {
-  background: linear-gradient(90deg, #eff6ff, #f0f9ff);
-  border-bottom: 1px solid #bfdbfe;
-  padding: 10px 24px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 12.5px;
-  color: #1e40af;
-  flex-shrink: 0;
-  animation: slideDown 0.3s ease;
-}
-
-.candidate-intel-chips {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.candidate-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-weight: 600;
-}
-
-.candidate-chip strong {
-  color: #1e3a8a;
-}
-
-/* Khung cuộn tin nhắn */
-.chat-messages-container {
-  flex: 1;
-  overflow-y: auto;
-  padding: 20px 24px;
-  display: flex;
-  flex-direction: column;
   gap: 14px;
 }
 
+/* ==========================================================================
+   NÚT SWITCH CHẾ ĐỘ (IOS STYLE TOGGLE) - CHỈ CÁ NHÂN
+   ========================================================================== */
+
+.ios-mode-switch-wrapper {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px 4px 6px;
+  background: #f8fafc;
+  border: 1px solid var(--zalo-border);
+  border-radius: 100px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.ios-switch-label {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: -0.1px;
+}
+
+.ios-switch-label.is-ai {
+  color: var(--zalo-primary);
+}
+
+.ios-switch-label.is-manual {
+  color: var(--ios-orange);
+}
+
+/* Apple iOS Toggle Switch Track */
+.ios-switch-control {
+  position: relative;
+  display: inline-block;
+  width: 38px;
+  height: 22px;
+}
+
+.ios-switch-control input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.ios-switch-slider {
+  position: absolute;
+  cursor: pointer;
+  inset: 0;
+  background-color: var(--ios-orange);
+  transition: 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  border-radius: 100px;
+}
+
+.ios-switch-slider::before {
+  position: absolute;
+  content: "";
+  height: 18px;
+  width: 18px;
+  left: 2px;
+  bottom: 2px;
+  background-color: #ffffff;
+  transition: 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  border-radius: 50%;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+/* Trạng thái BẬT AI (Zalo Blue / Green) */
+.ios-switch-control input:checked + .ios-switch-slider {
+  background-color: var(--zalo-primary);
+}
+
+.ios-switch-control input:checked + .ios-switch-slider::before {
+  transform: translateX(16px);
+}
+
+/* Candidate Intelligence Card Zalo PC Flat */
+.candidate-banner-flat {
+  background: #ffffff;
+  border-bottom: 1px solid var(--zalo-border);
+  padding: 8px 20px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.candidate-banner-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.candidate-banner-item strong {
+  color: var(--text-primary);
+}
+
+/* Timeline Container */
+.chat-messages-container {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
 .chat-messages-container::-webkit-scrollbar {
-  width: 6px;
+  width: 5px;
 }
 
 .chat-messages-container::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.4);
-  border-radius: 10px;
+  background: #cbd5e1;
+  border-radius: 4px;
 }
 
 /* Nút tải thêm tin nhắn cũ */
@@ -650,38 +695,32 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 8px 0;
+  padding: 4px 0;
 }
 
 .btn-load-older {
-  padding: 6px 16px;
-  border-radius: 20px;
-  border: 1px solid var(--border-subtle);
+  padding: 4px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--zalo-border);
   background: #ffffff;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 600;
-  font-family: inherit;
   cursor: pointer;
-  box-shadow: var(--shadow-sm);
-  transition: all 0.2s;
 }
 
 .btn-load-older:hover {
-  background: var(--bg-surface-hover);
   color: var(--zalo-primary);
-  border-color: var(--border-focus);
 }
 
 /* ==========================================================================
-   MESSAGE BUBBLES
+   4. BUBBLE TIN NHẮN CHUẨN ZALO PC
    ========================================================================== */
 
 .message-row {
   display: flex;
-  gap: 10px;
-  max-width: 78%;
-  animation: fadeInMsg 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  gap: 8px;
+  max-width: 70%;
 }
 
 .message-row.outgoing {
@@ -696,8 +735,8 @@ body {
 .msg-sender-avatar {
   width: 32px;
   height: 32px;
-  border-radius: 10px;
-  background: linear-gradient(135deg, #64748b, #475569);
+  border-radius: 50%;
+  background: #94a3b8;
   color: #fff;
   font-size: 13px;
   font-weight: 700;
@@ -705,7 +744,6 @@ body {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  margin-top: 2px;
 }
 
 .msg-body-wrapper {
@@ -718,211 +756,41 @@ body {
   font-size: 11px;
   font-weight: 600;
   color: var(--text-muted);
-  margin-bottom: 4px;
-  padding: 0 4px;
+  margin-bottom: 2px;
+  padding: 0 2px;
 }
 
 .msg-bubble {
-  padding: 12px 16px;
-  border-radius: 18px;
-  font-size: 14px;
-  line-height: 1.55;
-  word-break: break-word;
-  box-shadow: var(--shadow-sm);
-  position: relative;
-}
-
-/* Outgoing Bubble (Tôi / Admin) */
-.message-row.outgoing .msg-bubble {
-  background: linear-gradient(135deg, var(--zalo-primary), #0056d6);
-  color: var(--text-white);
-  border-bottom-right-radius: 4px;
-}
-
-/* Incoming Bubble (Ứng viên / Khách) */
-.message-row.incoming .msg-bubble {
-  background: #ffffff;
-  color: var(--text-main);
-  border: 1px solid var(--border-subtle);
-  border-bottom-left-radius: 4px;
-}
-
-/* ==========================================================================
-   PURE IMAGE MESSAGES (KHÔNG KHUNG VIỀN NGOÀI & SMART LOADING PLACEHOLDER)
-   ========================================================================== */
-
-.message-row.is-pure-image-row .msg-bubble {
-  display: none;
-}
-
-.smart-image-wrapper {
-  position: relative;
-  border-radius: 12px;
-  overflow: hidden;
-  background: #f1f5f9;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s ease;
-}
-
-.smart-image-wrapper:hover {
-  transform: scale(1.02);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1);
-  z-index: 2;
-}
-
-.image-shimmer-placeholder {
-  min-width: 160px;
-  min-height: 160px;
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(90deg, #f1f5f9 0%, #e2e8f0 50%, #f1f5f9 100%);
-  background-size: 200% 100%;
-  animation: shimmerGlow 1.6s infinite ease-in-out;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  border-radius: 12px;
-}
-
-.shimmer-spinner {
-  width: 22px;
-  height: 22px;
-  border: 2.5px solid rgba(0, 104, 255, 0.2);
-  border-top-color: var(--zalo-primary);
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-}
-
-.shimmer-text {
-  font-size: 11px;
-  font-weight: 600;
-  color: #94a3b8;
-}
-
-.image-error-placeholder {
-  min-width: 160px;
-  min-height: 100px;
-  background: #fee2e2;
-  border: 1px solid #fecaca;
-  color: #ef4444;
-  border-radius: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 12px;
-  font-weight: 600;
-  padding: 12px;
-}
-
-.smart-image-wrapper img.is-loading {
-  opacity: 0;
-  position: absolute;
-}
-
-.smart-image-wrapper img.is-loaded {
-  opacity: 1;
-  transition: opacity 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.msg-pure-images-container {
-  display: grid;
-  gap: 6px;
-  margin-top: 2px;
-}
-
-.msg-pure-images-container.grid-1 {
-  grid-template-columns: 1fr;
-  max-width: 380px;
-}
-
-.msg-pure-images-container.grid-1 .pure-image-img {
-  max-width: 100%;
-  max-height: 480px;
-  width: auto;
-  height: auto;
-  object-fit: contain;
-  border-radius: 14px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
-  border: 1px solid rgba(0, 0, 0, 0.06);
-  display: block;
-}
-
-.msg-pure-images-container.grid-2 {
-  grid-template-columns: repeat(2, 1fr);
-  max-width: 440px;
-}
-
-.msg-pure-images-container.grid-2 .smart-image-wrapper {
-  height: 200px;
-}
-
-.msg-pure-images-container.grid-2 .pure-image-img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  border-radius: 12px;
-}
-
-.msg-pure-images-container.grid-4 {
-  grid-template-columns: repeat(2, 1fr);
-  max-width: 440px;
-}
-
-.msg-pure-images-container.grid-4 .smart-image-wrapper {
-  height: 150px;
-}
-
-.msg-pure-images-container.grid-4 .pure-image-img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  border-radius: 12px;
-}
-
-.msg-pure-images-container.grid-multi {
-  grid-template-columns: repeat(3, 1fr);
-  max-width: 480px;
-}
-
-.msg-pure-images-container.grid-multi .smart-image-wrapper {
-  height: 130px;
-}
-
-.msg-pure-images-container.grid-multi .pure-image-img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  border-radius: 10px;
-}
-
-@keyframes shimmerGlow {
-  0% { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
-/* Trích dẫn Quote Card */
-.msg-quote-card {
-  background: rgba(0, 0, 0, 0.05);
-  border-left: 3.5px solid var(--zalo-primary);
-  padding: 8px 12px;
+  padding: 10px 14px;
   border-radius: 8px;
-  margin-bottom: 8px;
-  font-size: 12.5px;
+  font-size: 13.5px;
+  line-height: 1.5;
+  word-break: break-word;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
 }
 
-.message-row.outgoing .msg-quote-card {
-  background: rgba(255, 255, 255, 0.15);
-  border-left-color: #ffffff;
-  color: #f1f5f9;
+/* Outgoing Bubble (Tôi / Admin): Zalo PC Light Blue */
+.message-row.outgoing .msg-bubble {
+  background-color: var(--zalo-bubble-out);
+  color: var(--text-primary);
+  border: 1px solid var(--zalo-primary-border);
+}
+
+/* Incoming Bubble (Ứng viên): White */
+.message-row.incoming .msg-bubble {
+  background-color: var(--zalo-bubble-in);
+  color: var(--text-primary);
+  border: 1px solid var(--zalo-border);
+}
+
+/* Trích dẫn Quote Card Zalo PC */
+.msg-quote-card {
+  background: rgba(0, 0, 0, 0.04);
+  border-left: 3px solid var(--zalo-primary);
+  padding: 6px 10px;
+  border-radius: 4px;
+  margin-bottom: 6px;
+  font-size: 12px;
 }
 
 .quote-sender-name {
@@ -932,74 +800,159 @@ body {
 }
 
 .quote-text-preview {
-  opacity: 0.9;
+  color: var(--text-secondary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-/* Ảnh đính kèm bên trong Bubble kèm chữ */
-.msg-images-grid {
-  display: grid;
+/* ==========================================================================
+   5. HIỂN THỊ HÌNH ẢNH & ALBUM (KHÔNG KHUNG BỌC NGOÀI, CHUẨN ZALO PC)
+   ========================================================================== */
+
+.message-row.is-pure-image-row .msg-bubble {
+  display: none;
+}
+
+.smart-image-wrapper {
+  position: relative;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.smart-image-wrapper:hover {
+  opacity: 0.95;
+}
+
+.image-shimmer-placeholder {
+  min-width: 140px;
+  min-height: 140px;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, #e2e8f0 0%, #f1f5f9 50%, #e2e8f0 100%);
+  background-size: 200% 100%;
+  animation: shimmerGlow 1.5s infinite ease-in-out;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   gap: 6px;
-  margin-top: 8px;
 }
 
-.msg-images-grid.grid-1 {
+.shimmer-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(0, 104, 255, 0.2);
+  border-top-color: var(--zalo-primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.shimmer-text {
+  font-size: 10.5px;
+  color: var(--text-muted);
+}
+
+.image-error-placeholder {
+  padding: 10px;
+  background: #fee2e2;
+  color: #ef4444;
+  font-size: 11px;
+  border-radius: 6px;
+}
+
+.smart-image-wrapper img.is-loading {
+  opacity: 0;
+  position: absolute;
+}
+
+.smart-image-wrapper img.is-loaded {
+  opacity: 1;
+  transition: opacity 0.2s ease;
+}
+
+.msg-pure-images-container {
+  display: grid;
+  gap: 4px;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+/* Album 1 ảnh */
+.msg-pure-images-container.grid-1 {
   grid-template-columns: 1fr;
-  max-width: 320px;
+  max-width: 360px;
 }
 
-.msg-images-grid.grid-1 .msg-image-thumb {
+.msg-pure-images-container.grid-1 .pure-image-img {
   max-width: 100%;
-  max-height: 380px;
+  max-height: 420px;
   width: auto;
   height: auto;
   object-fit: contain;
-  border-radius: 10px;
-  cursor: pointer;
-  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 6px;
+  display: block;
 }
 
-.msg-images-grid.grid-2 {
+/* Album 2 ảnh (Như trong hình Zalo PC người dùng gửi) */
+.msg-pure-images-container.grid-2 {
   grid-template-columns: repeat(2, 1fr);
-  max-width: 380px;
+  max-width: 440px;
 }
 
-.msg-images-grid.grid-2 .msg-image-thumb {
+.msg-pure-images-container.grid-2 .smart-image-wrapper {
+  height: 180px;
+}
+
+.msg-pure-images-container.grid-2 .pure-image-img {
   width: 100%;
-  height: 150px;
+  height: 100%;
   object-fit: cover;
-  border-radius: 10px;
-  cursor: pointer;
 }
 
-.msg-images-grid.grid-4,
-.msg-images-grid.grid-multi {
+/* Album 3-4 ảnh */
+.msg-pure-images-container.grid-4 {
   grid-template-columns: repeat(2, 1fr);
-  max-width: 380px;
+  max-width: 440px;
 }
 
-.msg-images-grid.grid-4 .msg-image-thumb,
-.msg-images-grid.grid-multi .msg-image-thumb {
+.msg-pure-images-container.grid-4 .smart-image-wrapper {
+  height: 140px;
+}
+
+.msg-pure-images-container.grid-4 .pure-image-img {
   width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Album nhiều ảnh */
+.msg-pure-images-container.grid-multi {
+  grid-template-columns: repeat(3, 1fr);
+  max-width: 460px;
+}
+
+.msg-pure-images-container.grid-multi .smart-image-wrapper {
   height: 120px;
-  object-fit: cover;
-  border-radius: 8px;
-  cursor: pointer;
 }
 
-.msg-image-thumb:hover {
-  transform: scale(1.02);
-  box-shadow: var(--shadow-md);
+.msg-pure-images-container.grid-multi .pure-image-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .msg-meta-row {
   display: flex;
   align-items: center;
   gap: 4px;
-  margin-top: 4px;
-  padding: 0 4px;
+  margin-top: 3px;
+  padding: 0 2px;
 }
 
 .message-row.outgoing .msg-meta-row {
@@ -1009,79 +962,74 @@ body {
 .msg-timestamp {
   font-size: 10.5px;
   color: var(--text-muted);
-  font-weight: 500;
 }
 
 /* ==========================================================================
-   CHAT INPUT BAR: KHUNG NHẬP LIỆU
+   6. KHUNG NHẬP LIỆU CHUẨN ZALO PC (INPUT TOOLBAR & TEXTAREA)
    ========================================================================== */
 
 .chat-input-wrapper {
-  padding: 14px 24px 20px 24px;
   background: #ffffff;
-  border-top: 1px solid var(--border-subtle);
+  border-top: 1px solid var(--zalo-border);
+  display: flex;
+  flex-direction: column;
 }
 
-.chat-input-form {
+/* Dải icon công cụ mảnh Zalo PC */
+.chat-input-toolbar {
+  height: 38px;
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-bottom: 1px solid #f1f3f5;
+}
+
+.btn-tool-outline {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  color: #64748b;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-tool-outline:hover {
+  background: #f1f5f9;
+  color: var(--zalo-primary);
+}
+
+/* Khung soạn thảo text */
+.chat-input-box-row {
+  padding: 8px 16px 12px 16px;
   display: flex;
   align-items: flex-end;
   gap: 10px;
-  background: var(--bg-app);
-  border: 1.5px solid var(--border-subtle);
-  border-radius: 20px;
-  padding: 6px 8px 6px 14px;
-  transition: all 0.2s ease;
 }
 
-.chat-input-form:focus-within {
-  background: #ffffff;
-  border-color: var(--zalo-primary);
-  box-shadow: 0 0 0 3px var(--zalo-primary-glow);
-}
-
-.chat-textarea {
+.chat-textarea-native {
   flex: 1;
   border: none;
   background: transparent;
   resize: none;
   font-family: inherit;
-  font-size: 14px;
-  color: var(--text-main);
+  font-size: 13.5px;
+  color: var(--text-primary);
   outline: none;
-  max-height: 120px;
   min-height: 24px;
+  max-height: 100px;
   line-height: 1.45;
-  padding: 4px 0;
+  padding: 2px 0;
 }
 
-.chat-input-actions {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.btn-upload-trigger {
-  width: 36px;
-  height: 36px;
-  border: none;
-  background: transparent;
-  color: var(--text-secondary);
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.btn-upload-trigger:hover {
-  background: var(--bg-surface-hover);
-  color: var(--zalo-primary);
-}
-
-.btn-send-message {
-  width: 38px;
-  height: 38px;
+.btn-native-send {
+  width: 32px;
+  height: 32px;
   border: none;
   background: var(--zalo-primary);
   color: #ffffff;
@@ -1090,59 +1038,54 @@ body {
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: all 0.2s;
-  box-shadow: 0 2px 8px var(--zalo-primary-glow);
+  transition: all 0.15s ease;
+  flex-shrink: 0;
 }
 
-.btn-send-message:hover {
-  background: var(--zalo-primary-hover);
-  transform: scale(1.05);
+.btn-native-send:hover {
+  background: var(--zalo-nav-hover);
 }
 
-.btn-send-message:disabled {
-  background: var(--text-muted);
+.btn-native-send:disabled {
+  background: #cbd5e1;
   cursor: not-allowed;
-  transform: none;
-  box-shadow: none;
 }
 
-/* Image Upload Preview Bar */
+/* Upload Preview Bar */
 .upload-preview-bar {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 12px;
-  background: var(--bg-surface-active);
-  border-radius: 12px;
-  margin-bottom: 10px;
-  animation: slideUp 0.2s ease;
+  gap: 8px;
+  padding: 6px 16px;
+  background: #f8fafc;
+  border-bottom: 1px solid var(--zalo-border);
 }
 
 .upload-preview-thumb {
-  width: 44px;
-  height: 44px;
-  border-radius: 8px;
+  width: 38px;
+  height: 38px;
+  border-radius: 4px;
   object-fit: cover;
 }
 
 .upload-preview-info {
-  flex: 1;
-  font-size: 12.5px;
-  font-weight: 600;
+  font-size: 12px;
   color: var(--zalo-primary);
+  font-weight: 600;
+  flex: 1;
 }
 
 .btn-cancel-upload {
   border: none;
   background: transparent;
-  color: var(--accent-danger);
-  cursor: pointer;
+  color: #ef4444;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
+  cursor: pointer;
 }
 
 /* ==========================================================================
-   WELCOME VIEW (KHI CHƯA CHỌN THREAD)
+   7. WELCOME VIEW
    ========================================================================== */
 
 .chat-welcome-view {
@@ -1156,122 +1099,107 @@ body {
 }
 
 .welcome-badge-icon {
-  width: 72px;
-  height: 72px;
-  border-radius: 24px;
-  background: linear-gradient(135deg, var(--zalo-primary-light), #ffffff);
-  border: 1.5px solid rgba(0, 104, 255, 0.2);
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: var(--zalo-primary-light);
+  color: var(--zalo-primary);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 32px;
-  margin-bottom: 18px;
-  box-shadow: var(--shadow-md);
+  margin-bottom: 14px;
 }
 
 .welcome-title {
-  font-size: 20px;
-  font-weight: 800;
-  color: var(--text-main);
-  margin-bottom: 8px;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 6px;
 }
 
 .welcome-desc {
-  font-size: 14px;
+  font-size: 13px;
   color: var(--text-secondary);
-  max-width: 360px;
-  line-height: 1.55;
-  margin-bottom: 24px;
+  max-width: 340px;
+  line-height: 1.5;
 }
 
 /* ==========================================================================
-   MODALS (RENAME, LIGHTBOX, NEW THREAD)
+   8. MODALS & LIGHTBOX
    ========================================================================== */
 
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(15, 23, 42, 0.45);
-  backdrop-filter: blur(6px);
+  background: rgba(0, 0, 0, 0.4);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 100;
-  animation: fadeIn 0.2s ease;
 }
 
 .modal-dialog {
   background: #ffffff;
-  border-radius: 20px;
-  padding: 24px;
+  border-radius: 12px;
+  padding: 20px;
   width: 90%;
-  max-width: 440px;
-  box-shadow: var(--shadow-lg);
-  animation: scaleUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  max-width: 400px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
 }
 
 .modal-title {
-  font-size: 18px;
-  font-weight: 800;
-  color: var(--text-main);
-  margin-bottom: 12px;
+  font-size: 16px;
+  font-weight: 700;
+  margin-bottom: 8px;
 }
 
 .modal-desc {
-  font-size: 13px;
+  font-size: 12.5px;
   color: var(--text-secondary);
-  margin-bottom: 16px;
-  line-height: 1.5;
+  margin-bottom: 14px;
 }
 
 .modal-input {
   width: 100%;
-  height: 44px;
-  padding: 0 14px;
-  border-radius: 12px;
-  border: 1.5px solid var(--border-subtle);
-  font-size: 14px;
+  height: 38px;
+  padding: 0 12px;
+  border-radius: 6px;
+  border: 1px solid var(--zalo-border);
+  font-size: 13px;
   font-family: inherit;
-  margin-bottom: 20px;
+  margin-bottom: 16px;
   outline: none;
 }
 
 .modal-input:focus {
   border-color: var(--zalo-primary);
-  box-shadow: 0 0 0 3px var(--zalo-primary-glow);
 }
 
 .modal-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 10px;
+  gap: 8px;
 }
 
 .btn-secondary {
-  padding: 10px 18px;
-  border-radius: 10px;
-  border: 1px solid var(--border-subtle);
-  background: #ffffff;
-  font-size: 13.5px;
+  padding: 8px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--zalo-border);
+  background: #fff;
+  font-size: 13px;
   font-weight: 600;
-  font-family: inherit;
   cursor: pointer;
 }
 
 .btn-primary {
-  padding: 10px 20px;
-  border-radius: 10px;
+  padding: 8px 16px;
+  border-radius: 6px;
   border: none;
   background: var(--zalo-primary);
-  color: #ffffff;
-  font-size: 13.5px;
-  font-weight: 700;
-  font-family: inherit;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
   cursor: pointer;
-}
-
-.btn-primary:hover {
-  background: var(--zalo-primary-hover);
 }
 
 /* Lightbox Modal */
@@ -1279,52 +1207,40 @@ body {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.85);
-  backdrop-filter: blur(12px);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 120;
-  animation: fadeIn 0.2s ease;
 }
 
 .lightbox-image {
   max-width: 90vw;
   max-height: 85vh;
-  border-radius: 12px;
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
-  animation: scaleUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  border-radius: 6px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
 }
 
 .lightbox-close-btn {
   position: absolute;
-  top: 24px;
-  right: 24px;
-  width: 44px;
-  height: 44px;
+  top: 20px;
+  right: 20px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.15);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
   color: #ffffff;
-  font-size: 20px;
+  font-size: 18px;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: all 0.2s;
 }
 
-.lightbox-close-btn:hover {
-  background: rgba(255, 255, 255, 0.3);
-  transform: scale(1.08);
-}
-
-/* ==========================================================================
-   TOAST NOTIFICATION
-   ========================================================================== */
-
+/* Toast */
 .toast-container {
   position: fixed;
-  top: 20px;
+  top: 16px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 150;
@@ -1332,67 +1248,40 @@ body {
 }
 
 .toast-item {
-  background: rgba(15, 23, 42, 0.9);
-  backdrop-filter: blur(8px);
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(6px);
   color: #ffffff;
-  padding: 10px 20px;
+  padding: 8px 18px;
   border-radius: 100px;
-  font-size: 13.5px;
+  font-size: 13px;
   font-weight: 600;
-  box-shadow: var(--shadow-lg);
-  animation: slideDownToast 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
-/* ==========================================================================
-   KEYFRAME ANIMATIONS
-   ========================================================================== */
-
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+/* Keyframes */
+@keyframes shimmerGlow {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
 }
 
-@keyframes fadeInMsg {
-  from { opacity: 0; transform: translateY(6px); }
-  to { opacity: 1; transform: translateY(0); }
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
-
-@keyframes slideDown {
-  from { opacity: 0; transform: translateY(-8px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-@keyframes slideDownToast {
-  from { opacity: 0; transform: translate(-50%, -15px); }
-  to { opacity: 1; transform: translate(-50%, 0); }
-}
-
-@keyframes scaleUp {
-  from { opacity: 0; transform: scale(0.95); }
-  to { opacity: 1; transform: scale(1); }
-}
-
-/* ==========================================================================
-   RESPONSIVE (MOBILE VIEW)
-   ========================================================================== */
 
 @media (max-width: 768px) {
+  .zalo-nav-rail {
+    display: none;
+  }
   .zalo-sidebar {
     width: 100vw;
-    max-width: 100vw;
-    position: absolute;
-    inset: 0;
   }
-
   .zalo-sidebar.hide-mobile {
     display: none;
   }
-
   .btn-mobile-back {
     display: flex;
   }
-
   .message-row {
-    max-width: 90%;
+    max-width: 85%;
   }
 }
