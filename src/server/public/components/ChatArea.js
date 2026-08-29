@@ -191,6 +191,11 @@ export function ChatArea({
   const candidate = historyData?.candidate;
   const avatarLetter = (threadName || 'U').trim().charAt(0).toUpperCase();
 
+  // Quy tắc hiển thị thanh nhập tin nhắn:
+  // - Đối với Group: LUÔN HIỆN THANH NHẬP TIN NHẮN
+  // - Đối với Chat cá nhân: CHỈ HIỆN KHI Ở CHẾ ĐỘ THỦ CÔNG (isManual = true)
+  const canSendInput = isGroup || isManual;
+
   return html`
     <main className="zalo-chat-area">
       <!-- 1. Header Zalo PC -->
@@ -230,12 +235,12 @@ export function ChatArea({
         </div>
 
         <div className="chat-header-right">
-          <!-- Nút Switch Chế độ AI / Thủ Công (iOS Style Switch) - CHỈ CÁ NHÂN -->
+          <!-- Nút Switch Chế độ AI / Thủ Công (iOS Style Switch) - CHỈ HIỆN Ở CHAT CÁ NHÂN -->
           ${!isGroup && html`
             <div
               className="ios-mode-switch-wrapper"
               onClick=${handleModeClick}
-              title=${isManual ? 'Đang ở chế độ Thủ công. Bấm để bật AI tự động' : 'Đang ở chế độ AI tự động. Bấm để tắt AI (Thủ công)'}
+              title=${isManual ? 'Đang ở chế độ Thủ công. Bấm để bật AI tự động' : 'Đang ở chế độ AI tự động. Bấm để chuyển sang Thủ công'}
             >
               <span className=${`ios-switch-label ${isManual ? 'is-manual' : 'is-ai'}`}>
                 ${isManual ? 'Thủ công (-M)' : 'AI Tự động'}
@@ -326,103 +331,124 @@ export function ChatArea({
         <div ref=${messagesEndRef} />
       </div>
 
-      <!-- 4. Input Wrapper Zalo PC -->
-      <footer className="chat-input-wrapper">
-        ${selectedImages.length > 0 && html`
-          <div className="upload-preview-bar">
-            <div style=${{ display: 'flex', gap: '8px', overflowX: 'auto', flex: 1, alignItems: 'center' }}>
-              ${selectedImages.map((img, idx) => html`
-                <div key=${idx} style=${{ position: 'relative', flexShrink: 0 }}>
-                  <img
-                    src=${img.dataUrl}
-                    className="upload-preview-thumb"
-                    alt="Preview"
-                  />
-                  <button
-                    onClick=${() => removeSelectedImage(idx)}
-                    style=${{
-                      position: 'absolute',
-                      top: '-5px',
-                      right: '-5px',
-                      width: '16px',
-                      height: '16px',
-                      borderRadius: '50%',
-                      background: '#ef4444',
-                      color: '#fff',
-                      border: 'none',
-                      fontSize: '9px',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}
-                  >
-                    ✕
-                  </button>
-                </div>
-              `)}
+      <!-- 4. Chân trang (Footer): Tùy biến theo chế độ AI / Thủ Công / Group -->
+      ${canSendInput ? html`
+        <!-- Thanh nhập tin nhắn (Hiện cho Group hoặc Chat Cá Nhân ở chế độ Thủ Công) -->
+        <footer className="chat-input-wrapper">
+          ${selectedImages.length > 0 && html`
+            <div className="upload-preview-bar">
+              <div style=${{ display: 'flex', gap: '8px', overflowX: 'auto', flex: 1, alignItems: 'center' }}>
+                ${selectedImages.map((img, idx) => html`
+                  <div key=${idx} style=${{ position: 'relative', flexShrink: 0 }}>
+                    <img
+                      src=${img.dataUrl}
+                      className="upload-preview-thumb"
+                      alt="Preview"
+                    />
+                    <button
+                      onClick=${() => removeSelectedImage(idx)}
+                      style=${{
+                        position: 'absolute',
+                        top: '-5px',
+                        right: '-5px',
+                        width: '16px',
+                        height: '16px',
+                        borderRadius: '50%',
+                        background: '#ef4444',
+                        color: '#fff',
+                        border: 'none',
+                        fontSize: '9px',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                `)}
+              </div>
+              <div className="upload-preview-info">
+                Đã chọn ${selectedImages.length} hình ảnh
+              </div>
+              <button
+                className="btn-cancel-upload"
+                onClick=${() => setSelectedImages([])}
+              >
+                Hủy tất cả
+              </button>
             </div>
-            <div className="upload-preview-info">
-              Đã chọn ${selectedImages.length} hình ảnh
-            </div>
+          `}
+
+          <!-- Dải icon công cụ (Chỉ giữ nút Đính kèm ảnh) -->
+          <div className="chat-input-toolbar">
+            <input
+              type="file"
+              ref=${fileInputRef}
+              accept="image/*"
+              multiple
+              style=${{ display: 'none' }}
+              onChange=${handleFileChange}
+            />
+
             <button
-              className="btn-cancel-upload"
-              onClick=${() => setSelectedImages([])}
+              className="btn-tool-outline"
+              title="Đính kèm hình ảnh (hỗ trợ gửi nhiều ảnh)"
+              onClick=${() => fileInputRef.current?.click()}
             >
-              Hủy tất cả
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                <polyline points="21 15 16 10 5 21"></polyline>
+              </svg>
             </button>
           </div>
-        `}
 
-        <!-- Dải icon công cụ (Chỉ giữ nút Đính kèm ảnh có chức năng) -->
-        <div className="chat-input-toolbar">
-          <input
-            type="file"
-            ref=${fileInputRef}
-            accept="image/*"
-            multiple
-            style=${{ display: 'none' }}
-            onChange=${handleFileChange}
-          />
+          <!-- Khung soạn thảo text -->
+          <div className="chat-input-box-row">
+            <textarea
+              ref=${textareaRef}
+              className="chat-textarea-native"
+              placeholder=${`Nhập tin nhắn gửi tới ${threadName}... (Enter để gửi)`}
+              rows="1"
+              value=${inputText}
+              onInput=${handleTextChange}
+              onKeyDown=${handleKeyDown}
+            />
 
-          <button
-            className="btn-tool-outline"
-            title="Đính kèm hình ảnh (hỗ trợ gửi nhiều ảnh)"
-            onClick=${() => fileInputRef.current?.click()}
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-              <circle cx="8.5" cy="8.5" r="1.5"></circle>
-              <polyline points="21 15 16 10 5 21"></polyline>
-            </svg>
-          </button>
-        </div>
-
-        <!-- Khung soạn thảo text -->
-        <div className="chat-input-box-row">
-          <textarea
-            ref=${textareaRef}
-            className="chat-textarea-native"
-            placeholder=${`Nhập tin nhắn gửi tới ${threadName}... (Enter để gửi)`}
-            rows="1"
-            value=${inputText}
-            onInput=${handleTextChange}
-            onKeyDown=${handleKeyDown}
-          />
-
-          <button
-            className="btn-native-send"
-            title="Gửi"
-            onClick=${handleSubmit}
-            disabled=${sending || (!inputText.trim() && selectedImages.length === 0)}
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="22" y1="2" x2="11" y2="13"></line>
-              <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
-            </svg>
-          </button>
-        </div>
-      </footer>
+            <button
+              className="btn-native-send"
+              title="Gửi"
+              onClick=${handleSubmit}
+              disabled=${sending || (!inputText.trim() && selectedImages.length === 0)}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="22" y1="2" x2="11" y2="13"></line>
+                <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+              </svg>
+            </button>
+          </div>
+        </footer>
+      ` : html`
+        <!-- Thông báo khi AI Mode đang BẬT: Ẩn khung nhập tin nhắn -->
+        <footer className="chat-ai-active-footer">
+          <div className="ai-active-notice-box">
+            <span className="ai-active-pulse"></span>
+            <span className="ai-notice-text">
+              🤖 <strong>Chế độ AI Tự động đang bật</strong> — Bot đang tự động trả lời ứng viên này.
+            </span>
+            <button
+              className="btn-takeover-manual"
+              onClick=${handleModeClick}
+              disabled=${togglingMode}
+              title="Chuyển sang chế độ Thủ công (-M) để tự nhắn tin"
+            >
+              Chuyển sang Thủ công (-M) để nhắn tin
+            </button>
+          </div>
+        </footer>
+      `}
     </main>
   `;
 }
