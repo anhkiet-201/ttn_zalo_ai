@@ -205,10 +205,37 @@ export class ToolExecutor {
     );
 
     // 4. Chuyển tiếp thông tin + toàn bộ ảnh CCCD 2 mặt sang tài khoản HR
-    await this.hrNotifier.notifyCandidateRegistration(
+    const hrResult = await this.hrNotifier.notifyCandidateRegistration(
       candidateData,
       args.notes ? String(args.notes).trim() : undefined
     );
+
+    if (hrResult.requireFreshPhoto) {
+      // Dọn dẹp link ảnh cũ không còn khả dụng
+      this.contextManager.clearDocumentImages(
+        context.threadId,
+        context.senderId,
+        selectedDoc?.idNumber || selectedDoc?.fullName
+      );
+      this.candidateRepo.upsertCandidate({
+        ...candidateData,
+        imageUrls: [],
+      });
+
+      console.warn(
+        `⚠️ [Tool: register_candidate] Ảnh CCCD của [${candidateData.fullName}] không khả dụng/hết hạn. Yêu cầu AI xin lại ảnh!`
+      );
+      return {
+        result: {
+          status: "require_photo",
+          success: false,
+          message:
+            "Chưa có ảnh CCCD hợp lệ hoặc ảnh cũ đã hết hạn. BẮT BUỘC yêu cầu ứng viên gửi ảnh 2 mặt CCCD/VNeID để hoàn tất đăng ký nhận việc. (RÀNG BUỘC: Tuyệt đối không đề cập đến lý do kỹ thuật hay lỗi hệ thống; chỉ xin ảnh tự nhiên).",
+        },
+        updatedCandidate: { ...candidateData, imageUrls: [] },
+      };
+    }
+
     this.candidateRepo.markAsForwarded(candidateData.id!);
 
     return {
@@ -297,13 +324,34 @@ export class ToolExecutor {
       newCompany
     );
 
-    await this.hrNotifier.notifyCompanyChange({
+    const hrResult = await this.hrNotifier.notifyCompanyChange({
       candidate: candidateData,
       oldCompany: String(oldCompany),
       newCompany,
       interviewDate,
       reason: args.reason ? String(args.reason).trim() : undefined,
     });
+
+    if (hrResult.requireFreshPhoto) {
+      this.contextManager.clearDocumentImages(
+        context.threadId,
+        context.senderId,
+        selectedDoc?.idNumber || selectedDoc?.fullName
+      );
+      this.candidateRepo.upsertCandidate({
+        ...candidateData,
+        imageUrls: [],
+      });
+      return {
+        result: {
+          status: "require_photo",
+          success: false,
+          message:
+            "Chưa có ảnh CCCD hợp lệ hoặc ảnh cũ đã hết hạn. BẮT BUỘC yêu cầu ứng viên gửi ảnh 2 mặt CCCD/VNeID để hoàn tất đổi công ty. (RÀNG BUỘC: Tuyệt đối không đề cập đến lý do kỹ thuật hay lỗi hệ thống; chỉ xin ảnh tự nhiên).",
+        },
+        updatedCandidate: { ...candidateData, imageUrls: [] },
+      };
+    }
 
     return {
       result: {
@@ -381,12 +429,33 @@ export class ToolExecutor {
       gender: context.candidateData?.gender || selectedDoc?.gender,
     });
 
-    await this.hrNotifier.notifyReschedule({
+    const hrResult = await this.hrNotifier.notifyReschedule({
       candidate: candidateData,
       targetCompany: String(targetCompany),
       newDate,
       reason: args.reason ? String(args.reason).trim() : undefined,
     });
+
+    if (hrResult.requireFreshPhoto) {
+      this.contextManager.clearDocumentImages(
+        context.threadId,
+        context.senderId,
+        selectedDoc?.idNumber || selectedDoc?.fullName
+      );
+      this.candidateRepo.upsertCandidate({
+        ...candidateData,
+        imageUrls: [],
+      });
+      return {
+        result: {
+          status: "require_photo",
+          success: false,
+          message:
+            "Chưa có ảnh CCCD hợp lệ hoặc ảnh cũ đã hết hạn. BẮT BUỘC yêu cầu ứng viên gửi ảnh 2 mặt CCCD/VNeID để hoàn tất dời lịch hẹn. (RÀNG BUỘC: Tuyệt đối không đề cập đến lý do kỹ thuật hay lỗi hệ thống; chỉ xin ảnh tự nhiên).",
+        },
+        updatedCandidate: { ...candidateData, imageUrls: [] },
+      };
+    }
 
     return {
       result: {

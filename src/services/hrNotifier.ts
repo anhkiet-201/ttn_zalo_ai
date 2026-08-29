@@ -6,6 +6,12 @@ import { type ZaloService } from "./zaloService.js";
 import { type CandidateRecord } from "../database/index.js";
 import { config } from "../config/index.js";
 
+export interface HrNotificationResult {
+  success: boolean;
+  requireFreshPhoto: boolean;
+  message?: string;
+}
+
 /**
  * HRNotifier: Quản lý việc đóng gói và chuyển tiếp thông tin ứng viên, đổi công ty, dời lịch sang tài khoản Zalo HR
  */
@@ -48,37 +54,56 @@ export class HRNotifier {
   }
 
   /**
-   * Helper gửi tin nhắn kèm ảnh CCCD đính kèm (nếu có) tới HR
+   * Helper gửi tin nhắn kèm ảnh CCCD đính kèm (nếu có) tới HR.
+   * BẮT BUỘC: Nếu link ảnh hết hạn hoặc không tải được ảnh thực tế nào -> Từ chối gửi và báo lỗi requireFreshPhoto.
    */
   private async sendMessageWithAttachments(
     msg: string,
     imageUrls?: string[]
-  ): Promise<void> {
-    let tempFiles: string[] = [];
-    if (imageUrls && imageUrls.length > 0) {
-      const results = await Promise.all(
-        imageUrls.map((imgUrl) => this.downloadImageToTempFile(imgUrl))
+  ): Promise<HrNotificationResult> {
+    if (!imageUrls || imageUrls.length === 0) {
+      console.warn("⚠️ [HRNotifier] Không có link ảnh CCCD nào để gửi cho HR.");
+      return {
+        success: false,
+        requireFreshPhoto: true,
+        message: "Chưa có ảnh CCCD hợp lệ.",
+      };
+    }
+
+    const results = await Promise.all(
+      imageUrls.map((imgUrl) => this.downloadImageToTempFile(imgUrl))
+    );
+    const tempFiles = results.filter((t): t is string => Boolean(t));
+
+    // BẮT BUỘC: Nếu toàn bộ link ảnh đều hết hạn (Zalo CDN 403) hoặc không tải được ảnh nào -> CHẶN gửi tin nhắn thiếu ảnh
+    if (tempFiles.length === 0) {
+      console.warn(
+        "⚠️ [HRNotifier] Toàn bộ link ảnh CCCD đã hết hạn hoặc không tải được. Từ chối gửi tin nhắn thiếu ảnh sang HR."
       );
-      tempFiles = results.filter((t): t is string => Boolean(t));
+      return {
+        success: false,
+        requireFreshPhoto: true,
+        message: "Ảnh CCCD cũ đã hết hạn hoặc không khả dụng trên Zalo CDN.",
+      };
     }
 
     try {
-      if (tempFiles.length > 0) {
-        await this.zaloService.sendMessage(
-          this.hrRecipientId,
-          {
-            msg,
-            attachments: tempFiles,
-          },
-          config.hrThreadType
-        );
-      } else {
-        await this.zaloService.sendMessage(
-          this.hrRecipientId,
+      await this.zaloService.sendMessage(
+        this.hrRecipientId,
+        {
           msg,
-          config.hrThreadType
-        );
-      }
+          attachments: tempFiles,
+        },
+        config.hrThreadType
+      );
+      return { success: true, requireFreshPhoto: false };
+    } catch (err: any) {
+      console.error(`❌ [HRNotifier] Lỗi gửi tin nhắn sang HR:`, err);
+      return {
+        success: false,
+        requireFreshPhoto: false,
+        message: err.message || "Lỗi gửi tin nhắn sang HR",
+      };
     } finally {
       for (const tmp of tempFiles) {
         try {
@@ -94,7 +119,7 @@ export class HRNotifier {
   public async notifyCandidateRegistration(
     candidate: CandidateRecord,
     notes?: string
-  ): Promise<void> {
+  ): Promise<HrNotificationResult> {
     const interviewTime = candidate.interviewDate || "Sáng mai lúc 7h30 tại cổng công ty";
     const company = candidate.targetCompany?.toUpperCase() || "CHƯA RÕ";
     const fullName = candidate.fullName || candidate.senderName || "Chưa rõ";
@@ -130,17 +155,25 @@ ${notes ? `\n📝 Ghi chú: ${notes}` : ""}
 ⏱️ Thời gian gửi: ${timeNow}`;
 
     try {
-      await this.sendMessageWithAttachments(cccdReport, candidate.imageUrls);
-      console.log(
-        `📤 [Chuyển tiếp CCCD] Đã gửi ${candidate.imageUrls?.length || 0} ảnh CCCD đính kèm + thông tin công ty [${company}] của [${fullName}] tới HR (${this.hrRecipientId}) thành công!`
-      );
-      // Nghỉ 500ms để đảm bảo các tin nhắn chuyển tiếp đa ứng viên được gửi tuần tự
-      await new Promise((r) => setTimeout(r, 500));
-    } catch (forwardErr) {
+      const res = await this.sendMessageWithAttachments(cccdReport, candidate.imageUrls);
+      if (res.success) {
+        console.log(
+          `📤 [Chuyển tiếp CCCD] Đã gửi ${candidate.imageUrls?.length || 0} ảnh CCCD đính kèm + thông tin công ty [${company}] của [${fullName}] tới HR (${this.hrRecipientId}) thành công!`
+        );
+        // Nghỉ 500ms để đảm bảo các tin nhắn chuyển tiếp đa ứng viên được gửi tuần tự
+        await new Promise((r) => setTimeout(r, 500));
+      }
+      return res;
+    } catch (forwardErr: any) {
       console.error(
         `❌ Lỗi khi gửi thông tin hồ sơ CCCD tới HR (${this.hrRecipientId}):`,
         forwardErr
       );
+      return {
+        success: false,
+        requireFreshPhoto: false,
+        message: forwardErr.message || "Lỗi gửi thông tin tới HR",
+      };
     }
   }
 
@@ -153,7 +186,7 @@ ${notes ? `\n📝 Ghi chú: ${notes}` : ""}
     newCompany: string;
     interviewDate: string;
     reason?: string;
-  }): Promise<void> {
+  }): Promise<HrNotificationResult> {
     const { candidate, oldCompany, newCompany, interviewDate, reason } = params;
     const fullName = (candidate.fullName || candidate.senderName || "Chưa rõ").toUpperCase();
     const phone = candidate.phoneNumber || "Chưa cung cấp";
@@ -173,12 +206,20 @@ ${reason ? `📝 Lý do đổi: ${reason}\n` : ""}
 ⏱️ Thời gian đổi: ${timeNow}`;
 
     try {
-      await this.sendMessageWithAttachments(changeReport, candidate.imageUrls);
-      console.log(
-        `📤 [Tool: switch_company] Đã báo HR đổi sang [${newCompany}] kèm ${candidate.imageUrls?.length || 0} ảnh CCCD thành công!`
-      );
-    } catch (err) {
+      const res = await this.sendMessageWithAttachments(changeReport, candidate.imageUrls);
+      if (res.success) {
+        console.log(
+          `📤 [Tool: switch_company] Đã báo HR đổi sang [${newCompany}] kèm ${candidate.imageUrls?.length || 0} ảnh CCCD thành công!`
+        );
+      }
+      return res;
+    } catch (err: any) {
       console.error("❌ Lỗi gửi thông báo đổi công ty tới HR:", err);
+      return {
+        success: false,
+        requireFreshPhoto: false,
+        message: err.message || "Lỗi gửi thông báo đổi công ty tới HR",
+      };
     }
   }
 
@@ -190,7 +231,7 @@ ${reason ? `📝 Lý do đổi: ${reason}\n` : ""}
     targetCompany: string;
     newDate: string;
     reason?: string;
-  }): Promise<void> {
+  }): Promise<HrNotificationResult> {
     const { candidate, targetCompany, newDate, reason } = params;
     const fullName = (candidate.fullName || candidate.senderName || "Chưa rõ").toUpperCase();
     const phone = candidate.phoneNumber || "Chưa cung cấp";
@@ -208,12 +249,20 @@ ${reason ? `📝 Lý do dời lịch: ${reason}\n` : ""}
 ⏱️ Thời gian báo: ${timeNow}`;
 
     try {
-      await this.sendMessageWithAttachments(rescheduleReport, candidate.imageUrls);
-      console.log(
-        `📤 [Tool: reschedule_interview] Đã báo HR dời lịch sang [${newDate}] kèm ${candidate.imageUrls?.length || 0} ảnh CCCD thành công!`
-      );
-    } catch (err) {
+      const res = await this.sendMessageWithAttachments(rescheduleReport, candidate.imageUrls);
+      if (res.success) {
+        console.log(
+          `📤 [Tool: reschedule_interview] Đã báo HR dời lịch sang [${newDate}] kèm ${candidate.imageUrls?.length || 0} ảnh CCCD thành công!`
+        );
+      }
+      return res;
+    } catch (err: any) {
       console.error("❌ Lỗi gửi thông báo dời lịch tới HR:", err);
+      return {
+        success: false,
+        requireFreshPhoto: false,
+        message: err.message || "Lỗi gửi thông báo dời lịch tới HR",
+      };
     }
   }
 

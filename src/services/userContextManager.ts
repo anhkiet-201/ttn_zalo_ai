@@ -284,6 +284,33 @@ export class UserContextManager {
   }
 
   /**
+   * Xóa danh sách link ảnh CCCD đã hết hạn/không khả dụng khỏi UserContext
+   */
+  public clearDocumentImages(
+    threadId: string,
+    senderId: string,
+    idNumberOrName?: string
+  ): void {
+    const context = this.getContext(threadId, senderId);
+    if (idNumberOrName) {
+      const doc = context.documents.find(
+        (d) =>
+          (d.idNumber && d.idNumber === idNumberOrName) ||
+          (d.fullName &&
+            d.fullName.trim().toLowerCase() === idNumberOrName.trim().toLowerCase())
+      );
+      if (doc) {
+        doc.imageUrls = [];
+      }
+    } else {
+      context.documents.forEach((d) => {
+        d.imageUrls = [];
+      });
+    }
+    this.saveAndSync(context);
+  }
+
+  /**
    * Định dạng toàn bộ User Context thành chuỗi văn bản trực quan nạp vào AI Prompt
    */
   public formatForPrompt(context: UserContextData): string {
@@ -314,7 +341,9 @@ export class UserContextManager {
             ? `[ĐÃ ĐĂNG KÝ CTY: ${doc.registeredCompany} - LỊCH HẸN: ${doc.interviewDate}]`
             : `[CHƯA ĐĂNG KÝ]`;
         const imagesDesc =
-          doc.imageUrls.length > 1
+          doc.imageUrls.length === 0
+            ? `0 ảnh (Chưa có ảnh hoặc ảnh cũ đã hết hạn, BẮT BUỘC XIN LẠI ẢNH 2 MẶT CCCD)`
+            : doc.imageUrls.length > 1
             ? `${doc.imageUrls.length} ảnh (đầy đủ mặt trước & mặt sau)`
             : `${doc.imageUrls.length} ảnh`;
 
