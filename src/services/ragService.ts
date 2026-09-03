@@ -35,6 +35,8 @@ export function loadRagContext(baseDir: string = process.cwd()): string {
           const suggestStr = item.nearby_suggestions.join(", ");
           content += `\nKHU VỰC / CỤM LIỀN KỀ LÂN CẬN: ${suggestStr}. (Lưu ý: Chỉ mở rộng gợi ý các khu vực lân cận này khi khu vực chính có dưới 2 công ty đang tuyển).`;
         }
+      } else if (item.details) {
+        content = formatRagDetailsToText(item.details);
       } else {
         content = JSON.stringify(item, null, 2);
       }
@@ -128,7 +130,7 @@ export interface RagUpdateResult {
   entry?: Record<string, unknown>;
 }
 
-function normalizeText(str: string): string {
+export function normalizeText(str: string): string {
   return str
     .toLowerCase()
     .normalize("NFD")
@@ -136,6 +138,89 @@ function normalizeText(str: string): string {
     .replace(/[^\w\s]/gi, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+/**
+ * Chuyển đổi object details (ví dụ trong policy_rag) thành văn bản có gạch đầu dòng rõ ràng, dễ đọc trên Zalo, không in ra JSON thô.
+ */
+export function formatRagDetailsToText(details: unknown): string {
+  if (!details || typeof details !== "object") return String(details || "");
+
+  const labelMap: Record<string, string> = {
+    official_employee: "Nhân viên chính thức",
+    seasonal_employee: "Lao động thời vụ",
+    contribution_rate: "Tỷ lệ đóng góp",
+    company: "Công ty",
+    employee: "Người lao động",
+    luat_ap_dung: "Luật áp dụng",
+    cac_loai_hinh_bhxh: "Các loại hình BHXH",
+    dieu_kien_huong_luong_huu: "Điều kiện hưởng lương hưu",
+    muc_dong_bhxh_bat_buoc: "Mức đóng BHXH bắt buộc",
+    nguoi_lao_dong: "Người lao động",
+    nguoi_su_dung_lao_dong: "Người sử dụng lao động",
+    tong_cong: "Tổng cộng",
+    nghi_huu_truoc_tuoi: "Nghỉ hưu trước tuổi",
+    dieu_kien_nhan_luong: "Điều kiện nhận lương",
+    luong_thang: "Lương tháng",
+    luong_tuan: "Lương tuần",
+    luong_3_ngay: "Lương 3 ngày",
+    ung_luong_tuan: "Ứng lương tuần",
+    quy_dinh_xin_nghi: "Quy định xin nghỉ",
+  };
+
+  const formatLabel = (key: string) =>
+    labelMap[key] ||
+    key
+      .replace(/_/g, " ")
+      .replace(/^./, (c) => c.toUpperCase());
+
+  const lines: string[] = [];
+
+  if (Array.isArray(details)) {
+    for (const item of details) {
+      if (typeof item === "object" && item !== null) {
+        lines.push(formatRagDetailsToText(item));
+      } else {
+        lines.push(`• ${item}`);
+      }
+    }
+    return lines.join("\n");
+  }
+
+  for (const [key, value] of Object.entries(details as Record<string, unknown>)) {
+    const label = formatLabel(key);
+    if (value === undefined || value === null || value === "") continue;
+
+    if (Array.isArray(value)) {
+      lines.push(`• ${label}:`);
+      for (const it of value) {
+        lines.push(`  - ${it}`);
+      }
+    } else if (typeof value === "object") {
+      lines.push(`• ${label}:`);
+      for (const [subK, subV] of Object.entries(value as Record<string, unknown>)) {
+        lines.push(`  - ${formatLabel(subK)}: ${subV}`);
+      }
+    } else {
+      lines.push(`• ${label}: ${value}`);
+    }
+  }
+
+  return lines.join("\n");
+}
+
+/**
+ * Trích xuất nội dung văn bản tự nhiên từ một entry RAG (ưu tiên raw_content, nếu không có thì format details).
+ */
+export function extractRagContent(entry: Record<string, unknown> | undefined): string {
+  if (!entry) return "";
+  if (entry["raw_content"] && typeof entry["raw_content"] === "string" && entry["raw_content"].trim()) {
+    return entry["raw_content"].trim();
+  }
+  if (entry["details"]) {
+    return formatRagDetailsToText(entry["details"]);
+  }
+  return "";
 }
 
 function generateNextId(targetFile: RagTargetFile, data: Record<string, unknown>[]): string {

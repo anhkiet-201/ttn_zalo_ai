@@ -153,6 +153,8 @@ export class GroupAnalysisService {
                 message: result.message,
                 updatedFields: args.updatedFields,
                 newEntry: args.newEntry,
+                entry: result.entry,
+                rawContent: (args.updatedFields?.raw_content || args.newEntry?.raw_content || result.entry?.raw_content) as string | undefined,
               });
             }
           }

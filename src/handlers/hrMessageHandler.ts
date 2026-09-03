@@ -2,7 +2,7 @@ import { type ParsedMessage, ThreadType } from "../types/zalo.types.js";
 import { type ZaloService } from "../services/zaloService.js";
 import { type AIService } from "../services/aiService.js";
 import { CandidateRepository, ChatHistoryRepository } from "../database/index.js";
-import { type RAGService } from "../services/ragService.js";
+import { type RAGService, normalizeText, extractRagContent } from "../services/ragService.js";
 import { config } from "../config/index.js";
 
 /**
@@ -213,11 +213,13 @@ export class HRMessageHandler {
   ): Promise<boolean> {
     const isRagCmd =
       lowerText === "rag" || lowerText === "/rag" ||
-      lowerText.startsWith("rag ") || lowerText.startsWith("/rag ");
+      lowerText === "xem rag" || lowerText === "kho rag" ||
+      lowerText.startsWith("rag ") || lowerText.startsWith("/rag ") ||
+      lowerText.startsWith("xem rag ") || lowerText.startsWith("kho rag ");
 
     if (!isRagCmd) return false;
 
-    const ragContent = rawText.replace(/^\/?rag\s*/i, "").trim();
+    const ragContent = rawText.replace(/^(?:\/?rag|xem\s+rag|kho\s+rag)\s*/i, "").trim();
 
     // 1. Xử lý lệnh XÓA RAG trực tiếp (vd: /rag xóa cmt, /rag xoa sanaky, /rag delete job_05)
     const deleteMatch = ragContent.match(/^(?:xóa|xoa|delete|del|remove)\s+(.+)$/i);
@@ -247,7 +249,51 @@ export class HRMessageHandler {
       return true;
     }
 
-    // 2. Xử lý cập nhật/tạo mới RAG qua văn bản tự nhiên
+    // 2. Tra cứu chi tiết một công ty cụ thể nếu tên khớp trong kho RAG (vd: xem rag sanaky, rag kaiser)
+    if (ragContent && ragContent.length < 40 && !ragContent.includes("\n")) {
+      const jobs = this.ragService.getJobRag();
+      const normKeyword = normalizeText(ragContent);
+      const matchedJob = jobs.find((j) => {
+        const normTitle = normalizeText(String(j["title"] || ""));
+        const normId = normalizeText(String(j["id"] || ""));
+        if (normId === normKeyword || normTitle.includes(normKeyword)) return true;
+        const aliases = Array.isArray(j["aliases"]) ? (j["aliases"] as string[]) : [];
+        return aliases.some((a) => {
+          const normA = normalizeText(String(a));
+          return normA && (normA === normKeyword || normKeyword.includes(normA) || normA.includes(normKeyword));
+        });
+      });
+
+      if (matchedJob) {
+        const vac = matchedJob["vacancies"];
+        const vacStr = vac !== undefined && vac !== null
+          ? (Number(vac) === 0 ? "🔴 TẠM NGƯNG TUYỂN" : `🟢 Đang tuyển ${vac} người`)
+          : "Đang tuyển";
+        const loc = matchedJob["location"] ? `\n📍 Địa chỉ: ${matchedJob["location"]}` : "";
+        const map = matchedJob["map_url"] ? `\n🗺️ Map: ${matchedJob["map_url"]}` : "";
+        const schedule = matchedJob["interview_schedule"] ? `\n⏰ Lịch hẹn: ${matchedJob["interview_schedule"]}` : "";
+        const jobType = matchedJob["job_type"] ? `\n💼 Vị trí: ${matchedJob["job_type"]}` : "";
+
+        const jobName = String(matchedJob["title"] || matchedJob["id"] || "").toUpperCase();
+        const headerMsg =
+          `🏢 [THÔNG TIN TUYỂN DỤNG: ${jobName}]\n` +
+          `━━━━━━━━━━━━━━━━━━━━\n` +
+          `• Trạng thái: ${vacStr}${schedule}${jobType}${loc}${map}`;
+
+        // Tin nhắn 1: Header/thông tin tổng quan
+        await this.zaloService.replyMessage(parsedMessage.raw, headerMsg.trim());
+
+        // Tin nhắn 2: Chỉ chứa rawContent
+        const rawContent = extractRagContent(matchedJob);
+        if (rawContent) {
+          await new Promise((r) => setTimeout(r, 400));
+          await this.zaloService.sendMessage(parsedMessage.threadId, rawContent, targetThreadType);
+        }
+        return true;
+      }
+    }
+
+    // 3. Xử lý cập nhật/tạo mới RAG qua văn bản tự nhiên
     if (ragContent.length > 5 && ragContent.toLowerCase() !== "ds") {
       console.log(`📥 [HR Admin] Nhận yêu cầu cập nhật RAG (${ragContent.length} ký tự)...`);
       const report = await this.aiService.updateRagFromText(ragContent, this.ragService);
@@ -255,24 +301,25 @@ export class HRMessageHandler {
       if (report.success && report.items.length > 0) {
         let replyText = `✅ [CẬP NHẬT KHO TRI THỨC RAG THÀNH CÔNG]\nĐã cập nhật ${report.updatedCount} mục:\n\n`;
         report.items.forEach((it, idx) => {
-          const e = it.entry || {};
           replyText += `${idx + 1}. 🏢 ${it.title} (ID: ${it.targetId || "Mới"})\n`;
           replyText += `   📁 ${it.targetFile} | 📝 ${it.action === "create_new" ? "Tạo mới" : "Cập nhật"}\n`;
-          if (it.targetFile === "job_rag.json") {
-            const vac = e["vacancies"];
-            const vacStr = vac !== undefined && vac !== null
-              ? (Number(vac) === 0 ? "⛔ TẠM NGƯNG TUYỂN" : `✅ Tuyển ${vac} người`) : "Đang tuyển";
-            replyText += `   👥 Chỉ tiêu: ${vacStr}\n`;
-            if (e["location"]) replyText += `   📍 ${e["location"]}\n`;
-            if (e["interview_schedule"]) replyText += `   ⏰ ${e["interview_schedule"]}\n`;
-          } else if (it.targetFile === "location_rag.json" && Array.isArray(e["nearby_suggestions"])) {
-            replyText += `   🔄 Lân cận: ${(e["nearby_suggestions"] as string[]).join(", ")}\n`;
-          }
           if (it.reason) replyText += `   📌 ${it.reason}\n`;
           replyText += "\n";
         });
         replyText += `👉 Bot đã sẵn sàng tư vấn theo dữ liệu mới nhất!`;
+
+        // Tin nhắn 1: Header báo cáo cập nhật thành công
         await this.zaloService.replyMessage(parsedMessage.raw, replyText.trim());
+
+        // Tin nhắn 2: Chỉ chứa rawContent của từng mục vừa cập nhật
+        for (const it of report.items) {
+          const e = (it.entry || {}) as Record<string, any>;
+          const raw = extractRagContent(e);
+          if (raw) {
+            await new Promise((r) => setTimeout(r, 400));
+            await this.zaloService.sendMessage(parsedMessage.threadId, raw, targetThreadType);
+          }
+        }
       } else {
         await this.zaloService.replyMessage(
           parsedMessage.raw,
@@ -327,7 +374,8 @@ export class HRMessageHandler {
       `• /ds: Xem danh sách ứng viên hôm nay\n` +
       `• /ds <ngày>: Xem ứng viên ngày trong tháng này (VD: /ds 10)\n` +
       `• /ds <ngày/tháng>: Xem ứng viên theo ngày tháng (VD: /ds 10/08)\n` +
-      `• rag / /rag: Xem danh sách công ty đang tuyển\n` +
+      `• xem rag / /rag: Xem danh sách công ty đang tuyển\n` +
+      `• xem rag <tên cty>: Xem chi tiết nội dung công ty (VD: xem rag sanaky)\n` +
       `• /rag <bài viết>: Cập nhật / tạo mới công ty từ bài viết\n` +
       `• /rag xóa <tên/id>: Xóa công ty khỏi cơ sở dữ liệu (VD: /rag xóa cmt)\n` +
       `• ping: Kiểm tra trạng thái hoạt động của bot\n` +

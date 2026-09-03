@@ -5,6 +5,7 @@ import { ThreadType } from "../types/zalo.types.js";
 import { type ZaloService } from "./zaloService.js";
 import { type CandidateRecord } from "../database/index.js";
 import { config } from "../config/index.js";
+import { formatRagDetailsToText } from "./ragService.js";
 
 export interface HrNotificationResult {
   success: boolean;
@@ -310,10 +311,12 @@ ${reason ? `📝 Lý do dời lịch: ${reason}\n` : ""}
     message?: string;
     updatedFields?: Record<string, any>;
     newEntry?: Record<string, any>;
+    entry?: Record<string, any>;
+    rawContent?: string;
   }): Promise<void> {
-    const { groupName, action, targetFile, targetId, title, reason, message, updatedFields, newEntry } = params;
+    const { groupName, action, targetFile, targetId, title, reason, message, updatedFields, newEntry, entry, rawContent: rawParam } = params;
     const actionText = action === "create_new" ? "TẠO MỚI ENTRY" : "CẬP NHẬT ENTRY";
-    const dataObj = updatedFields || newEntry || {};
+    const dataObj = updatedFields || newEntry || entry || {};
     const timeNow = new Date().toLocaleString("vi-VN");
 
     const detailLines: string[] = [];
@@ -361,7 +364,19 @@ ${detailLines.length > 0 ? `\n📊 CHI TIẾT CẬP NHẬT:\n${detailLines.join(
 📝 Ghi chú/Lý do: ${reason || message || "Phân tích tự động từ tin nhắn nhóm"}
 ⏱️ Thời gian: ${timeNow}`;
 
+    const rawContent =
+      rawParam ||
+      dataObj.raw_content ||
+      entry?.raw_content ||
+      "";
+    const contentToSend = (
+      typeof rawContent === "string" && rawContent.trim()
+        ? rawContent.trim()
+        : formatRagDetailsToText(dataObj.details || entry?.details)
+    );
+
     try {
+      // Tin nhắn 1: Header và thông tin tổng quan
       await this.zaloService.sendMessage(
         this.hrRecipientId,
         report,
@@ -370,6 +385,19 @@ ${detailLines.length > 0 ? `\n📊 CHI TIẾT CẬP NHẬT:\n${detailLines.join(
       console.log(
         `📤 [HR Notifier] Đã gửi thông báo cập nhật RAG từ nhóm [${groupName}] tới HR (${this.hrRecipientId}) thành công!`
       );
+
+      // Tin nhắn 2: Chỉ chứa rawContent
+      if (contentToSend) {
+        await new Promise((r) => setTimeout(r, 400));
+        await this.zaloService.sendMessage(
+          this.hrRecipientId,
+          contentToSend,
+          config.hrThreadType
+        );
+        console.log(
+          `📤 [HR Notifier] Đã gửi tin nhắn rawContent (${contentToSend.length} ký tự) tới HR (${this.hrRecipientId})!`
+        );
+      }
     } catch (err) {
       console.error(
         `❌ Lỗi gửi thông báo cập nhật RAG tới HR (${this.hrRecipientId}):`,
