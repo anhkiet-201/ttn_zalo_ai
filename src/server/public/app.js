@@ -445,6 +445,7 @@ function App() {
         onLoadOlderMessages=${handleLoadOlderMessages}
         onImageClick=${(url) => setLightboxImage(url)}
         ownId=${ownId}
+        hideOnMobile=${!activeThreadId}
       />
 
       <${LightboxModal}

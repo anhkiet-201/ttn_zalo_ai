@@ -41,16 +41,22 @@ body {
   background-color: #ffffff;
   color: var(--text-primary);
   height: 100vh;
+  height: 100dvh;
   width: 100vw;
+  width: 100%;
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
+  -webkit-text-size-adjust: 100%;
 }
 
 .zalo-app-wrapper {
   display: flex;
   width: 100vw;
+  width: 100%;
   height: 100vh;
+  height: 100dvh;
   overflow: hidden;
+  position: relative;
 }
 
 /* ==========================================================================
@@ -1240,17 +1246,248 @@ body {
 }
 
 @media (max-width: 768px) {
+  /* 1. Single-panel Fullscreen Navigation */
   .zalo-sidebar {
-    width: 100vw;
+    width: 100% !important;
+    height: 100% !important;
+    flex: 1;
+    border-right: none;
   }
   .zalo-sidebar.hide-mobile {
+    display: none !important;
+  }
+
+  .zalo-chat-area {
+    width: 100% !important;
+    height: 100% !important;
+    flex: 1;
+  }
+  .zalo-chat-area.hide-mobile {
+    display: none !important;
+  }
+
+  /* 2. Mobile Header */
+  .chat-main-header {
+    height: 56px;
+    padding: 0 10px 0 6px;
+    gap: 8px;
+  }
+
+  .chat-header-left {
+    gap: 8px;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .btn-mobile-back {
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    cursor: pointer;
+    color: var(--text-primary);
+    transition: background 0.15s ease;
+  }
+  .btn-mobile-back:active {
+    background: #e2e8f0;
+  }
+
+  .chat-header-avatar {
+    width: 36px;
+    height: 36px;
+    font-size: 13px;
+    flex-shrink: 0;
+  }
+
+  .chat-header-info {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .chat-header-title {
+    font-size: 14px;
+    max-width: 150px;
+  }
+
+  .chat-header-subtitle {
+    font-size: 11px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .chat-header-right {
+    flex-shrink: 0;
+    gap: 6px;
+  }
+
+  /* Compact Mode Switch trên Mobile */
+  .ios-mode-switch-wrapper {
+    padding: 3px 6px 3px 8px;
+    gap: 6px;
+  }
+  .ios-switch-label {
+    font-size: 11px;
+  }
+  .ios-switch-control {
+    width: 32px;
+    height: 18px;
+  }
+  .ios-switch-slider::before {
+    width: 14px;
+    height: 14px;
+    left: 2px;
+    bottom: 2px;
+  }
+  .ios-switch-control input:checked + .ios-switch-slider::before {
+    transform: translateX(14px);
+  }
+
+  /* 3. Candidate Intelligence Banner dạng chip cuộn ngang */
+  .candidate-banner-flat {
+    padding: 6px 10px;
+    gap: 8px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    white-space: nowrap;
+    scrollbar-width: none;
+  }
+  .candidate-banner-flat::-webkit-scrollbar {
     display: none;
   }
-  .btn-mobile-back {
-    display: flex;
+  .candidate-banner-item {
+    background: #f1f5f9;
+    padding: 4px 8px;
+    border-radius: 6px;
+    flex-shrink: 0;
+    font-size: 11px;
+    border: 1px solid #e2e8f0;
   }
+
+  /* 4. Filter Tabs dạng chip cuộn ngang ở Sidebar */
+  .sidebar-header {
+    padding: 10px 12px 6px 12px;
+  }
+  .filter-tabs-row {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    justify-content: flex-start;
+    gap: 6px;
+    padding-bottom: 4px;
+  }
+  .filter-tabs-row::-webkit-scrollbar {
+    display: none;
+  }
+  .filter-tab-pill {
+    flex-shrink: 0;
+    white-space: nowrap;
+    padding: 5px 12px;
+    font-size: 12px;
+    background: #f1f5f9;
+    border-radius: 100px;
+  }
+  .filter-tab-pill.active {
+    background: var(--zalo-primary-light);
+    color: var(--zalo-primary);
+  }
+  .filter-tab-pill.active::after {
+    display: none; /* Bỏ gạch chân trên mobile, dùng pill background */
+  }
+  .filter-tab-pill.manual-tab.active {
+    background: #fff7ed;
+    color: var(--ios-orange);
+  }
+
+  /* 5. Timeline Tin nhắn */
+  .chat-messages-container {
+    padding: 10px 10px 12px 10px;
+    gap: 8px;
+  }
+
   .message-row {
-    max-width: 85%;
+    max-width: 90%;
+  }
+
+  .msg-sender-avatar {
+    width: 28px;
+    height: 28px;
+    font-size: 11px;
+  }
+
+  .msg-text-content {
+    font-size: 13.5px;
+    line-height: 1.45;
+  }
+
+  /* 6. Voice Message Widget trên Mobile */
+  .zalo-voice-msg-card {
+    min-width: 210px;
+    max-width: 260px;
+    gap: 6px;
+  }
+  .zalo-voice-play-circle {
+    width: 36px;
+    height: 36px;
+  }
+
+  /* 7. Input Toolbar & Textarea Mobile */
+  .chat-input-wrapper {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    background: #ffffff;
+  }
+
+  .chat-input-toolbar {
+    height: 34px;
+    padding: 0 10px;
+  }
+  .btn-tool-outline {
+    width: 32px;
+    height: 32px;
+  }
+
+  .chat-input-box-row {
+    padding: 6px 10px calc(8px + env(safe-area-inset-bottom, 0px)) 10px;
+    gap: 8px;
+  }
+
+  .chat-textarea-native {
+    font-size: 16px !important; /* QUAN TRỌNG: Ngăn chặn iOS Safari tự động phóng to (Auto-Zoom) */
+    line-height: 1.4;
+    padding: 4px 0;
+  }
+
+  .btn-native-send {
+    width: 36px;
+    height: 36px;
+  }
+
+  /* 8. Modals trên Mobile */
+  .modal-dialog {
+    width: calc(100% - 32px);
+    max-width: 380px;
+    padding: 18px;
+    border-radius: 16px;
+  }
+  .modal-input {
+    font-size: 16px !important; /* Ngăn chặn iOS Safari auto-zoom khi focus */
+    height: 42px;
+  }
+  .modal-actions button {
+    height: 40px;
+    padding: 0 16px;
+    font-size: 14px;
+  }
+
+  .lightbox-close-btn {
+    top: calc(12px + env(safe-area-inset-top, 0px));
+    right: 16px;
+    width: 44px;
+    height: 44px;
+    font-size: 20px;
   }
 }
 

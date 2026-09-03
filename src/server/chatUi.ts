@@ -10,12 +10,12 @@ export function renderChatPage(initialThreadId: string = "", initialOwnId: strin
 <html lang="vi">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>Zalo AI Bot - Executive Chat</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/chat.css?v=8">
+  <link rel="stylesheet" href="/static/chat.css?v=9">
   <script>
     window.__INITIAL_THREAD_ID__ = ${safeThreadId};
     window.__LOGGED_IN_ID__ = ${safeOwnId};
@@ -23,7 +23,7 @@ export function renderChatPage(initialThreadId: string = "", initialOwnId: strin
 </head>
 <body>
   <div id="root"></div>
-  <script type="module" src="/static/app.js?v=8"></script>
+  <script type="module" src="/static/app.js?v=9"></script>
 </body>
 </html>`;
 }

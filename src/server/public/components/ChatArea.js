@@ -104,6 +104,7 @@ export function ChatArea({
   onLoadOlderMessages,
   onImageClick,
   ownId,
+  hideOnMobile,
 }) {
   const [inputText, setInputText] = useState('');
   const [selectedImages, setSelectedImages] = useState([]);
@@ -208,7 +209,7 @@ export function ChatArea({
 
   if (!activeThread) {
     return html`
-      <main className="zalo-chat-area">
+      <main className=${`zalo-chat-area ${hideOnMobile ? 'hide-mobile' : ''}`}>
         <div className="chat-welcome-view">
           <div className="welcome-badge-icon">
             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -236,7 +237,7 @@ export function ChatArea({
   const canSendInput = isGroup || isManual;
 
   return html`
-    <main className="zalo-chat-area">
+    <main className=${`zalo-chat-area ${hideOnMobile ? 'hide-mobile' : ''}`}>
       <!-- 1. Header Zalo PC -->
       <header className="chat-main-header">
         <div className="chat-header-left">
