@@ -44,9 +44,9 @@ export class GroupMessageHandler {
     }
     // Lọc từ khóa nội bộ hoặc tin nhắn văn bản quá ngắn (bỏ qua im lặng)
     if (parsedMessage.text && parsedMessage.mediaType !== "sticker") {
-      const lowerText = parsedMessage.text.toLowerCase().trim();
-      const matchedKeyword = config.groupIgnoreKeywords.find((kw) => lowerText.includes(kw));
-      if (matchedKeyword || lowerText.length < 25) {
+      const rawText = parsedMessage.text.trim();
+      const matchedPattern = config.groupIgnorePatterns.find((pattern) => pattern.test(rawText));
+      if (matchedPattern || rawText.length < config.groupMinMessageLength) {
         return;
       }
     }

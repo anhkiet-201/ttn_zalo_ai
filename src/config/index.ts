@@ -56,6 +56,119 @@ function getCredentialsFromEnv(): Credentials | undefined {
   }
 }
 
+/**
+ * Danh sách các mẫu biểu thức chính quy (Regex) mặc định dùng để lọc bỏ các tin nhắn
+ * trao đổi nội bộ, hỏi thăm, đón người, phỏng vấn/nhận việc lại trong nhóm.
+ */
+export const DEFAULT_GROUP_IGNORE_PATTERNS: RegExp[] = [
+  /mai\s+(?:pv|nv|phỏng\s+vấn|nhận\s+việc)/i,
+  /(?:pv|nv|phỏng\s+vấn|nhận\s+việc)\s+lại/i,
+  /(?:danh\s+sách|ds)\s+(?:pv|nv|phỏng\s+vấn|nhận\s+việc)/i,
+  /(?:liên\s+hệ.*(?:ứng\s+viên|uv)|(?:ứng\s+viên|uv).*liên\s+hệ)/i,
+  /đón\s+(?:dùm|giùm|giúp|hộ)/i,
+];
+
+/**
+ * Phân tách chuỗi danh sách các mẫu lọc từ .env một cách thông minh,
+ * không làm gãy các biểu thức regex chứa dấu phẩy (như lượng từ \d{3,5}).
+ */
+export function splitIgnorePatterns(input: string): string[] {
+  const results: string[] = [];
+  let current = "";
+  let inRegex = false;
+
+  for (let i = 0; i < input.length; i++) {
+    const char = input[i];
+
+    if (char === "/" && (i === 0 || input[i - 1] !== "\\")) {
+      inRegex = !inRegex;
+      current += char;
+    } else if (char === "," && !inRegex) {
+      if (current.trim()) {
+        results.push(current.trim());
+      }
+      current = "";
+    } else {
+      current += char;
+    }
+  }
+
+  if (current.trim()) {
+    results.push(current.trim());
+  }
+
+  return results;
+}
+
+/**
+ * Chuyển đổi chuỗi cấu hình (từ khóa thường hoặc regex) thành danh sách RegExp an toàn.
+ */
+export function parseIgnorePatterns(rawInput?: string): {
+  keywords: string[];
+  patterns: RegExp[];
+} {
+  const patterns: RegExp[] = [...DEFAULT_GROUP_IGNORE_PATTERNS];
+  const keywords: string[] = [
+    "mai pv",
+    "mai nv",
+    "pv lại",
+    "nv lại",
+    "danh sách pv",
+    "danh sách nv",
+    "liên hệ ứng viên",
+    "đón dùm",
+  ];
+
+  if (!rawInput || !rawInput.trim()) {
+    return { keywords, patterns };
+  }
+
+  const items = splitIgnorePatterns(rawInput);
+
+  for (const item of items) {
+    if (!item) continue;
+    keywords.push(item);
+
+    // Dạng regex: /pattern/flags
+    const slashMatch = item.match(/^\/(.+)\/([a-z]*)$/i);
+    if (slashMatch) {
+      try {
+        const regex = new RegExp(slashMatch[1], slashMatch[2] || "i");
+        patterns.push(regex);
+        continue;
+      } catch (err) {
+        console.warn(`⚠️ [Config] Biểu thức regex không hợp lệ trong GROUP_IGNORE_KEYWORDS: "${item}"`, err);
+        continue;
+      }
+    }
+
+    // Dạng prefix: regex:...
+    if (item.toLowerCase().startsWith("regex:")) {
+      const patternStr = item.slice(6).trim();
+      try {
+        const regex = new RegExp(patternStr, "i");
+        patterns.push(regex);
+        continue;
+      } catch (err) {
+        console.warn(`⚠️ [Config] Biểu thức regex không hợp lệ: "${item}"`, err);
+        continue;
+      }
+    }
+
+    // Từ khóa chuỗi thông thường: escape ký tự đặc biệt để match an toàn
+    try {
+      const escaped = item.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      patterns.push(new RegExp(escaped, "i"));
+    } catch {
+      // Bỏ qua nếu có lỗi
+    }
+  }
+
+  return { keywords, patterns };
+}
+
+const parsedIgnore = parseIgnorePatterns(process.env.GROUP_IGNORE_KEYWORDS);
+
 export const config: BotConfig = {
   selfListen: process.env.SELF_LISTEN !== "false", // Mặc định là true để bắt cả tin nhắn gửi đến và gửi đi
   checkUpdate: process.env.CHECK_UPDATE !== "false",
@@ -77,9 +190,9 @@ export const config: BotConfig = {
     Number(process.env.MESSAGE_DEBOUNCE_SECONDS) ||
     30,
   groupDebounceSeconds: Number(process.env.GROUP_DEBOUNCE_SECONDS) || 30,
-  groupIgnoreKeywords: process.env.GROUP_IGNORE_KEYWORDS
-    ? process.env.GROUP_IGNORE_KEYWORDS.split(",").map((k) => k.trim().toLowerCase())
-    : ["mai pv", "mai nv"],
+  groupIgnoreKeywords: parsedIgnore.keywords,
+  groupIgnorePatterns: parsedIgnore.patterns,
+  groupMinMessageLength: Number(process.env.GROUP_MIN_MESSAGE_LENGTH) || 30,
   hrRecipientId: process.env.HR_RECIPIENT_ID || "",
   hrThreadType:
     (process.env.HR_THREAD_TYPE || "group").toLowerCase() === "user"

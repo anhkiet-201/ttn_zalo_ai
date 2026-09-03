@@ -52,6 +52,8 @@ export interface BotConfig {
   maxDebounceSeconds: number;
   groupDebounceSeconds: number;
   groupIgnoreKeywords: string[];
+  groupIgnorePatterns: RegExp[];
+  groupMinMessageLength: number;
   hrRecipientId: string;
   hrThreadType: import("zca-js").ThreadType;
   chatHistoryLimit: number;
