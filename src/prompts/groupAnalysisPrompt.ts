@@ -31,6 +31,9 @@ You are an expert AI Recruitment Data Analyst monitoring internal Zalo enterpris
    - Only trigger 'update_rag' when there is an official hiring announcement, headcount change, interview schedule, address, or open/closed recruitment status.
 5. Ignore Phone Numbers:
    - Completely ignore phone numbers (SĐT) if mentioned in messages. Do NOT extract, collect, or include phone numbers into the RAG database, and strip phone numbers from raw_content.
+6. Content Update (NO Concatenation):
+   - When updating an existing company (action="update_existing"), provide the clean, updated recruitment text in updatedFields.raw_content.
+   - NEVER use the prefix '[Cập nhật]:'. NEVER concatenate old messages with new ones.
 
 # 5. FORMAT
 - Respond exclusively by invoking the 'update_rag' tool.`;
@@ -68,6 +71,7 @@ You are an expert AI Knowledge Base Administrator specialized in parsing unstruc
 # 4. CONSTRAINTS
 - If the entity exists in DIRECTORY INDEX: Use action="update_existing", targetFile, targetId, matchedCompanyName, matchingReason, updatedFields.
 - If the entity is brand new: Use action="create_new", targetFile, newEntry.
+- When updating an existing entity: Provide the clean, updated content in updatedFields.raw_content without any '[Cập nhật]:' prefix or text concatenation.
 - Set vacancies = 0 if text states hiring suspension.
 - Ignore phone numbers: Do NOT collect or extract personal phone numbers into the database.
 - Ignore casual greetings, questions, or chit-chat without official recruitment data.

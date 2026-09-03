@@ -223,6 +223,125 @@ export function extractRagContent(entry: Record<string, unknown> | undefined): s
   return "";
 }
 
+/**
+ * Hợp nhất thông minh tin tuyển dụng raw_content hiện tại với thông tin cập nhật mới.
+ * Bảo toàn các trường cốt lõi (Bản đồ, địa chỉ, lương, bao cơm), đồng bộ trạng thái tuyển dụng và lịch hẹn,
+ * loại bỏ triệt để tiền tố và các khối lặp "[Cập nhật]:".
+ */
+export function consolidateJobRawContent(
+  currentRaw: string,
+  newUpdateText: string,
+  updatedFields: Record<string, unknown> = {}
+): string {
+  // 1. Làm sạch currentRaw: nếu đã bị nối nhiều đoạn [Cập nhật]: thì lấy phần gốc sạch
+  let cleanBase = (currentRaw || "").trim();
+  if (cleanBase.includes("[Cập nhật]:")) {
+    const parts = cleanBase.split(/\[Cập nhật\]:\s*/i);
+    cleanBase = parts[0].trim();
+  }
+
+  const cleanUpdate = (newUpdateText || "").trim().replace(/^\[Cập nhật\]:\s*/i, "");
+
+  // Trích xuất map_url và location từ cleanBase nếu có để bảo toàn
+  const mapMatch = cleanBase.match(/(?:📍\s*)?(?:Bản đồ\/Vị trí|Bản đồ|Map):\s*(https?:\/\/[^\s\n]+)/i);
+  const existingMap = mapMatch ? mapMatch[1] : (updatedFields["map_url"] as string) || "";
+
+  const addressMatch = cleanBase.match(/(?:📍\s*)?(?:Địa chỉ|Địa điểm|Vị trí):\s*([^\n]+)/i);
+  const existingAddress = addressMatch ? addressMatch[1].trim() : (updatedFields["location"] as string) || "";
+
+  const isFullPost =
+    cleanUpdate.includes("LƯƠNG") ||
+    cleanUpdate.includes("luong") ||
+    cleanUpdate.includes("Lương") ||
+    cleanUpdate.includes("THU NHẬP") ||
+    (cleanUpdate.split("\n").filter((l) => l.trim().length > 0).length >= 4 &&
+      (cleanUpdate.includes("📢") || cleanUpdate.includes("🏢") || cleanUpdate.includes("🏭") || cleanUpdate.includes("CÔNG TY")));
+
+  let result = "";
+
+  if (isFullPost) {
+    result = cleanUpdate;
+    // Đảm bảo map_url được bảo lưu nếu bài viết mới thiếu link bản đồ
+    if (existingMap && !result.includes("http") && !result.includes("maps")) {
+      const lines = result.split("\n");
+      const insertIdx = lines.findIndex((l) => l.includes("Địa chỉ") || l.includes("Địa điểm"));
+      if (insertIdx !== -1) {
+        lines.splice(insertIdx + 1, 0, `- Bản đồ/Vị trí: ${existingMap}`);
+        result = lines.join("\n");
+      } else {
+        result += `\n- Bản đồ/Vị trí: ${existingMap}`;
+      }
+    }
+  } else {
+    // cleanUpdate là thông báo ngắn hoặc cập nhật lịch hẹn/yêu cầu
+    result = cleanBase;
+
+    // Bổ sung các lưu ý mới vào bài viết
+    if (cleanUpdate && !result.includes(cleanUpdate)) {
+      result += `\n- Lưu ý / Yêu cầu: ${cleanUpdate}`;
+    }
+  }
+
+  // 2. Đồng bộ hóa trạng thái tuyển dụng (vacancies)
+  const vacancies = updatedFields["vacancies"];
+  if (vacancies !== undefined && vacancies !== null) {
+    const vacNum = Number(vacancies);
+    if (vacNum === 0) {
+      // Tạm ngưng tuyển
+      if (!result.includes("TẠM NGƯNG TUYỂN")) {
+        const lines = result.split("\n");
+        if (lines.length > 0 && !lines[0].includes("TẠM NGƯNG")) {
+          lines[0] = `${lines[0]} (HIỆN TẠI TẠM NGƯNG TUYỂN)`;
+        }
+        result = lines.join("\n");
+      }
+      result = result.replace(
+        /(?:-\s*)?Số lượng (?:cần|đang) tuyển:\s*[^\n]+/i,
+        "- Số lượng cần tuyển: 0 người (Tạm ngưng tuyển)"
+      );
+    } else {
+      // Đang tuyển lại -> Xóa bỏ toàn bộ nhãn tạm ngưng
+      result = result
+        .replace(/\(HIỆN TẠI TẠM NGƯNG TUYỂN\)/gi, "")
+        .replace(/\(Tạm ngưng tuyển\)/gi, "")
+        .replace(/\(TẠM NGƯNG[^\)]*\)/gi, "")
+        .trim();
+
+      const vacStr = `- Số lượng cần tuyển: ${vacNum} người (Đang tuyển)`;
+      if (/(?:-\s*)?Số lượng (?:cần|đang) tuyển:/i.test(result)) {
+        result = result.replace(/(?:-\s*)?Số lượng (?:cần|đang) tuyển:[^\n]*/i, vacStr);
+      }
+    }
+  }
+
+  // 3. Đồng bộ hóa lịch hẹn (interview_schedule)
+  const interviewSchedule = (updatedFields["interview_schedule"] as string) || "";
+  if (interviewSchedule) {
+    const schedStr = `- Lịch hẹn nhận việc: ${interviewSchedule}`;
+    if (/(?:-\s*)?Lịch hẹn(?: nhận việc)?:/i.test(result)) {
+      result = result.replace(/(?:-\s*)?Lịch hẹn(?: nhận việc)?:[^\n]*/i, schedStr);
+    } else {
+      const lines = result.split("\n");
+      const vacIdx = lines.findIndex((l) => l.includes("Số lượng"));
+      if (vacIdx !== -1) {
+        lines.splice(vacIdx + 1, 0, schedStr);
+        result = lines.join("\n");
+      } else {
+        result += `\n${schedStr}`;
+      }
+    }
+  }
+
+  // 4. Làm sạch triệt để: xóa khoảng trắng thừa, xóa mọi chuỗi [Cập nhật]: còn sót và emoji
+  result = result
+    .replace(/\[Cập nhật\]:\s*/gi, "")
+    .replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F1E0}-\u{1F1FF}]/gu, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+
+  return result;
+}
+
 function generateNextId(targetFile: RagTargetFile, data: Record<string, unknown>[]): string {
   const prefix =
     targetFile === "job_rag"
@@ -368,6 +487,21 @@ export class RAGService {
   }
 
   /**
+   * Lấy chi tiết một entry theo targetFile và id
+   */
+  public getEntryById(targetFile: RagTargetFile, id: string): Record<string, unknown> | null {
+    try {
+      const filePath = path.join(this.baseDir, "data", `${targetFile}.json`);
+      if (!fs.existsSync(filePath)) return null;
+      const data: Record<string, unknown>[] = JSON.parse(fs.readFileSync(filePath, "utf-8"));
+      return data.find((entry) => entry["id"] === id) || null;
+    } catch (err) {
+      console.error(`❌ [RAGService] Lỗi khi getEntryById(${targetFile}, ${id}):`, err);
+      return null;
+    }
+  }
+
+  /**
    * Thực thi lệnh cập nhật RAG khi Gemini fire tool call "update_rag".
    * Hỗ trợ cả 3 RAG file: job_rag, policy_rag, location_rag.
    * Sau khi ghi file thành công, cache sẽ tự động được invalidate bởi fs.watch.
@@ -398,16 +532,15 @@ export class RAGService {
         };
       }
 
-      // Merge fields thông minh
+      // Merge fields thông minh: CẬP NHẬT đè nội dung mới, tuyệt đối không nối chuỗi
       const existing = data[idx] as Record<string, unknown>;
       for (const [key, value] of Object.entries(args.updatedFields)) {
         if (value === undefined || value === null || value === "") continue;
 
         if (key === "raw_content") {
           const valStr = String(value).trim();
-          const existStr = String(existing["raw_content"] || "").trim();
-          if (valStr && !existStr.includes(valStr)) {
-            existing["raw_content"] = existStr ? `${existStr}\n\n[Cập nhật]: ${valStr}` : valStr;
+          if (valStr) {
+            existing["raw_content"] = valStr;
           }
         } else if (key === "aliases" && Array.isArray(value)) {
           const curAliases = Array.isArray(existing["aliases"]) ? existing["aliases"] : [];
@@ -416,6 +549,16 @@ export class RAGService {
           existing[key] = value;
         }
       }
+
+      // Tự động đồng bộ trạng thái và lịch hẹn trong raw_content nếu raw_content chưa được cập nhật trực tiếp
+      if (args.targetFile === "job_rag" && typeof existing["raw_content"] === "string") {
+        existing["raw_content"] = consolidateJobRawContent(
+          existing["raw_content"] as string,
+          "",
+          args.updatedFields
+        );
+      }
+
       data[idx] = existing;
 
       try {

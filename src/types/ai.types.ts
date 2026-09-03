@@ -233,7 +233,11 @@ export const groupRagTools: FunctionDeclaration[] = [
             interview_schedule: { type: Type.STRING, description: "Lịch hẹn phỏng vấn / nhận việc (vd: 'Cổng công ty 7h30 sáng')" },
             job_type: { type: Type.STRING, description: "Ngành nghề sản xuất hoặc loại công việc (vd: 'Sản xuất, thời vụ')" },
             aliases: { type: Type.ARRAY, items: { type: Type.STRING }, description: "Các tên viết tắt, gọi tắt (vd: ['adc', 'công ty adc'])" },
-            raw_content: { type: Type.STRING, description: "Nội dung tin nhắn bổ sung" },
+            raw_content: {
+              type: Type.STRING,
+              description:
+                "Nội dung thông tin tuyển dụng cập nhật mới nhất (được kết hợp với bài viết cũ để tạo bài viết mới hoàn chỉnh, tuyệt đối không dùng tiền tố '[Cập nhật]:', không lặp lại nội dung cũ)",
+            },
           },
         },
         newEntry: {

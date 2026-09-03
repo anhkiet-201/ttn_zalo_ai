@@ -1,6 +1,6 @@
 import { GoogleGenAI, type Content, type Part } from "@google/genai";
 import { config } from "../config/index.js";
-import { type RAGService, type RagUpdateArgs } from "./ragService.js";
+import { type RAGService, type RagUpdateArgs, consolidateJobRawContent } from "./ragService.js";
 import { type HRNotifier } from "./hrNotifier.js";
 import { type GroupQueuedMessage } from "../handlers/groupMessageBatcher.js";
 import {
@@ -21,6 +21,54 @@ import {
  */
 export class GroupAnalysisService {
   constructor(private readonly ai: GoogleGenAI | null) {}
+
+  /**
+   * Kết hợp bài viết tuyển dụng hiện tại trong RAG với thông tin cập nhật mới để tạo thành bài viết mới hoàn chỉnh.
+   * Sử dụng Gemini AI và fallback về hàm consolidateJobRawContent nếu AI gặp sự cố.
+   */
+  public async synthesizeJobAnnouncement(
+    currentRaw: string,
+    newUpdateText: string,
+    updatedFields: Record<string, unknown> = {}
+  ): Promise<string> {
+    const fallbackResult = consolidateJobRawContent(currentRaw, newUpdateText, updatedFields);
+
+    if (!this.ai) {
+      return fallbackResult;
+    }
+
+    try {
+      const prompt =
+        `Bạn là chuyên gia biên tập tin tuyển dụng cho lao động phổ thông tại Bình Dương.\n` +
+        `NHIỆM VỤ: Kết hợp [BÀI VIẾT TUYỂN DỤNG HIỆN TẠI] với [THÔNG TIN CẬP NHẬT MỚI] để tạo ra DUY NHẤT MỘT BÀI VIẾT MỚI HOÀN CHỈNH, CHUẨN XÁC, RÕ RÀNG.\n\n` +
+        `[BÀI VIẾT TUYỂN DỤNG HIỆN TẠI TRONG KHO RAG]:\n${currentRaw}\n\n` +
+        `[THÔNG TIN CẬP NHẬT MỚI]:\n${newUpdateText}\n\n` +
+        `CÁC YÊU CẦU BẮT BUỘC:\n` +
+        `1. Giữ nguyên các thông tin nền tảng quan trọng từ tin cũ: Địa chỉ công ty, Link bản đồ Google Maps (Bản đồ/Vị trí: https://...), Mức lương ngày/đêm/tăng ca, Phụ cấp, Chế độ công ty bao cơm.\n` +
+        `2. Cập nhật đè các thông tin mới nhất: Lịch hẹn phỏng vấn/nhận việc mới (ví dụ hẹn 19:20 tối nay), yêu cầu mới (CCCD, giày bít mũi/dép), các lưu ý mới (ví dụ lưu ý mã số thẻ nhân viên...).\n` +
+        `3. Đồng bộ trạng thái: Nếu thông tin mới báo nhận việc / tuyển lại thì XÓA BỎ HOÀN TOÀN các chữ như '(HIỆN TẠI TẠM NGƯNG TUYỂN)', '0 người', đổi thành đang tuyển. Nếu thông tin mới báo tạm ngưng tuyển thì cập nhật thành tạm ngưng tuyển.\n` +
+        `4. TUYỆT ĐỐI KHÔNG DÙNG tiền tố '[Cập nhật]:', TUYỆT ĐỐI KHÔNG NỐI CHUỖI bài viết cũ với bài viết mới, KHÔNG lặp lại các đoạn văn bản trùng nhau.\n` +
+        `5. TUYỆT ĐỐI KHÔNG DÙNG ICON/EMOJI TRANG TRÍ (như 🚨, 🔥, 🆙, 📌, ⏰, 👥, 💰, 📍...). Định dạng bài viết chuẩn mực phân mục bằng dấu gạch đầu dòng '-'.\n` +
+        `6. Trả về DUY NHẤT nội dung bài viết mới hoàn chỉnh, không thêm lời dẫn hay giải thích gì khác.`;
+
+      const response = await this.ai.models.generateContent({
+        model: config.geminiModel,
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+      });
+
+      let text = response.text ? response.text.trim() : "";
+      if (text && text.length > 50) {
+        text = text.replace(/\[Cập nhật\]:\s*/gi, "").trim();
+        const emojiRegex = /[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F1E0}-\u{1F1FF}]/gu;
+        text = text.replace(emojiRegex, "").trim();
+        return text;
+      }
+      return fallbackResult;
+    } catch (err) {
+      console.warn("⚠️ [GroupAnalysisService] Lỗi khi AI tổng hợp bài viết mới, dùng fallback:", err);
+      return fallbackResult;
+    }
+  }
 
   /**
    * Phân tích batch tin nhắn nhóm bằng Gemini Tool Calling.
@@ -127,6 +175,29 @@ export class GroupAnalysisService {
           if (call.name !== "update_rag") continue;
 
           const args = (call.args as unknown) as RagUpdateArgs;
+
+          // Kết hợp tin tuyển hiện tại với cập nhật mới để tạo bài viết mới hoàn chỉnh
+          if (args.action === "update_existing" && args.targetFile === "job_rag" && args.targetId) {
+            const existingEntry = ragService.getEntryById(args.targetFile, args.targetId);
+            if (existingEntry) {
+              const currentRaw = (existingEntry["raw_content"] as string) || "";
+              const updateSnippet =
+                (args.updatedFields?.raw_content as string) ||
+                (args.reason as string) ||
+                "";
+
+              if (currentRaw && updateSnippet) {
+                const synthesized = await this.synthesizeJobAnnouncement(
+                  currentRaw,
+                  updateSnippet,
+                  args.updatedFields || {}
+                );
+                if (!args.updatedFields) args.updatedFields = {};
+                args.updatedFields.raw_content = synthesized;
+              }
+            }
+          }
+
           const result = ragService.executeRagUpdate(args);
           if (result.success) {
             updatedCount++;
@@ -301,6 +372,30 @@ export class GroupAnalysisService {
           if (call.name !== "update_rag") continue;
 
           const args = (call.args as unknown) as RagUpdateArgs;
+
+          // Kết hợp tin tuyển hiện tại với cập nhật mới từ HR để tạo bài viết mới hoàn chỉnh
+          if (args.action === "update_existing" && args.targetFile === "job_rag" && args.targetId) {
+            const existingEntry = ragService.getEntryById(args.targetFile, args.targetId);
+            if (existingEntry) {
+              const currentRaw = (existingEntry["raw_content"] as string) || "";
+              const updateSnippet =
+                (args.updatedFields?.raw_content as string) ||
+                rawText ||
+                (args.reason as string) ||
+                "";
+
+              if (currentRaw && updateSnippet) {
+                const synthesized = await this.synthesizeJobAnnouncement(
+                  currentRaw,
+                  updateSnippet,
+                  args.updatedFields || {}
+                );
+                if (!args.updatedFields) args.updatedFields = {};
+                args.updatedFields.raw_content = synthesized;
+              }
+            }
+          }
+
           const result = ragService.executeRagUpdate(args);
           const currentEntry = result.entry || args.newEntry || args.updatedFields || {};
 

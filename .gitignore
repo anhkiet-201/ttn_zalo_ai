@@ -15,4 +15,7 @@ data/uploads/
 data/job_rag.json
 data/location_rag.json
 data/policy_rag.json
+data/*.backup
+data/*.production_backup
+*.backup
 .DS_Store
