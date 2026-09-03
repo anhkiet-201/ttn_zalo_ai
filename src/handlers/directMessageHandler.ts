@@ -459,11 +459,19 @@ export class DirectMessageHandler {
       .replace(/\{\s*\|{2,}\s*\}/g, "|||")
       .replace(/\|{2,}/g, "|||");
 
-    const cleanSnippet = (s: string): string =>
-      s.trim()
+    const cleanSnippet = (s: string): string => {
+      let cleaned = s.trim()
         .replace(/^[\]\)\}>\s]+/, "")
         .replace(/[\[\(\{<\s]+$/, "")
         .trim();
+
+      // Loại bỏ tiền tố đánh số máy móc dạng "1. ", "2. ", "Dạ 1. ", "Dạ 2. ", "1) ", "1: "
+      cleaned = cleaned.replace(/^(?:Dạ\s*)?(?:\d+[\.\)\-:]\s*)/i, (match) => {
+        return /^Dạ/i.test(match) ? "Dạ " : "";
+      }).trim();
+
+      return cleaned;
+    };
 
     if (normalized.includes("|||")) {
       return normalized.split("|||").map(cleanSnippet).filter((s) => s.length > 0);
