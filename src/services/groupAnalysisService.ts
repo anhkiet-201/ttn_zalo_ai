@@ -39,17 +39,18 @@ export class GroupAnalysisService {
 
     try {
       const prompt =
-        `Bạn là chuyên gia biên tập tin tuyển dụng cho lao động phổ thông tại Bình Dương.\n` +
-        `NHIỆM VỤ: Kết hợp [BÀI VIẾT TUYỂN DỤNG HIỆN TẠI] với [THÔNG TIN CẬP NHẬT MỚI] để tạo ra DUY NHẤT MỘT BÀI VIẾT MỚI HOÀN CHỈNH, CHUẨN XÁC, RÕ RÀNG.\n\n` +
-        `[BÀI VIẾT TUYỂN DỤNG HIỆN TẠI TRONG KHO RAG]:\n${currentRaw}\n\n` +
-        `[THÔNG TIN CẬP NHẬT MỚI]:\n${newUpdateText}\n\n` +
-        `CÁC YÊU CẦU BẮT BUỘC:\n` +
-        `1. Giữ nguyên các thông tin nền tảng quan trọng từ tin cũ: Địa chỉ công ty, Link bản đồ Google Maps (Bản đồ/Vị trí: https://...), Mức lương ngày/đêm/tăng ca, Phụ cấp, Chế độ công ty bao cơm.\n` +
-        `2. Cập nhật đè các thông tin mới nhất: Lịch hẹn phỏng vấn/nhận việc mới (ví dụ hẹn 19:20 tối nay), yêu cầu mới (CCCD, giày bít mũi/dép), các lưu ý mới (ví dụ lưu ý mã số thẻ nhân viên...).\n` +
-        `3. Đồng bộ trạng thái: Nếu thông tin mới báo nhận việc / tuyển lại thì XÓA BỎ HOÀN TOÀN các chữ như '(HIỆN TẠI TẠM NGƯNG TUYỂN)', '0 người', đổi thành đang tuyển. Nếu thông tin mới báo tạm ngưng tuyển thì cập nhật thành tạm ngưng tuyển.\n` +
-        `4. TUYỆT ĐỐI KHÔNG DÙNG tiền tố '[Cập nhật]:', TUYỆT ĐỐI KHÔNG NỐI CHUỖI bài viết cũ với bài viết mới, KHÔNG lặp lại các đoạn văn bản trùng nhau.\n` +
-        `5. TUYỆT ĐỐI KHÔNG DÙNG ICON/EMOJI TRANG TRÍ (như 🚨, 🔥, 🆙, 📌, ⏰, 👥, 💰, 📍...). Định dạng bài viết chuẩn mực phân mục bằng dấu gạch đầu dòng '-'.\n` +
-        `6. Trả về DUY NHẤT nội dung bài viết mới hoàn chỉnh, không thêm lời dẫn hay giải thích gì khác.`;
+        `You are an expert recruitment editor for factory and blue-collar labor in Binh Duong, Vietnam.\n` +
+        `TASK: Synthesize the [EXISTING RECRUITMENT POST] with the [NEW UPDATE INFORMATION] into A SINGLE, COHESIVE, COMPLETE, AND ACCURATE NEW JOB POST IN VIETNAMESE.\n\n` +
+        `[EXISTING RECRUITMENT POST IN RAG KNOWLEDGE BASE]:\n${currentRaw}\n\n` +
+        `[NEW UPDATE INFORMATION]:\n${newUpdateText}\n\n` +
+        `MANDATORY REQUIREMENTS:\n` +
+        `1. Preserve all critical foundational details from the existing post: Company address, Google Maps link ("- Bản đồ/Vị trí: https://..."), salary rates for day/night/overtime shifts, allowances, meal support (bao cơm), and work conditions.\n` +
+        `2. Overwrite and merge the latest updates: New interview/onboarding schedules (e.g., arrival time 19:20 tonight), new requirements (CCCD, closed-toe shoes/sneakers), and specific notes (e.g., employee badge rules, age limits, gender requirements).\n` +
+        `3. Synchronize hiring status: If the update states they are hiring or resuming onboarding, REMOVE all phrases like '(HIỆN TẠI TẠM NGƯNG TUYỂN)' or '0 người', and set to actively hiring. If the update states hiring is paused completely, update status accordingly.\n` +
+        `   - Gender-Specific Hiring (CRITICAL): If the update states 'chỉ nhận nam, không nhận nữ' / 'đã đủ nữ, chỉ nhận nam', the company IS ACTIVELY HIRING (do NOT mark as temporarily stopped; update to actively hiring men and pausing women, e.g., '- Số lượng cần tuyển: Đang tuyển Nam (đã đủ nữ, tạm ngưng Nữ)'). Vice versa, if 'chỉ nhận nữ, không nhận nam' / 'đã đủ nam, chỉ nhận nữ', mark as actively hiring women and pausing men.\n` +
+        `4. STRICTLY FORBIDDEN to use the prefix '[Cập nhật]:'. NEVER simply concatenate old text with new text. NEVER duplicate sections or paragraphs.\n` +
+        `5. STRICTLY FORBIDDEN to use decorative icons or emojis (such as 🚨, 🔥, 🆙, 📌, ⏰, 👥, 💰, 📍...). Format the post professionally with standard dash bullets ('-').\n` +
+        `6. Output language MUST be Vietnamese. Return ONLY the final synthesized job post without any introduction, explanations, or conversational filler.`;
 
       const response = await this.ai.models.generateContent({
         model: config.geminiModel,
