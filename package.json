@@ -13,7 +13,8 @@
     "test:voice": "tsx src/tests/testVoiceAndAudio.ts",
     "test:quote": "tsx src/tests/testMediaDescriptionAndQuote.ts",
     "test:benchmark": "tsx src/tests/runBenchmark.ts",
-    "test:comprehensive": "tsx src/tests/testComprehensiveFeatureAndUI.ts"
+    "test:comprehensive": "tsx src/tests/testComprehensiveFeatureAndUI.ts",
+    "test:resilience": "tsx src/tests/testReconnectResilience.ts"
   },
   "keywords": [
     "zalo",

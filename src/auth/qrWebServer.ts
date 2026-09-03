@@ -19,6 +19,39 @@ let loggedInAccount: {
   loginTime: string;
 } | null = null;
 
+export type ConnectionState = "connected" | "reconnecting" | "disconnected" | "session_expired";
+
+export interface ConnectionInfo {
+  state: ConnectionState;
+  reconnectAttempts: number;
+  maxAttempts: number;
+  lastError: string | null;
+  lastConnectedAt: string | null;
+  nextRetryInMs?: number | null;
+  cooldownReason?: string | null;
+}
+
+let connectionInfo: ConnectionInfo = {
+  state: "disconnected",
+  reconnectAttempts: 0,
+  maxAttempts: 10,
+  lastError: null,
+  lastConnectedAt: null,
+  nextRetryInMs: null,
+  cooldownReason: null,
+};
+
+export function updateConnectionInfo(info: Partial<ConnectionInfo>): void {
+  connectionInfo = {
+    ...connectionInfo,
+    ...info,
+  };
+}
+
+export function getConnectionInfo(): ConnectionInfo {
+  return { ...connectionInfo };
+}
+
 let logoutCallback: (() => Promise<void> | void) | null = null;
 let activeZaloService: ZaloService | null = null;
 
@@ -66,7 +99,7 @@ export function startQrWebServer(port: number = config.qrPort): void {
     );
     if (handledByChat) return;
 
-    // 2. API GET: Trạng thái phiên & mã QR
+    // 2. API GET: Trạng thái phiên & mã QR & Kết nối thời gian thực
     if (pathname === "/api/status" || pathname === "/api/qr") {
       res.writeHead(200, {
         "Content-Type": "application/json; charset=utf-8",
@@ -79,6 +112,7 @@ export function startQrWebServer(port: number = config.qrPort): void {
           status: qrStatus,
           image: currentQrBase64,
           scannedUser: scannedUserName,
+          connection: connectionInfo,
         })
       );
       return;
@@ -136,11 +170,15 @@ export function startQrWebServer(port: number = config.qrPort): void {
           .logo { font-size: 26px; font-weight: 800; color: #0068ff; margin-bottom: 6px; display: flex; align-items: center; justify-content: center; gap: 8px; }
           .subtitle { color: #64748b; font-size: 14px; margin-bottom: 24px; }
           
-          .status-badge { display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: 600; margin-bottom: 20px; }
+          .status-badge { display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: 600; margin-bottom: 20px; transition: all 0.3s ease; }
           .status-waiting { background: #eff6ff; color: #1d4ed8; }
           .status-scanned { background: #fef3c7; color: #b45309; }
           .status-success { background: #dcfce7; color: #15803d; }
           .status-expired { background: #fee2e2; color: #b91c1c; }
+          .status-reconnecting { background: #fef3c7; color: #b45309; animation: pulse 1.5s infinite; }
+          .status-conflict { background: #ffedd5; color: #c2410c; }
+          .status-disconnected { background: #fee2e2; color: #b91c1c; }
+          @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.65; } 100% { opacity: 1; } }
 
           .qr-wrapper { background: #fff; padding: 12px; border-radius: 16px; border: 2px solid #0068ff; display: inline-block; margin-bottom: 20px; min-width: 250px; min-height: 250px; position: relative; }
           .qr-wrapper img { width: 250px; height: 250px; display: block; border-radius: 8px; }
@@ -191,7 +229,7 @@ export function startQrWebServer(port: number = config.qrPort): void {
 
           <!-- Giao diện khi ĐÃ đăng nhập -->
           <div id="dashboardView" style="display: none;">
-            <div class="status-badge status-success">🟢 Đang hoạt động (Online)</div>
+            <div id="connectionBadge" class="status-badge status-success">🟢 Đang hoạt động (Online)</div>
             <div class="info-box">
               <div class="info-row">
                 <span class="info-label">👤 Tài khoản Zalo ID:</span>
@@ -204,6 +242,10 @@ export function startQrWebServer(port: number = config.qrPort): void {
               <div class="info-row">
                 <span class="info-label">🤖 Model AI:</span>
                 <span class="info-value">${config.geminiModel}</span>
+              </div>
+              <div class="info-row">
+                <span class="info-label">🌐 Kết nối Socket:</span>
+                <span class="info-value" id="socketStatus">Đã kết nối</span>
               </div>
             </div>
             <a href="/chat" class="btn-chat-portal">💬 Mở Giao Diện Web Chat Trực Tiếp</a>
@@ -234,6 +276,41 @@ export function startQrWebServer(port: number = config.qrPort): void {
                 dashboardView.style.display = 'block';
                 document.getElementById('accId').textContent = data.account.id;
                 document.getElementById('accLoginTime').textContent = data.account.loginTime;
+
+                // Cập nhật trạng thái kết nối WebSocket thời gian thực
+                const connBadge = document.getElementById('connectionBadge');
+                const socketStatus = document.getElementById('socketStatus');
+                if (data.connection && connBadge && socketStatus) {
+                  const conn = data.connection;
+                  if (conn.state === 'connected') {
+                    connBadge.textContent = '🟢 Đang hoạt động (Online)';
+                    connBadge.className = 'status-badge status-success';
+                    socketStatus.textContent = '🟢 Đã kết nối';
+                    socketStatus.style.color = '#15803d';
+                  } else if (conn.cooldownReason) {
+                    connBadge.textContent = '🟠 Xung đột phiên Zalo Web (Chờ 30s)';
+                    connBadge.className = 'status-badge status-conflict';
+                    socketStatus.textContent = '🟠 Đang tạm hoãn (Tránh xung đột Web)';
+                    socketStatus.style.color = '#c2410c';
+                  } else if (conn.state === 'reconnecting') {
+                    const waitSec = conn.nextRetryInMs ? Math.ceil(conn.nextRetryInMs / 1000) : null;
+                    const retryText = waitSec ? ' (' + waitSec + 's)' : '';
+                    connBadge.innerHTML = '<span class="spinner"></span> Đang kết nối lại (' + conn.reconnectAttempts + '/' + conn.maxAttempts + ')' + retryText + '...';
+                    connBadge.className = 'status-badge status-reconnecting';
+                    socketStatus.textContent = '🟡 Đang kết nối lại (Lần ' + conn.reconnectAttempts + '/' + conn.maxAttempts + ')';
+                    socketStatus.style.color = '#b45309';
+                  } else if (conn.state === 'session_expired') {
+                    connBadge.textContent = '🔴 Phiên hết hạn / Vui lòng đăng xuất & quét lại';
+                    connBadge.className = 'status-badge status-disconnected';
+                    socketStatus.textContent = '🔴 Token hết hạn';
+                    socketStatus.style.color = '#b91c1c';
+                  } else {
+                    connBadge.textContent = '🔴 Mất kết nối (' + (conn.lastError || 'Lỗi 1006') + ')';
+                    connBadge.className = 'status-badge status-disconnected';
+                    socketStatus.textContent = '🔴 Ngắt kết nối';
+                    socketStatus.style.color = '#b91c1c';
+                  }
+                }
                 return;
               }
 
@@ -307,5 +384,14 @@ export function stopQrWebServer(): void {
     qrStatus = "waiting";
     scannedUserName = null;
     loggedInAccount = null;
+    connectionInfo = {
+      state: "disconnected",
+      reconnectAttempts: 0,
+      maxAttempts: 10,
+      lastError: null,
+      lastConnectedAt: null,
+      nextRetryInMs: null,
+      cooldownReason: null,
+    };
   }
 }

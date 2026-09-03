@@ -1,4 +1,4 @@
-import { authenticateZalo, onLogout, setZaloService } from "./auth/sessionManager.js";
+import { authenticateZalo, onLogout, setZaloService, updateConnectionInfo } from "./auth/sessionManager.js";
 import { stopQrWebServer } from "./auth/qrWebServer.js";
 import { SQLiteDatabase } from "./database/sqliteDb.js";
 import { RAGService } from "./services/ragService.js";
@@ -58,8 +58,26 @@ async function startBot() {
       );
     });
 
-    // 5. Khởi tạo và kích hoạt Message Listener
+    // 5. Khởi tạo và kích hoạt Message Listener với cơ chế Tự Phục Hồi (Self-Healing)
     currentListener = new MessageListener(api, dispatcher);
+
+    // Đồng bộ trạng thái kết nối lên Web Portal Dashboard thời gian thực
+    currentListener.onStateChange((connInfo) => {
+      updateConnectionInfo(connInfo);
+    });
+
+    // Tự động phục hồi khi phiên/cookie hết hạn (bị logout từ app điện thoại)
+    currentListener.onSessionExpired(async () => {
+      console.warn(
+        "\n🔄 [Index] Phát hiện phiên hết hạn/bị đăng xuất. Đang dừng Listener và khởi tạo phiên đăng nhập mới..."
+      );
+      if (currentListener) {
+        currentListener.stop();
+        currentListener = null;
+      }
+      await startBot();
+    });
+
     currentListener.start();
   } catch (error) {
     console.error("❌ Lỗi khi khởi động Zalo Bot:", error);

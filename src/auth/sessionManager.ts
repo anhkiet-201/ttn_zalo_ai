@@ -25,6 +25,10 @@ export {
   setLoggedInAccount,
   startQrWebServer,
   stopQrWebServer,
+  updateConnectionInfo,
+  getConnectionInfo,
+  type ConnectionInfo,
+  type ConnectionState,
 } from "./qrWebServer.js";
 
 /**
@@ -233,3 +237,21 @@ export async function authenticateZalo(): Promise<API> {
     throw error;
   }
 }
+
+/**
+ * Kiểm tra tính hợp lệ của phiên đăng nhập qua API nhẹ (fetchAccountInfo)
+ */
+export async function validateSessionHealth(api: API): Promise<boolean> {
+  try {
+    if (!api || typeof api.fetchAccountInfo !== "function") {
+      return false;
+    }
+    const info = await api.fetchAccountInfo();
+    // Nếu API trả về dữ liệu profile hợp lệ
+    return !!info && !!info.profile;
+  } catch (error) {
+    console.warn("⚠️ [Session Health Check] Phiên đăng nhập không phản hồi hoặc đã hết hạn:", error);
+    return false;
+  }
+}
+
