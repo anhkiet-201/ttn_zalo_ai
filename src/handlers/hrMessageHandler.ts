@@ -221,47 +221,16 @@ export class HRMessageHandler {
 
     const ragContent = rawText.replace(/^(?:\/?rag|xem\s+rag|kho\s+rag)\s*/i, "").trim();
 
-    // 1. Xử lý lệnh XÓA RAG trực tiếp (vd: /rag xóa cmt, /rag xoa sanaky, /rag delete job_05)
-    const deleteMatch = ragContent.match(/^(?:xóa|xoa|delete|del|remove)\s+(.+)$/i);
-    if (deleteMatch) {
-      const keyword = deleteMatch[1].trim();
-      console.log(`📥 [HR Admin] Nhận lệnh xóa RAG với từ khóa: "${keyword}"`);
-      const deleteResult = this.ragService.deleteRagEntry({ keyword, targetFile: "all" });
-
-      if (deleteResult.success && deleteResult.deletedItems.length > 0) {
-        let replyText = `🗑️ [ĐÃ XÓA DỮ LIỆU RAG THÀNH CÔNG]\n━━━━━━━━━━━━━━━━━━━━\nĐã xóa ${deleteResult.deletedItems.length} mục khỏi cơ sở dữ liệu:\n\n`;
-        deleteResult.deletedItems.forEach((it, idx) => {
-          replyText += `${idx + 1}. 🏢 ${it.title.toUpperCase()} (ID: ${it.id})\n`;
-          replyText += `   📁 File: ${it.targetFile}\n`;
-          if (it.aliases && it.aliases.length > 0) {
-            replyText += `   🏷️ Tên khác: ${it.aliases.join(", ")}\n`;
-          }
-          replyText += "\n";
-        });
-        replyText += `👉 Bot sẽ không còn tư vấn hoặc hiển thị các mục này cho ứng viên nữa!`;
-        await this.zaloService.replyMessage(parsedMessage.raw, replyText.trim());
-      } else {
-        await this.zaloService.replyMessage(
-          parsedMessage.raw,
-          `⚠️ [KHÔNG TÌM THẤY DỮ LIỆU ĐỂ XÓA]\n━━━━━━━━━━━━━━━━━━━━\nKhông tìm thấy công ty hay chính sách nào khớp với từ khóa: "${keyword}"\n\n👉 Gõ "/rag" để xem danh sách toàn bộ ID và tên công ty hiện có.`
-        );
-      }
-      return true;
-    }
-
-    // 2. Tra cứu chi tiết một công ty cụ thể nếu tên khớp trong kho RAG (vd: xem rag sanaky, rag kaiser)
-    if (ragContent && ragContent.length < 40 && !ragContent.includes("\n")) {
+    // 1. Tra cứu chi tiết một công ty cụ thể nếu tên/ID khớp chính xác trong kho RAG (vd: xem rag sanaky, rag kaiser)
+    if (ragContent && ragContent.length < 35 && !ragContent.includes("\n")) {
       const jobs = this.ragService.getJobRag();
       const normKeyword = normalizeText(ragContent);
       const matchedJob = jobs.find((j) => {
         const normTitle = normalizeText(String(j["title"] || ""));
         const normId = normalizeText(String(j["id"] || ""));
-        if (normId === normKeyword || normTitle.includes(normKeyword)) return true;
+        if (normId === normKeyword || normTitle === normKeyword) return true;
         const aliases = Array.isArray(j["aliases"]) ? (j["aliases"] as string[]) : [];
-        return aliases.some((a) => {
-          const normA = normalizeText(String(a));
-          return normA && (normA === normKeyword || normKeyword.includes(normA) || normA.includes(normKeyword));
-        });
+        return aliases.some((a) => normalizeText(String(a)) === normKeyword);
       });
 
       if (matchedJob) {
@@ -293,26 +262,43 @@ export class HRMessageHandler {
       }
     }
 
-    // 3. Xử lý cập nhật/tạo mới RAG qua văn bản tự nhiên
-    if (ragContent.length > 5 && ragContent.toLowerCase() !== "ds") {
-      console.log(`📥 [HR Admin] Nhận yêu cầu cập nhật RAG (${ragContent.length} ký tự)...`);
+    // 2. Chuyển toàn bộ văn bản/lệnh RAG cho AI phân tích và tự quyết định (update_rag vs delete_rag)
+    if (ragContent.length > 0 && ragContent.toLowerCase() !== "ds") {
+      console.log(`📥 [HR Admin] Chuyển nội dung RAG cho AI phân tích (${ragContent.length} ký tự)...`);
       const report = await this.aiService.updateRagFromText(ragContent, this.ragService);
 
       if (report.success && report.items.length > 0) {
-        let replyText = `✅ [CẬP NHẬT KHO TRI THỨC RAG THÀNH CÔNG]\nĐã cập nhật ${report.updatedCount} mục:\n\n`;
-        report.items.forEach((it, idx) => {
-          replyText += `${idx + 1}. 🏢 ${it.title} (ID: ${it.targetId || "Mới"})\n`;
-          replyText += `   📁 ${it.targetFile} | 📝 ${it.action === "create_new" ? "Tạo mới" : "Cập nhật"}\n`;
-          if (it.reason) replyText += `   📌 ${it.reason}\n`;
-          replyText += "\n";
-        });
-        replyText += `👉 Bot đã sẵn sàng tư vấn theo dữ liệu mới nhất!`;
+        const deletedItems = report.items.filter((i) => i.action === "delete");
+        const updatedItems = report.items.filter((i) => i.action !== "delete");
 
-        // Tin nhắn 1: Header báo cáo cập nhật thành công
+        let replyText = "";
+        if (deletedItems.length > 0 && updatedItems.length === 0) {
+          replyText = `🗑️ [ĐÃ XÓA DỮ LIỆU RAG THÀNH CÔNG]\n━━━━━━━━━━━━━━━━━━━━\nĐã xóa ${deletedItems.length} mục khỏi cơ sở dữ liệu:\n\n`;
+          deletedItems.forEach((it, idx) => {
+            replyText += `${idx + 1}. 🏢 ${it.title || it.targetId} (ID: ${it.targetId || "N/A"})\n`;
+            replyText += `   📁 File: ${it.targetFile}\n`;
+            if (it.reason) replyText += `   📌 Lý do: ${it.reason}\n`;
+            replyText += "\n";
+          });
+          replyText += `👉 Bot sẽ không còn tư vấn mục này cho ứng viên nữa!`;
+        } else {
+          replyText = `✅ [XỬ LÝ KHO TRI THỨC RAG THÀNH CÔNG]\nĐã xử lý ${report.updatedCount} mục:\n\n`;
+          report.items.forEach((it, idx) => {
+            const actionLabel =
+              it.action === "create_new" ? "Tạo mới" : it.action === "delete" ? "Đã xóa" : "Cập nhật";
+            replyText += `${idx + 1}. 🏢 ${it.title || it.targetId} (ID: ${it.targetId || "Mới"})\n`;
+            replyText += `   📁 ${it.targetFile} | 📝 ${actionLabel}\n`;
+            if (it.reason) replyText += `   📌 ${it.reason}\n`;
+            replyText += "\n";
+          });
+          replyText += `👉 Bot đã sẵn sàng tư vấn theo dữ liệu mới nhất!`;
+        }
+
+        // Tin nhắn 1: Header báo cáo kết quả
         await this.zaloService.replyMessage(parsedMessage.raw, replyText.trim());
 
-        // Tin nhắn 2: Chỉ chứa rawContent của từng mục vừa cập nhật
-        for (const it of report.items) {
+        // Tin nhắn 2: Gửi rawContent cho các mục vừa cập nhật/tạo mới (nếu có)
+        for (const it of updatedItems) {
           const e = (it.entry || {}) as Record<string, any>;
           const raw = extractRagContent(e);
           if (raw) {
@@ -323,7 +309,7 @@ export class HRMessageHandler {
       } else {
         await this.zaloService.replyMessage(
           parsedMessage.raw,
-          `⚠️ [CẬP NHẬT RAG THẤT BẠI]\n❌ ${report.message || "Không thể trích xuất thông tin hợp lệ."}\n👉 Kiểm tra lại cấu trúc bài viết!`
+          `⚠️ [XỬ LÝ RAG THẤT BẠI]\n❌ ${report.message || "Không thể trích xuất thông tin hợp lệ."}\n👉 Vui lòng kiểm tra lại câu lệnh hoặc cấu trúc bài viết!`
         );
       }
       return true;

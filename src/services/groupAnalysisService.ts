@@ -39,18 +39,28 @@ export class GroupAnalysisService {
 
     try {
       const prompt =
-        `You are an expert recruitment editor for factory and blue-collar labor in Binh Duong, Vietnam.\n` +
-        `TASK: Synthesize the [EXISTING RECRUITMENT POST] with the [NEW UPDATE INFORMATION] into A SINGLE, COHESIVE, COMPLETE, AND ACCURATE NEW JOB POST IN VIETNAMESE.\n\n` +
+        `You are an expert recruitment senior editor for factory and blue-collar labor in Binh Duong, Vietnam.\n` +
+        `TASK: Synthesize the [EXISTING RECRUITMENT POST] according strictly to the [HR INSTRUCTION / UPDATE] into A SINGLE, COHESIVE, COMPLETE, AND ACCURATE NEW JOB POST IN VIETNAMESE.\n\n` +
         `[EXISTING RECRUITMENT POST IN RAG KNOWLEDGE BASE]:\n${currentRaw}\n\n` +
-        `[NEW UPDATE INFORMATION]:\n${newUpdateText}\n\n` +
-        `MANDATORY REQUIREMENTS:\n` +
-        `1. Preserve all critical foundational details from the existing post: Company address, Google Maps link ("- Bản đồ/Vị trí: https://..."), salary rates for day/night/overtime shifts, allowances, meal support (bao cơm), and work conditions.\n` +
-        `2. Overwrite and merge the latest updates: New interview/onboarding schedules (e.g., arrival time 19:20 tonight), new requirements (CCCD, closed-toe shoes/sneakers), and specific notes (e.g., employee badge rules, age limits, gender requirements).\n` +
-        `3. Synchronize hiring status: If the update states they are hiring or resuming onboarding, REMOVE all phrases like '(HIỆN TẠI TẠM NGƯNG TUYỂN)' or '0 người', and set to actively hiring. If the update states hiring is paused completely, update status accordingly.\n` +
+        `[HR INSTRUCTION / UPDATE]:\n${newUpdateText}\n\n` +
+        `MANDATORY EDITING RULES (SENIOR EDITOR STANDARDS):\n` +
+        `1. OMISSION MEANS REMOVAL (NHỮNG THỨ KHÔNG ĐỀ CẬP TỨC LÀ CẦN LOẠI BỎ TRIỆT ĐỂ):\n` +
+        `   - When HR specifies a revised requirement (documents, CCCD/ID card, attire, age, etc.), any previous options, alternative documents, or conditions in the existing post that are NOT mentioned in the HR instruction MUST BE COMPLETELY REMOVED.\n` +
+        `   - Specific Example: If existing post has "Yêu cầu: CCCD gốc hoặc photo, hoặc hình chụp trong điện thoại", and HR instructs "chỉ chấp nhận CCCD gốc" (or "phải có CCCD gốc") -> The revised line MUST BE: "Yêu cầu: Chỉ chấp nhận CCCD gốc" (or "CCCD gốc"). The phrases "hoặc photo", "hình chụp trong điện thoại" MUST BE PURGED COMPLETELY.\n` +
+        `2. ABSOLUTE BAN ON LOOPING NEGATIONS (CẤM PHỦ ĐỊNH LUẨN QUẨN):\n` +
+        `   - NEVER preserve an obsolete requirement and invert it into a confusing negative phrase like "(bắt buộc, không bắt buộc photo hay hình chụp)", "(bắt buộc không nhận photo)", etc. Only output clean, affirmative rules as instructed by HR.\n` +
+        `3. REMOVAL INSTRUCTION (LỆNH XÓA CÂU CHỮ / DÒNG LƯU Ý):\n` +
+        `   - If HR asks to delete, remove, or drop a specific phrase, sentence, or note (e.g., 'xóa (bắt buộc, không bắt buộc photo hay hình chụp) trong...', 'xóa dòng lưu ý...'), DELETE that exact phrase/sentence entirely from the post without leaving any trace.\n` +
+        `4. ZERO HALLUCINATION (CẤM TỰ BỊA):\n` +
+        `   - Strictly forbidden to fabricate alternative documents, photo allowances, or requirements not explicitly specified by HR.\n` +
+        `5. PRESERVE FOUNDATIONAL DETAILS:\n` +
+        `   - Company address, Google Maps link ("- Bản đồ/Vị trí: https://..."), salary rates for day/night/overtime shifts, allowances, meal support (bao cơm), and work conditions MUST BE PRESERVED unless HR specifically changes them.\n` +
+        `6. SYNCHRONIZE HIRING STATUS:\n` +
+        `   - If the update states they are hiring or resuming onboarding, REMOVE all phrases like '(HIỆN TẠI TẠM NGƯNG TUYỂN)' or '0 người', and set to actively hiring. If the update states hiring is paused completely, update status accordingly.\n` +
         `   - Gender-Specific Hiring (CRITICAL): If the update states 'chỉ nhận nam, không nhận nữ' / 'đã đủ nữ, chỉ nhận nam', the company IS ACTIVELY HIRING (do NOT mark as temporarily stopped; update to actively hiring men and pausing women, e.g., '- Số lượng cần tuyển: Đang tuyển Nam (đã đủ nữ, tạm ngưng Nữ)'). Vice versa, if 'chỉ nhận nữ, không nhận nam' / 'đã đủ nam, chỉ nhận nữ', mark as actively hiring women and pausing men.\n` +
-        `4. STRICTLY FORBIDDEN to use the prefix '[Cập nhật]:'. NEVER simply concatenate old text with new text. NEVER duplicate sections or paragraphs.\n` +
-        `5. STRICTLY FORBIDDEN to use decorative icons or emojis (such as 🚨, 🔥, 🆙, 📌, ⏰, 👥, 💰, 📍...). Format the post professionally with standard dash bullets ('-').\n` +
-        `6. Output language MUST be Vietnamese. Return ONLY the final synthesized job post without any introduction, explanations, or conversational filler.`;
+        `7. STRICTLY FORBIDDEN to use the prefix '[Cập nhật]:'. NEVER simply concatenate old text with new text. NEVER duplicate sections or paragraphs.\n` +
+        `8. STRICTLY FORBIDDEN to use decorative icons or emojis (such as 🚨, 🔥, 🆙, 📌, ⏰, 👥, 💰, 📍...). Format the post professionally with standard dash bullets ('-').\n` +
+        `9. Output language MUST be Vietnamese. Return ONLY the final synthesized job post without any introduction, explanations, or conversational filler.`;
 
       const response = await this.ai.models.generateContent({
         model: config.geminiModel,
@@ -347,11 +357,11 @@ export class GroupAnalysisService {
               reason?: string;
             };
             const deleteRes = ragService.deleteRagEntry(args);
-            if (deleteRes.success) {
+            if (deleteRes.success && deleteRes.deletedItems.length > 0) {
               for (const it of deleteRes.deletedItems) {
                 items.push({
                   targetFile: it.targetFile,
-                  action: "update_existing",
+                  action: "delete",
                   targetId: it.id,
                   title: it.title,
                   reason: args.reason,
@@ -360,6 +370,17 @@ export class GroupAnalysisService {
                   message: deleteRes.message,
                 });
               }
+            } else {
+              items.push({
+                targetFile: `${args.targetFile || "job_rag"}.json`,
+                action: "delete",
+                targetId: args.targetId,
+                title: args.keyword || args.targetId || "Dữ liệu RAG",
+                reason: args.reason,
+                summary: `Xóa thất bại`,
+                success: false,
+                message: deleteRes.message,
+              });
             }
 
             functionResponseParts.push({
@@ -379,15 +400,16 @@ export class GroupAnalysisService {
 
           const args = (call.args as unknown) as RagUpdateArgs;
 
-          // Kết hợp tin tuyển hiện tại với cập nhật mới từ HR để tạo bài viết mới hoàn chỉnh
+          // Kết hợp tin tuyển hiện tại với chỉ đạo gốc từ HR để tạo bài viết mới hoàn chỉnh
           if (args.action === "update_existing" && args.targetFile === "job_rag" && args.targetId) {
             const existingEntry = ragService.getEntryById(args.targetFile, args.targetId);
             if (existingEntry) {
               const currentRaw = (existingEntry["raw_content"] as string) || "";
+              // Ưu tiên câu chỉ đạo gốc của HR (rawText) để AI đối chiếu trực tiếp với bài cũ
               const updateSnippet =
+                rawText ||
                 (args.updatedFields?.raw_content as string) ||
                 (args.newEntry?.raw_content as string) ||
-                rawText ||
                 (args.reason as string) ||
                 "";
 
@@ -466,7 +488,9 @@ export class GroupAnalysisService {
         success: successfulCount > 0,
         message:
           successfulCount > 0
-            ? `Đã cập nhật thành công ${successfulCount} mục vào cơ sở dữ liệu RAG.`
+            ? `Đã xử lý thành công ${successfulCount} mục trong cơ sở dữ liệu RAG.`
+            : items.length > 0 && items[0].message
+            ? items[0].message
             : "Không trích xuất hoặc cập nhật được dữ liệu nào.",
         updatedCount: successfulCount,
         items,

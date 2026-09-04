@@ -45,7 +45,7 @@ export interface GenerateReplyOptions {
 
 export interface RagUpdateItemReport {
   targetFile: string;
-  action: "create_new" | "update_existing";
+  action: "create_new" | "update_existing" | "delete";
   targetId?: string;
   title?: string;
   reason?: string;
@@ -188,7 +188,9 @@ export const groupRagTools: FunctionDeclaration[] = [
   {
     name: "update_rag",
     description:
-      "MANDATORY: Call this tool whenever hiring information (vacancies, shifts, positions, companies), Google Maps links, addresses, policies, or locations are detected in group chat messages. " +
+      "MANDATORY: Call this tool whenever hiring information, policies, or locations are created, updated, or edited. " +
+      "CRITICAL: You MUST call this tool when HR wants to edit, update, replace, or remove/delete specific details, requirements, notes, or wording WITHIN a job post " +
+      "(e.g., 'xóa photo trong yêu cầu chervon mỹ phước 4', 'xóa dòng lưu ý trong...', 'chervon mp3 chỉ nhận CCCD gốc', 'bỏ phụ cấp...', 'đổi giờ phỏng vấn'). " +
       "Extract all fields comprehensively: title, location, map_url, vacancies, interview_schedule, job_type, aliases, raw_content.",
     parameters: {
       type: Type.OBJECT,
@@ -255,7 +257,7 @@ export const groupRagTools: FunctionDeclaration[] = [
         },
         reason: {
           type: Type.STRING,
-          description: "Reason for update (e.g., 'Update map link for Company ADC' or 'Create new Company ADC hiring 30 workers').",
+          description: "Reason for update (e.g., 'Update document requirements for Chervon' or 'Remove photo requirement from post').",
         },
       },
       required: ["action", "targetFile", "reason"],
@@ -264,7 +266,10 @@ export const groupRagTools: FunctionDeclaration[] = [
   {
     name: "delete_rag",
     description:
-      "CALL THIS TOOL when the user or HR explicitly requests to completely remove a company, policy, or location from the RAG database.",
+      "CALL THIS TOOL ONLY when the user or HR explicitly requests to completely delete/remove an ENTIRE company, policy, or location entity from the RAG database " +
+      "(e.g., 'xóa cty sanaky', 'xóa job_05', 'xoa cmt', 'công ty này giải thể hãy xóa khỏi database'). " +
+      "STRICTLY FORBIDDEN to call this tool if HR is only asking to edit, remove, or delete specific words, requirements, or sentences WITHIN a job post " +
+      "(e.g., 'xóa photo trong yêu cầu chervon', 'xóa dòng lưu ý...'). In those editing cases, you MUST call 'update_rag' instead!",
     parameters: {
       type: Type.OBJECT,
       properties: {

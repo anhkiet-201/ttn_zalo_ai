@@ -680,13 +680,18 @@ export class RAGService {
       };
     }
 
-    const deletedItems: Array<{
-      targetFile: string;
+    interface MatchedCandidate {
+      rFile: string;
+      filePath: string;
       id: string;
       title: string;
-      aliases?: string[];
-    }> = [];
+      aliases: string[];
+      exactMatch: boolean;
+    }
 
+    const matchedCandidates: MatchedCandidate[] = [];
+
+    // Giai đoạn 1: Quét tìm tất cả mục thỏa mãn tiêu chí so khớp an toàn
     for (const rFile of filesToSearch) {
       const filePath = path.join(this.baseDir, "data", `${rFile}.json`);
       if (!fs.existsSync(filePath)) continue;
@@ -698,9 +703,6 @@ export class RAGService {
         continue;
       }
 
-      const keptEntries: Record<string, unknown>[] = [];
-      let fileModified = false;
-
       for (const entry of data) {
         const entryId = String(entry["id"] || "").toLowerCase();
         const entryTitle = String(entry["title"] || "");
@@ -708,24 +710,32 @@ export class RAGService {
         const aliases = Array.isArray(entry["aliases"]) ? (entry["aliases"] as string[]) : [];
 
         let isMatch = false;
+        let isExact = false;
 
-        // 1. So khớp theo targetId hoặc ID
-        if (cleanTargetId && (entryId === cleanTargetId || entryId === cleanKeyword)) {
+        // 1. So khớp chính xác theo targetId hoặc ID
+        if (cleanTargetId && entryId === cleanTargetId) {
           isMatch = true;
+          isExact = true;
+        } else if (cleanKeyword && entryId === cleanKeyword.toLowerCase()) {
+          isMatch = true;
+          isExact = true;
         }
 
-        // 2. So khớp theo keyword tên công ty / title
+        // 2. So khớp theo tên công ty / title
         if (!isMatch && normKeyword) {
-          if (entryId === normKeyword) {
+          if (normTitle && normTitle === normKeyword) {
             isMatch = true;
-          } else if (normTitle && (normTitle === normKeyword || normTitle.includes(normKeyword) || normKeyword.includes(normTitle))) {
+            isExact = true;
+          } else if (normTitle && normKeyword.length >= 3 && normTitle.includes(normKeyword)) {
+            // Chỉ kiểm tra normTitle.includes(normKeyword) xuôi, TUYỆT ĐỐI KHÔNG so khớp ngược
             isMatch = true;
           } else {
             // So khớp theo danh sách aliases
             for (const a of aliases) {
               const normA = normalizeText(String(a));
-              if (normA && (normA === normKeyword || normKeyword.includes(normA) || normA.includes(normKeyword))) {
+              if (normA && normA === normKeyword) {
                 isMatch = true;
+                isExact = true;
                 break;
               }
             }
@@ -733,28 +743,89 @@ export class RAGService {
         }
 
         if (isMatch) {
-          fileModified = true;
-          deletedItems.push({
-            targetFile: `${rFile}.json`,
+          matchedCandidates.push({
+            rFile,
+            filePath,
             id: String(entry["id"] || "N/A"),
             title: entryTitle || String(entry["id"] || "Không rõ"),
             aliases,
+            exactMatch: isExact,
           });
-        } else {
-          keptEntries.push(entry);
         }
       }
+    }
 
-      if (fileModified) {
-        try {
-          fs.writeFileSync(filePath, JSON.stringify(keptEntries, null, 2), "utf-8");
-          this.cachedContext = null;
-          if (rFile === "job_rag") {
-            this.cachedJobRag = null;
-          }
-        } catch (err) {
-          console.error(`❌ Lỗi ghi file sau khi xóa trong ${rFile}.json:`, err);
-        }
+    if (matchedCandidates.length === 0) {
+      return {
+        success: false,
+        message: `Không tìm thấy mục nào khớp với từ khóa "${keyword || targetId}".`,
+        deletedItems: [],
+      };
+    }
+
+    // Giai đoạn 2: Safety Guard - Nếu tìm thấy nhiều hơn 1 mục
+    let itemsToDelete = matchedCandidates;
+    if (matchedCandidates.length > 1) {
+      // Nếu có mục khớp chính xác ID hoặc chính xác Title/Alias
+      const exactList = matchedCandidates.filter((m) => m.exactMatch);
+      if (exactList.length === 1) {
+        itemsToDelete = exactList;
+      } else {
+        // Có nhiều mục cùng khớp từ khóa chung chung -> CHẶN KHÔNG XÓA để bảo vệ dữ liệu!
+        const matchedListStr = matchedCandidates.map((m) => `• ${m.title} (ID: ${m.id})`).join("\n");
+        const warnMsg =
+          `⚠️ Từ khóa "${keyword || targetId}" khớp với ${matchedCandidates.length} mục trong kho RAG:\n${matchedListStr}\n\n` +
+          `👉 Để đảm bảo an toàn tuyệt đối không xóa nhầm, vui lòng cung cấp đích danh ID cần xóa (ví dụ: "/rag xóa ${matchedCandidates[0].id}").`;
+        console.warn(`⚠️ [RAG Delete Safety Guard] Chặn xóa hàng loạt (${matchedCandidates.length} mục khớp từ khóa "${keyword}")`);
+        return {
+          success: false,
+          message: warnMsg,
+          deletedItems: [],
+        };
+      }
+    }
+
+    // Giai đoạn 3: Thực hiện xóa mục đã xác định
+    const deletedItems: Array<{
+      targetFile: string;
+      id: string;
+      title: string;
+      aliases?: string[];
+    }> = [];
+
+    const idsToDeleteSet = new Set(itemsToDelete.map((it) => it.id.toLowerCase()));
+    const modifiedFiles = new Set<string>();
+
+    for (const item of itemsToDelete) {
+      const filePath = item.filePath;
+      if (!fs.existsSync(filePath)) continue;
+
+      let data: Record<string, unknown>[];
+      try {
+        data = JSON.parse(fs.readFileSync(filePath, "utf-8"));
+      } catch {
+        continue;
+      }
+
+      const keptEntries = data.filter((e) => !idsToDeleteSet.has(String(e["id"] || "").toLowerCase()));
+      try {
+        fs.writeFileSync(filePath, JSON.stringify(keptEntries, null, 2), "utf-8");
+        modifiedFiles.add(item.rFile);
+        deletedItems.push({
+          targetFile: `${item.rFile}.json`,
+          id: item.id,
+          title: item.title,
+          aliases: item.aliases,
+        });
+      } catch (err) {
+        console.error(`❌ Lỗi ghi file sau khi xóa trong ${item.rFile}.json:`, err);
+      }
+    }
+
+    if (modifiedFiles.size > 0) {
+      this.cachedContext = null;
+      if (modifiedFiles.has("job_rag")) {
+        this.cachedJobRag = null;
       }
     }
 
@@ -771,7 +842,7 @@ export class RAGService {
 
     return {
       success: false,
-      message: `Không tìm thấy mục nào khớp với từ khóa "${keyword || targetId}".`,
+      message: `Không thể xóa mục nào khớp với từ khóa "${keyword || targetId}".`,
       deletedItems: [],
     };
   }
