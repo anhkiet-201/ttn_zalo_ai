@@ -87,17 +87,17 @@ export const recruitmentTools: FunctionDeclaration[] = [
   {
     name: "register_candidate",
     description:
-      "CRITICAL — TOP PRIORITY MANDATORY RULE (PRE-CONFIRMATION IS STRICTLY REQUIRED BEFORE BOOKING):\n" +
-      "1. PREREQUISITE: Candidate MUST have citizen ID card (CCCD/VNeID) in User Context. If User Context indicates 'NO CCCD', calling this tool is STRICTLY FORBIDDEN and setting appointments is prohibited!\n" +
-      "2. STRICT PRE-CONFIRMATION: NEVER unilaterally confirm appointments or call this tool when the candidate is only asking questions or testing feasibility (e.g., 'Tôi nay đưocj không?', 'Mai đi làm được ko?', 'Còn nhận không?', 'Có ca đêm không?', messages containing 'được không', 'được ko', 'còn nhận ko', or ending with '?'). You MUST answer their inquiry first and ask: 'Em đăng ký lịch hẹn này cho mình luôn nha anh/chị?'.\n" +
-      "3. EXECUTE ONLY UPON EXPLICIT AFFIRMATION: Call this tool ONLY IF you have already asked the confirmation question (Step 1) AND the candidate explicitly responded with a clear affirmative confirmation in Step 2 (e.g., 'Ok em', 'Đúng rồi em', 'Chốt đi', 'Đồng ý', 'Đăng ký giúp anh').",
+      "Register an interview/work appointment for a candidate. " +
+      "PREREQUISITES: Candidate MUST have citizen ID card (CCCD/VNeID) in User Context. " +
+      "MANDATORY PRE-CONFIRMATION: Call ONLY after asking confirmation (Step 1) AND candidate explicitly gave affirmative confirmation in Step 2 (e.g., 'Ok em', 'Đồng ý', 'Chốt đi'). " +
+      "STRICTLY FORBIDDEN if candidate only asked questions ('được không?', 'còn nhận ko?') or has NO CCCD.",
     parameters: {
       type: Type.OBJECT,
       properties: {
         targetCompany: {
           type: Type.STRING,
           description:
-            "Standard name of the company the candidate is registering for (e.g., Sowin Group, Chervon, Kaiser, Supor, Leader, Sanaky, Gỗ Wangshun, Sofa Hằng Phong, Dân Ôn, CMT, Gỗ Minh Huy, New Fortune).",
+            "Standard name of the company the candidate is registering for (e.g., Sowin Group, Chervon, Kaiser, Supor, Leader, Sanaky, Dân Ôn, CMT).",
         },
         phoneNumber: {
           type: Type.STRING,
@@ -106,7 +106,7 @@ export const recruitmentTools: FunctionDeclaration[] = [
         interviewDate: {
           type: Type.STRING,
           description:
-            "Appointment arrival time/interview date. MUST be converted to a SPECIFIC CALENDAR DATE with exact hour (e.g., '19h20 tối Thứ Năm, ngày 03/09/2026', '7h30 sáng Thứ Sáu, ngày 04/09/2026'). Never use vague relative text.",
+            "Appointment arrival time/interview date converted to a specific calendar date with exact hour (e.g., '19h20 tối Thứ Năm, ngày 03/09/2026', '7h30 sáng Thứ Sáu, ngày 04/09/2026').",
         },
         candidateIdNumber: {
           type: Type.STRING,
@@ -129,25 +129,24 @@ export const recruitmentTools: FunctionDeclaration[] = [
   {
     name: "switch_company",
     description:
-      "CRITICAL — PRE-CONFIRMATION IS REQUIRED BEFORE SWITCHING COMPANIES:\n" +
-      "1. Applies only when the candidate ALREADY has a CCCD profile and was previously registered.\n" +
-      "2. Step 1: When candidate expresses interest in switching companies, ask for confirmation first (e.g., 'Dạ vậy anh muốn đổi sang làm bên cty Chervon đúng ko ạ?') and DO NOT CALL THIS TOOL YET.\n" +
-      "3. Step 2: Call this tool ONLY AND ONLY IF the candidate explicitly confirms (e.g., 'Đúng rồi em', 'Ok em', 'Chốt đổi qua đó nha').\n" +
-      "STRICTLY FORBIDDEN to call if no CCCD exists or if the candidate is merely comparing companies.",
+      "Switch candidate's registration to a different company. " +
+      "PREREQUISITES: Candidate has CCCD profile and was previously registered. " +
+      "Call ONLY after candidate explicitly confirms switching (e.g., 'Đúng rồi em', 'Chốt đổi qua đó nha'). " +
+      "STRICTLY FORBIDDEN if no CCCD exists or candidate merely compares companies.",
     parameters: {
       type: Type.OBJECT,
       properties: {
         newCompany: {
           type: Type.STRING,
-          description: "Standard name of the NEW company the candidate explicitly confirmed switching to.",
+          description: "Standard name of the NEW company the candidate confirmed switching to.",
         },
         oldCompany: {
           type: Type.STRING,
-          description: "Name of the previous company the candidate is switching from (if known).",
+          description: "Name of previous company candidate is switching from (if known).",
         },
         reason: {
           type: Type.STRING,
-          description: "Reason for switching if mentioned by the candidate.",
+          description: "Reason for switching if mentioned.",
         },
       },
       required: ["newCompany"],
@@ -156,18 +155,17 @@ export const recruitmentTools: FunctionDeclaration[] = [
   {
     name: "reschedule_interview",
     description:
-      "CRITICAL — PRE-CONFIRMATION IS REQUIRED BEFORE RESCHEDULING:\n" +
-      "1. Applies only when the candidate ALREADY has a CCCD profile and an existing appointment.\n" +
-      "2. Step 1: When candidate asks to reschedule or inquires about another date, clarify and ask for confirmation of the new time (e.g., 'Dạ vậy em dời lịch hẹn cho anh sang 7h30 sáng Thứ Hai ngày 31/08 nha?') and DO NOT CALL THIS TOOL YET.\n" +
-      "3. Step 2: Call this tool ONLY AND ONLY IF the candidate gives an explicit affirmative confirmation.\n" +
-      "STRICTLY FORBIDDEN to call if the candidate has no appointment or is merely asking about schedules.",
+      "Reschedule candidate's interview/arrival date. " +
+      "PREREQUISITES: Candidate has CCCD profile and existing appointment. " +
+      "Call ONLY after candidate explicitly confirms new appointment time (e.g., 'Ok em', 'Đổi qua ngày đó đi'). " +
+      "STRICTLY FORBIDDEN if candidate has no appointment or merely asks about schedules.",
     parameters: {
       type: Type.OBJECT,
       properties: {
         newDate: {
           type: Type.STRING,
           description:
-            "New appointment arrival time. MUST be converted to a SPECIFIC CALENDAR DATE with exact hour (e.g., '7h30 sáng Thứ Bảy, ngày 05/09/2026'). Never use vague relative text.",
+            "New appointment arrival time converted to a specific calendar date with exact hour (e.g., '7h30 sáng Thứ Bảy, ngày 05/09/2026').",
         },
         targetCompany: {
           type: Type.STRING,

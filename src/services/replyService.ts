@@ -19,14 +19,17 @@ import { type ZaloService, type BotProfile } from "./zaloService.js";
  * Mỗi threadId (phiên chat) hoàn toàn độc lập, không chia sẻ trạng thái in-memory.
  */
 export class ReplyService {
-  private readonly maxHistoryLength: number = 20;
+  private readonly maxHistoryLength: number;
 
   constructor(
     private readonly ai: GoogleGenAI | null,
     private readonly ragService: RAGService,
     private readonly chatHistoryRepo: ChatHistoryRepository,
-    private zaloService?: ZaloService
-  ) {}
+    private zaloService?: ZaloService,
+    maxHistoryLength: number = config.chatHistoryLimit
+  ) {
+    this.maxHistoryLength = maxHistoryLength;
+  }
 
   public setZaloService(service: ZaloService): void {
     this.zaloService = service;
@@ -165,10 +168,17 @@ export class ReplyService {
             msgBody = `[Sticker]`;
           }
         } else if (mediaDescriptions.length > 0) {
-          // Bổ sung các description chưa có trong msgBody
-          const missingDescs = mediaDescriptions.filter((d) => !msgBody.includes(d));
-          if (missingDescs.length > 0) {
-            msgBody += `\n${missingDescs.join("\n")}`;
+          // Chỉ bổ sung description nếu msgBody chưa chứa thông tin mô tả media
+          const alreadyHasMedia =
+            msgBody.includes("[Image") ||
+            msgBody.includes("[Citizen ID") ||
+            msgBody.includes("[Voice") ||
+            msgBody.includes("[Sticker");
+          if (!alreadyHasMedia) {
+            const missingDescs = mediaDescriptions.filter((d) => !msgBody.includes(d));
+            if (missingDescs.length > 0) {
+              msgBody += `\n${missingDescs.join("\n")}`;
+            }
           }
         }
 

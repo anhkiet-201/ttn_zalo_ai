@@ -7,18 +7,30 @@ import { downloadImageAsBase64 } from "./imageHelper.js";
  * SRP: Sử dụng metadata từ Zalo payload hoặc Gemini Flash Vision để trích xuất ý nghĩa cảm xúc/thông điệp ngắn gọn (1-4 từ)
  */
 export class StickerService {
+  private readonly cache = new Map<string, string>();
+  private readonly maxCacheSize = 500;
+
   constructor(private readonly ai: GoogleGenAI | null) {}
 
   /**
    * Đọc hiểu ý nghĩa của một Sticker
    * @param stickerUrl URL hình ảnh sticker
    * @param caption Text hoặc caption có sẵn từ Zalo payload (nếu có)
+   * @param stickerId ID nhãn dán sticker từ Zalo payload (ưu tiên dùng làm cache key)
    */
   public async understandSticker(
     stickerUrl?: string,
-    caption?: string
+    caption?: string,
+    stickerId?: string
   ): Promise<string> {
-    // 1. Nếu payload đã có caption/text rõ ràng thì dùng ngay, không cần gọi AI
+    const cacheKey = stickerId ? `id:${stickerId}` : stickerUrl ? `url:${stickerUrl}` : "";
+
+    // 1. Kiểm tra cache trước (0 token, 0ms)
+    if (cacheKey && this.cache.has(cacheKey)) {
+      return this.cache.get(cacheKey)!;
+    }
+
+    // 2. Nếu payload đã có caption/text rõ ràng thì dùng ngay, không cần gọi AI
     if (caption && typeof caption === "string") {
       const clean = caption
         .replace(/\[.*?\]/g, "")
@@ -31,6 +43,7 @@ export class StickerService {
         clean !== "Nhãn dán" &&
         clean !== "Nhãn dán biểu cảm"
       ) {
+        if (cacheKey) this.setCache(cacheKey, clean);
         return clean;
       }
     }
@@ -87,6 +100,7 @@ Rules:
         ? response.text.trim().replace(/^["'`\s]+|["'`\s]+$/g, "")
         : "";
       if (resultText && resultText.length < 80) {
+        if (cacheKey) this.setCache(cacheKey, resultText);
         return resultText;
       }
 
@@ -98,5 +112,21 @@ Rules:
       );
       return "Nhãn dán biểu cảm";
     }
+  }
+
+  private setCache(key: string, value: string): void {
+    if (this.cache.size >= this.maxCacheSize) {
+      const firstKey = this.cache.keys().next().value;
+      if (firstKey) this.cache.delete(firstKey);
+    }
+    this.cache.set(key, value);
+  }
+
+  public clearCache(): void {
+    this.cache.clear();
+  }
+
+  public getCacheSize(): number {
+    return this.cache.size;
   }
 }

@@ -82,7 +82,7 @@ export class GroupMessageHandler {
       if (msg.mediaType === "sticker" && msg.mediaUrls?.[0]) {
         const item = msg.mediaUrls[0];
         try {
-          const meaning = await this.aiService.sticker.understandSticker(item.url, item.description);
+          const meaning = await this.aiService.sticker.understandSticker(item.url, item.description, item.id);
           msg.text = `[Sticker / Emotion]: ${meaning}`;
         } catch {}
       }

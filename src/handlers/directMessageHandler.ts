@@ -113,7 +113,8 @@ export class DirectMessageHandler {
         console.log(`🏷️ [StickerService] Đang đọc hiểu ý nghĩa sticker từ [${batch.senderName}]...`);
         const stickerMeaning = await this.aiService.sticker.understandSticker(
           item.url,
-          item.description
+          item.description,
+          item.id
         );
         console.log(`✅ [Sticker AI] Ý nghĩa nhãn dán: "${stickerMeaning}"`);
         msg.text = `[🏷️ Sticker Emotion & Meaning]: "${stickerMeaning}"`;
@@ -405,7 +406,11 @@ export class DirectMessageHandler {
 
     console.log(`📥 [DM: "${batch.senderName}"] ${formattedText.length > 100 ? formattedText.slice(0, 100) + "..." : formattedText}`);
 
-    // 6. Gọi AI generateReply — truyền đầy đủ description văn bản và chỉ gửi ảnh mới đính kèm (nếu có)
+    // 6. Gọi AI generateReply — truyền đầy đủ description văn bản và chỉ gửi ảnh nếu chưa được phân tích
+    // Tối ưu hóa Token: Nếu ảnh đã được OCR CCCD hoặc Vision Caption trích xuất thành công,
+    // không gửi lại Base64 ảnh vào generateReply để tránh lãng phí hàng nghìn token hình ảnh.
+    const unanalyzedImages = cccdResult ? undefined : allImageUrls.length > 0 ? allImageUrls : undefined;
+
     try {
       const aiReply = await this.aiService.generateReply(
         batch.threadId,
@@ -416,7 +421,7 @@ export class DirectMessageHandler {
           isGroup: false,
           quoteContext: lastQuote,
           quoteSenderName: lastQuoteSender,
-          imageUrls: allImageUrls.length > 0 ? allImageUrls : undefined,
+          imageUrls: unanalyzedImages,
           userContextText,
           onToolCall: async (toolName, args) => {
             const res = await this.toolExecutor.execute(toolName, args, {

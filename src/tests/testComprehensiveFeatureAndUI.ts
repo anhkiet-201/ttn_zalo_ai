@@ -148,6 +148,12 @@ async function runComprehensiveTests() {
     const res2 = await stickerService.understandSticker("", "");
     assert.strictEqual(res2, "Nhãn dán biểu cảm", "Fallback an toàn");
 
+    // Case 2.3: Cache hit theo stickerId (0 token, 0ms)
+    await stickerService.understandSticker("https://cdn/stk1.png", "Cảm ơn bạn nhiều", "stk_999");
+    const cachedRes = await stickerService.understandSticker("https://cdn/stk1.png", undefined, "stk_999");
+    assert.strictEqual(cachedRes, "Cảm ơn bạn nhiều", "Cache hit theo stickerId");
+    assert.strictEqual(stickerService.getCacheSize() >= 1, true, "Cache size > 0");
+
     const duration = performance.now() - start;
     results.push({
       module: "Chức Năng",
