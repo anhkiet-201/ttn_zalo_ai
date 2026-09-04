@@ -1,4 +1,4 @@
-import { type ParsedMessage, type UserRenameEvent } from "../types/zalo.types.js";
+import { type ParsedMessage } from "../types/zalo.types.js";
 import { type ZaloService } from "../services/zaloService.js";
 import { type AIService } from "../services/aiService.js";
 import { CandidateRepository, ChatHistoryRepository, ThreadMetadataRepository } from "../database/index.js";
@@ -16,8 +16,7 @@ import { GroupMessageHandler } from "./groupMessageHandler.js";
  * MessageHandler: Router trung tâm — phân luồng tin nhắn đến đúng sub-handler.
  * SRP: Chỉ chịu trách nhiệm:
  *   1. Lưu tin nhắn vào lịch sử (cross-cutting concern)
- *   2. Phát hiện sự kiện đổi tên cá nhân và kích hoạt callback
- *   3. Phân luồng đến HRMessageHandler | DirectMessageHandler | GroupMessageHandler
+ *   2. Phân luồng đến HRMessageHandler | DirectMessageHandler | GroupMessageHandler
  */
 export class MessageHandler {
   private readonly chatHistoryRepo: ChatHistoryRepository;
@@ -26,7 +25,6 @@ export class MessageHandler {
   private readonly hrHandler: HRMessageHandler;
   private readonly directHandler: DirectMessageHandler;
   private readonly groupHandler: GroupMessageHandler;
-  private onRenameCallback?: (event: UserRenameEvent) => Promise<void> | void;
 
   constructor(
     private readonly zaloService: ZaloService,
@@ -34,8 +32,7 @@ export class MessageHandler {
     candidateRepo?: CandidateRepository,
     hrNotifier?: HRNotifier,
     toolExecutor?: ToolExecutor,
-    userContextManager?: UserContextManager,
-    onRename?: (event: UserRenameEvent) => Promise<void> | void
+    userContextManager?: UserContextManager
   ) {
     const resolvedCandidateRepo = candidateRepo || new CandidateRepository();
     const resolvedHRNotifier = hrNotifier || new HRNotifier(this.zaloService);
@@ -46,7 +43,6 @@ export class MessageHandler {
 
     this.chatHistoryRepo = new ChatHistoryRepository();
     this.threadMetaRepo = new ThreadMetadataRepository();
-    this.onRenameCallback = onRename;
 
     const ragService = RAGService.getInstance();
 
@@ -79,22 +75,10 @@ export class MessageHandler {
   }
 
   /**
-   * Đăng ký callback khi phát hiện người dùng đổi tên
-   */
-  public setOnRename(callback: (event: UserRenameEvent) => Promise<void> | void): void {
-    this.onRenameCallback = callback;
-  }
-
-  /**
-   * Entry point duy nhất: kiểm tra đổi tên, lưu lịch sử rồi phân luồng
+   * Entry point duy nhất: lưu lịch sử rồi phân luồng
    */
   public async handle(parsedMessage: ParsedMessage): Promise<void> {
-    // 0.1 Phát hiện sự kiện đổi tên cá nhân (nếu có)
-    if (!parsedMessage.isGroup && !parsedMessage.isSelf) {
-      await this.detectAndDispatchRename(parsedMessage);
-    }
-
-    // 0.2 Lưu tin nhắn vào SQLite và kích hoạt SSE stream tới Web Chat
+    // 0. Lưu tin nhắn vào SQLite và kích hoạt SSE stream tới Web Chat
     await this.persistMessage(parsedMessage);
 
     // 1. Phân luồng đến đúng sub-handler
@@ -113,42 +97,6 @@ export class MessageHandler {
   }
 
   // ── Private helpers ─────────────────────────────────────────────────────
-
-  /**
-   * Tự động phát hiện khi một người dùng cá nhân đổi tên trên Zalo
-   */
-  private async detectAndDispatchRename(parsedMessage: ParsedMessage): Promise<void> {
-    const newName = (parsedMessage.senderName || "").trim();
-    if (!newName || newName === "Unknown" || newName === "Admin (Tôi)") {
-      return;
-    }
-
-    const threadId = parsedMessage.threadId;
-    const currentMeta = this.threadMetaRepo.getMetadata(threadId);
-
-    if (currentMeta?.customName) {
-      if (currentMeta.customName !== newName) {
-        if (this.onRenameCallback) {
-          try {
-            await this.onRenameCallback({
-              threadId,
-              senderId: parsedMessage.senderId,
-              oldName: currentMeta.customName,
-              newName,
-              isGroup: false,
-              timestamp: parsedMessage.timestamp || Date.now(),
-            });
-          } catch (err) {
-            console.error("❌ Lỗi trong callback onRename:", err);
-          }
-        }
-      }
-    } else {
-      // Lần đầu tiên ghi nhận tin nhắn từ cá nhân này -> khởi tạo metadata ban đầu
-      const isManual = /^-M(\s|_|-|$)/i.test(newName);
-      this.threadMetaRepo.upsertMetadata(threadId, newName, isManual, false);
-    }
-  }
 
   private async persistMessage(parsedMessage: ParsedMessage): Promise<void> {
     if (

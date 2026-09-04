@@ -1034,14 +1034,19 @@
             if (!newMsg) return;
 
             // Đổi tên
-            if (newMsg.type === "thread_renamed" && newMsg.newName) {
-              if (currentThreadId === newMsg.threadId) {
-                threadNameEl.textContent = newMsg.newName;
-              }
-              const cached = threadsCache.get(newMsg.threadId);
-              if (cached) {
-                cached.threadName = newMsg.newName;
-                renderSidebarThreads();
+            if (newMsg.type === "thread_renamed") {
+              const threadId = newMsg.threadId || newMsg.data?.threadId;
+              const newName = newMsg.newName || newMsg.data?.newName;
+              if (threadId && newName) {
+                if (currentThreadId === threadId && threadNameEl) {
+                  threadNameEl.textContent = newName;
+                }
+                const cached = threadsCache.get(threadId);
+                if (cached) {
+                  cached.threadName = newName;
+                  cached.isManual = /^-M(\s|_|-|$)/i.test(newName);
+                  renderSidebarThreads();
+                }
               }
               return;
             }

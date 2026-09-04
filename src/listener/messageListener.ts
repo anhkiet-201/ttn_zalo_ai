@@ -9,6 +9,7 @@ import {
   ThreadType,
   CloseReason,
 } from "zca-js";
+import zlib from "node:zlib";
 import { EventDispatcher } from "./eventDispatcher.js";
 import { validateSessionHealth } from "../auth/sessionManager.js";
 import { type ConnectionInfo, type ConnectionState } from "../auth/qrWebServer.js";
@@ -42,6 +43,8 @@ export class MessageListener {
 
   private stateChangeCallbacks: Array<(info: ConnectionInfo) => void> = [];
   private sessionExpiredCallbacks: Array<() => Promise<void> | void> = [];
+  private onSyncAliasCallback?: () => Promise<void> | void;
+  private rawWsHooked: boolean = false;
 
   constructor(
     private readonly api: API,
@@ -62,6 +65,13 @@ export class MessageListener {
    */
   public onSessionExpired(cb: () => Promise<void> | void): void {
     this.sessionExpiredCallbacks.push(cb);
+  }
+
+  /**
+   * Đăng ký callback khi nhận được tín hiệu yêu cầu đồng bộ alias từ Socket Control
+   */
+  public onSyncAlias(cb: () => Promise<void> | void): void {
+    this.onSyncAliasCallback = cb;
   }
 
   /**
@@ -133,10 +143,14 @@ export class MessageListener {
       }, 30000);
 
       this.emitState({ nextRetryInMs: null, cooldownReason: null });
+
+      // Kích hoạt hook WebSocket để bắt gói tin điều khiển (cmd == 601) đổi alias bạn bè
+      this.setupRawWsHook();
     });
 
     // 2. Sự kiện ngắt kết nối tạm thời
     this.api.listener.on("disconnected", (code: CloseReason, reason: string) => {
+      this.rawWsHooked = false;
       console.warn(
         `🟡 [Zalo Listener] Đã ngắt kết nối tạm thời. Code: ${code}, Lý do: ${reason || "Không rõ"}`
       );
@@ -145,6 +159,7 @@ export class MessageListener {
 
     // 3. Sự kiện đóng kết nối hoàn toàn
     this.api.listener.on("closed", (code: CloseReason, reason: string) => {
+      this.rawWsHooked = false;
       this.isRunning = false;
       if (this.stableTimer) {
         clearTimeout(this.stableTimer);
@@ -222,6 +237,170 @@ export class MessageListener {
     this.api.listener.on("typing", (typing: Typing) => {
       this.dispatcher.dispatchTyping(typing);
     });
+  }
+
+  /**
+   * Thiết lập hook lắng nghe WebSocket thô để bắt các gói tin điều khiển (cmd == 601)
+   * Phục vụ bắt sự kiện đổi tên gợi nhớ (Alias) từ app Zalo trên điện thoại/PC
+   */
+  private setupRawWsHook(): void {
+    const listenerAny = this.api.listener as any;
+    const ws = listenerAny?.ws;
+    if (!ws || this.rawWsHooked) {
+      return;
+    }
+    this.rawWsHooked = true;
+
+    ws.on("message", async (data: any) => {
+      try {
+        if (!(data instanceof Buffer)) return;
+        if (data.byteLength < 4) return;
+
+        const cmd = data.readUInt16LE(1);
+        if (cmd === 601) {
+          await this.handleControlsPacket(data, listenerAny.cipherKey);
+        }
+      } catch {
+        // Im lặng để không làm gián đoạn luồng WebSocket
+      }
+    });
+
+    ws.on("close", () => {
+      this.rawWsHooked = false;
+    });
+  }
+
+  /**
+   * Xử lý gói tin cmd == 601 (Controls) từ Zalo
+   */
+  private async handleControlsPacket(data: Buffer, cipherKey?: string): Promise<void> {
+    try {
+      const dataToDecode = data.subarray(4);
+      const decodedData = new TextDecoder("utf-8").decode(dataToDecode);
+      if (!decodedData) return;
+
+      const parsed = JSON.parse(decodedData);
+      const decodedEvent = await this.decodeRawEventData(parsed, cipherKey);
+      if (!decodedEvent) return;
+
+      const controls = decodedEvent?.data?.controls || decodedEvent?.controls;
+      if (!Array.isArray(controls)) return;
+
+      for (const control of controls) {
+        const content = control?.content;
+        if (!content) continue;
+
+        const actType = String(content.act_type || "").toLowerCase();
+        const act = String(content.act || "").toLowerCase();
+
+        // Kiểm tra xem control có chứa thông tin cập nhật alias / bạn bè / đổi tên không
+        const isAliasEvent =
+          actType.includes("alias") ||
+          act.includes("alias") ||
+          content.data?.alias !== undefined ||
+          (typeof content.data === "string" && content.data.includes("alias"));
+
+        if (isAliasEvent) {
+          let friendId = "";
+          let newAlias = "";
+
+          let innerData = content.data;
+          if (typeof innerData === "string") {
+            try {
+              innerData = JSON.parse(innerData);
+            } catch {}
+          }
+
+          if (innerData && typeof innerData === "object") {
+            friendId = String(innerData.friendId || innerData.userId || innerData.uid || innerData.id || "");
+            newAlias = String(innerData.alias || innerData.newName || innerData.name || "");
+          }
+
+          if (!friendId && content.friendId) friendId = String(content.friendId);
+          if (!friendId && content.userId) friendId = String(content.userId);
+          if (!newAlias && content.alias) newAlias = String(content.alias);
+
+          if (friendId && newAlias) {
+            console.log(
+              `🔔 [Socket Control] Phát hiện đổi alias từ thiết bị khác: User [${friendId}] ➡️ "${newAlias}"`
+            );
+            await this.dispatcher.dispatchUserRename({
+              threadId: friendId,
+              senderId: friendId,
+              newName: newAlias,
+              isGroup: false,
+              timestamp: Date.now(),
+            });
+          }
+
+          // Luôn kích hoạt đồng bộ alias on-demand để đảm bảo 100% dữ liệu chính xác
+          if (this.onSyncAliasCallback) {
+            try {
+              await this.onSyncAliasCallback();
+            } catch (syncErr) {
+              console.warn("⚠️ Lỗi trong callback onSyncAlias:", syncErr);
+            }
+          }
+        }
+      }
+    } catch {
+      // Bỏ qua lỗi giải mã gói tin
+    }
+  }
+
+  /**
+   * Giải mã gói tin sự kiện thô của Zalo bằng WebCrypto + zlib
+   */
+  private async decodeRawEventData(parsed: any, cipherKey?: string): Promise<any> {
+    try {
+      if (typeof parsed.data !== "string") return null;
+      const rawData = parsed.data;
+      const encryptType = parsed.encrypt;
+      if (encryptType === 0) {
+        return JSON.parse(rawData);
+      }
+
+      const decodedBuffer = Buffer.from(
+        encryptType === 1 ? rawData : decodeURIComponent(rawData),
+        "base64"
+      );
+      let decryptedBuffer: Uint8Array = decodedBuffer;
+
+      if (encryptType !== 1) {
+        if (cipherKey && decodedBuffer.length >= 48) {
+          const algorithm = {
+            name: "AES-GCM",
+            iv: decodedBuffer.subarray(0, 16),
+            tagLength: 128,
+            additionalData: decodedBuffer.subarray(16, 32),
+          };
+          const dataSource = decodedBuffer.subarray(32);
+          const cryptoKey = await crypto.subtle.importKey(
+            "raw",
+            Buffer.from(cipherKey, "base64"),
+            algorithm,
+            false,
+            ["decrypt"]
+          );
+          decryptedBuffer = new Uint8Array(
+            await crypto.subtle.decrypt(algorithm, cryptoKey, dataSource)
+          );
+        } else {
+          return null;
+        }
+      }
+
+      let decompressedBuffer: Buffer;
+      if (encryptType === 3) {
+        decompressedBuffer = Buffer.from(decryptedBuffer);
+      } else {
+        decompressedBuffer = zlib.inflateSync(Buffer.from(decryptedBuffer));
+      }
+
+      return JSON.parse(decompressedBuffer.toString("utf-8"));
+    } catch {
+      return null;
+    }
   }
 
   /**

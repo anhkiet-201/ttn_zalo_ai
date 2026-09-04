@@ -125,9 +125,9 @@ export class UserContextRepository {
       const stmt = this.db.connection.prepare(`
         UPDATE user_contexts
         SET sender_name = ?, updated_at = ?
-        WHERE id = ? OR (thread_id = ? AND sender_id = ?)
+        WHERE id = ? OR (thread_id = ? AND sender_id = ?) OR thread_id = ?
       `);
-      stmt.run(newSenderName, Date.now(), id, threadId, senderId);
+      stmt.run(newSenderName, Date.now(), id, threadId, senderId, threadId);
     } catch (err) {
       console.warn(`⚠️ [UserContextRepo] Không thể cập nhật sender_name cho [${threadId}:${senderId}]:`, err);
     }

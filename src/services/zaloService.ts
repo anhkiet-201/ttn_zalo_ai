@@ -10,6 +10,7 @@ import {
   type ForwardMessageResponse,
 } from "zca-js";
 import { ThreadMetadataRepository } from "../database/repositories/threadMetadataRepository.js";
+import { chatBroadcaster } from "../server/chatBroadcaster.js";
 
 /**
  * Bộ đệm in-memory có giới hạn kích thước và thời gian hết hạn (TTL) để tránh rò rỉ bộ nhớ
@@ -583,5 +584,55 @@ export class ZaloService {
    */
   public updateGroupNameCache(groupId: string, newName: string): void {
     this.groupNameCache.set(groupId, newName);
+  }
+
+  /**
+   * Đồng bộ danh sách tên gợi nhớ (Alias) từ Zalo Server vào Database & Cache
+   * - Được gọi On-Demand khi mở Web Portal (GET /api/chat/threads)
+   * - Hoặc khi WebSocket nhận được tín hiệu điều khiển (Control Packet) từ Zalo
+   * - Có debounce an toàn tránh gọi quá dồn dập
+   */
+  private lastAliasSyncTime: number = 0;
+  public async syncAliases(force: boolean = false): Promise<number> {
+    const now = Date.now();
+    // Cache 3 giây nếu không force để chống nghẽn API khi user F5 liên tục
+    if (!force && now - this.lastAliasSyncTime < 3000) {
+      return 0;
+    }
+    this.lastAliasSyncTime = now;
+
+    try {
+      if (typeof this.api.getAliasList !== "function") {
+        return 0;
+      }
+      const aliasData = await this.api.getAliasList(100, 1);
+      const items = aliasData?.items || [];
+      let updatedCount = 0;
+
+      for (const item of items) {
+        if (!item.userId || !item.alias) continue;
+        const userId = String(item.userId);
+        const alias = String(item.alias).trim();
+        if (!alias) continue;
+
+        const currentMeta = this.threadMetaRepo.getMetadata(userId);
+        // Nếu tên trong Zalo Alias khác với tên hiện tại đang lưu trong DB
+        if (!currentMeta || currentMeta.customName !== alias) {
+          const isManual = /^-M(\s|_|-|$)/i.test(alias);
+          this.threadMetaRepo.upsertMetadata(userId, alias, isManual, false);
+          this.updateUserNameCache(userId, alias);
+          chatBroadcaster.broadcastThreadRenamed(userId, alias);
+          updatedCount++;
+        }
+      }
+
+      if (updatedCount > 0) {
+        console.log(`🔄 [Zalo Alias Sync] Đã đồng bộ ${updatedCount} biệt danh/tên gợi nhớ từ Zalo.`);
+      }
+      return updatedCount;
+    } catch (err) {
+      console.warn("⚠️ [Zalo Alias Sync] Không thể đồng bộ alias từ Zalo API:", err);
+      return 0;
+    }
   }
 }

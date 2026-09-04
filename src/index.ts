@@ -37,10 +37,7 @@ async function startBot() {
     const friendHandler = new FriendHandler(zaloService);
     const renameHandler = new RenameHandler(zaloService);
 
-    // Kết nối bộ phát hiện đổi tên vào Dispatcher
-    messageHandler.setOnRename(async (event) => {
-      await dispatcher.dispatchUserRename(event);
-    });
+    // Kết nối bộ phát hiện đổi tên Nhóm vào Dispatcher
     groupHandler.setOnRename(async (event) => {
       await dispatcher.dispatchUserRename(event);
     });
@@ -78,6 +75,11 @@ async function startBot() {
     // Đồng bộ trạng thái kết nối lên Web Portal Dashboard thời gian thực
     currentListener.onStateChange((connInfo) => {
       updateConnectionInfo(connInfo);
+    });
+
+    // Kích hoạt đồng bộ alias khi nhận được socket control từ app Zalo điện thoại
+    currentListener.onSyncAlias(async () => {
+      await zaloService.syncAliases(true);
     });
 
     // Tự động phục hồi khi phiên/cookie hết hạn (bị logout từ app điện thoại)

@@ -131,10 +131,18 @@ export class UserContextManager {
       cached.senderName = newSenderName;
       cached.updatedAt = Date.now();
       this.saveAndSync(cached);
-      return;
     }
 
-    // Nếu không có trong cache, cập nhật trực tiếp vào SQLite
+    // Cập nhật cả các context trong cache thuộc cùng threadId
+    for (const [k, v] of this.cache.entries()) {
+      if (k.startsWith(`${threadId}:`) && v.senderName !== newSenderName) {
+        v.senderName = newSenderName;
+        v.updatedAt = Date.now();
+        this.saveAndSync(v);
+      }
+    }
+
+    // Cập nhật trực tiếp vào SQLite
     this.userContextRepo.updateSenderName(threadId, senderId, newSenderName);
   }
 

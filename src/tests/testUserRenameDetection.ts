@@ -16,7 +16,7 @@ import { GroupEventType } from "zca-js";
 
 async function runTest() {
   console.log("==================================================================");
-  console.log("🧪 BẮT ĐẦU KIỂM THỬ TỰ ĐỘNG: PHÁT HIỆN ĐỔI TÊN & ĐỒNG BỘ DATABASE");
+  console.log("🧪 BẮT ĐẦU KIỂM THỬ: BẮT ĐỔI TÊN ALIAS TỪ THIẾT BỊ KHÁC & ĐỒNG BỘ REALTIME");
   console.log("==================================================================\n");
 
   const db = SQLiteDatabase.getInstance();
@@ -28,6 +28,8 @@ async function runTest() {
   const testSenderId = `sender_${Date.now()}`;
   const testGroupId = `test_rename_group_${Date.now()}`;
 
+  let mockAliasList: Array<{ userId: string; alias: string }> = [];
+
   // Mock API và Services
   const mockApi = {
     getOwnId: () => "bot_own_id_9999",
@@ -37,6 +39,10 @@ async function runTest() {
     getGroupInfo: async () => null,
     changeFriendAlias: async () => {},
     changeGroupName: async () => {},
+    getAliasList: async () => ({
+      items: mockAliasList,
+      updateTime: String(Date.now()),
+    }),
   } as any;
 
   const zaloService = new ZaloService(mockApi);
@@ -53,10 +59,7 @@ async function runTest() {
     userCtxManager
   );
 
-  // Kết nối Dispatcher như trong src/index.ts
-  messageHandler.setOnRename(async (event) => {
-    await dispatcher.dispatchUserRename(event);
-  });
+  // Chỉ gắn GroupHandler vào dispatcher (MessageHandler không bắt ứng viên đổi tên)
   groupHandler.setOnRename(async (event) => {
     await dispatcher.dispatchUserRename(event);
   });
@@ -74,32 +77,10 @@ async function runTest() {
 
   try {
     // --------------------------------------------------------------------------
-    // Test Case 1: Lần đầu nhận tin nhắn cá nhân -> Khởi tạo tên ban đầu vào DB
+    // Test Case 1: Khởi tạo thông tin người dùng ban đầu trong DB
     // --------------------------------------------------------------------------
-    console.log("👉 Test 1: Khởi tạo tên ban đầu từ tin nhắn đầu tiên...");
-    const msg1: ParsedMessage = {
-      id: `msg_1_${Date.now()}`,
-      raw: {} as any,
-      threadId: testThreadId,
-      senderId: testSenderId,
-      senderName: "Lê Thị Ngọc Bích",
-      isGroup: false,
-      isSelf: false,
-      text: "Chào bot, em muốn ứng tuyển ạ",
-      timestamp: Date.now(),
-      args: [],
-      hasQuote: false,
-    };
-
-    await messageHandler.handle(msg1);
-
-    const meta1 = threadMetaRepo.getMetadata(testThreadId);
-    if (!meta1 || meta1.customName !== "Lê Thị Ngọc Bích") {
-      throw new Error(`❌ Test 1 thất bại: Tên ban đầu chưa lưu đúng. Thực tế: ${meta1?.customName}`);
-    }
-    console.log(`✅ Test 1 thành công: Metadata khởi tạo tên: "${meta1.customName}", isManual: ${meta1.isManual}`);
-
-    // Giả lập lưu trước 1 hồ sơ ứng viên và 1 user context để kiểm tra đồng bộ
+    console.log("👉 Test 1: Khởi tạo dữ liệu người dùng & hồ sơ ứng viên...");
+    threadMetaRepo.upsertMetadata(testThreadId, "Lê Thị Ngọc Bích", false, false);
     candidateRepo.upsertCandidate({
       threadId: testThreadId,
       senderId: testSenderId,
@@ -108,42 +89,32 @@ async function runTest() {
       forwardedTo: "hr_admin",
       imageUrls: [],
     });
-
     userCtxManager.getContext(testThreadId, testSenderId, "Lê Thị Ngọc Bích");
 
+    const meta1 = threadMetaRepo.getMetadata(testThreadId);
+    if (!meta1 || meta1.customName !== "Lê Thị Ngọc Bích" || meta1.isManual) {
+      throw new Error(`❌ Test 1 thất bại: Dữ liệu khởi tạo chưa đúng. Thực tế: ${meta1?.customName}`);
+    }
+    console.log(`✅ Test 1 thành công: Khởi tạo ban đầu tên: "${meta1.customName}", isManual: ${meta1.isManual}`);
+
     // --------------------------------------------------------------------------
-    // Test Case 2: Ứng viên đổi tên có gắn tiền tố -M -> Tự động chuyển sang Thủ công
+    // Test Case 2: Admin đổi Alias trên app Zalo điện thoại (kèm tiền tố -M)
+    // Giả lập Socket Event Dispatcher nhận sự kiện đổi alias từ thiết bị khác
     // --------------------------------------------------------------------------
-    console.log("\n👉 Test 2: Đổi tên cá nhân sang '-M Lê Thị Ngọc Bích (Thủ công)'...");
+    console.log("\n👉 Test 2: Bắt sự kiện Admin đổi alias sang '-M Lê Thị Ngọc Bích (Thủ công)' từ thiết bị khác...");
     renameEventReceived = null;
     broadcastReceived = null;
 
-    const msg2: ParsedMessage = {
-      id: `msg_2_${Date.now()}`,
-      raw: {} as any,
+    await dispatcher.dispatchUserRename({
       threadId: testThreadId,
-      senderId: testSenderId,
-      senderName: "-M Lê Thị Ngọc Bích (Thủ công)",
+      senderId: testThreadId,
+      newName: "-M Lê Thị Ngọc Bích (Thủ công)",
       isGroup: false,
-      isSelf: false,
-      text: "Dạ chị ơi",
       timestamp: Date.now(),
-      args: [],
-      hasQuote: false,
-    };
-
-    await messageHandler.handle(msg2);
+    });
 
     if (!renameEventReceived) {
       throw new Error("❌ Test 2 thất bại: Không nhận được sự kiện onUserRename!");
-    }
-    if (
-      renameEventReceived.oldName !== "Lê Thị Ngọc Bích" ||
-      renameEventReceived.newName !== "-M Lê Thị Ngọc Bích (Thủ công)"
-    ) {
-      throw new Error(
-        `❌ Test 2 thất bại: Dữ liệu sự kiện không đúng. Old: ${renameEventReceived.oldName}, New: ${renameEventReceived.newName}`
-      );
     }
 
     const meta2 = threadMetaRepo.getMetadata(testThreadId);
@@ -171,37 +142,34 @@ async function runTest() {
       throw new Error("❌ Test 2 thất bại: ChatBroadcaster chưa phát sự kiện SSE thread_renamed!");
     }
 
-    console.log("✅ Test 2 thành công: Phát hiện đổi tên, tự động bật -M và cập nhật toàn bộ database!");
+    console.log("✅ Test 2 thành công: Đã bắt đổi alias từ thiết bị khác, tự động bật -M và đồng bộ DB & SSE!");
 
     // --------------------------------------------------------------------------
-    // Test Case 3: Đổi tên gỡ bỏ tiền tố -M -> Tự động gỡ bỏ chế độ Thủ công
+    // Test Case 3: Đồng bộ On-Demand từ Zalo Server qua syncAliases()
+    // Giả lập Zalo Server có alias mới cập nhật
     // --------------------------------------------------------------------------
-    console.log("\n👉 Test 3: Đổi tên gỡ bỏ tiền tố -M -> Tự động khôi phục chế độ Tự động (isManual = false)...");
-    renameEventReceived = null;
+    console.log("\n👉 Test 3: Đồng bộ On-Demand (syncAliases) khi Zalo Server có alias mới...");
+    broadcastReceived = null;
+    mockAliasList = [
+      { userId: testThreadId, alias: "Ngọc Bích HR" },
+    ];
 
-    const msg3: ParsedMessage = {
-      id: `msg_3_${Date.now()}`,
-      raw: {} as any,
-      threadId: testThreadId,
-      senderId: testSenderId,
-      senderName: "Lê Thị Ngọc Bích",
-      isGroup: false,
-      isSelf: false,
-      text: "Em đã xong việc rồi ạ",
-      timestamp: Date.now(),
-      args: [],
-      hasQuote: false,
-    };
-
-    await messageHandler.handle(msg3);
+    const syncedCount = await zaloService.syncAliases(true);
+    if (syncedCount !== 1) {
+      throw new Error(`❌ Test 3 thất bại: Số lượng alias đồng bộ kỳ vọng là 1, nhưng nhận được ${syncedCount}`);
+    }
 
     const meta3 = threadMetaRepo.getMetadata(testThreadId);
-    if (!meta3 || meta3.customName !== "Lê Thị Ngọc Bích" || meta3.isManual) {
+    if (!meta3 || meta3.customName !== "Ngọc Bích HR" || meta3.isManual) {
       throw new Error(
-        `❌ Test 3 thất bại: Chưa tự động gỡ cờ isManual khi tên bỏ tiền tố -M. Thực tế: customName=${meta3?.customName}, isManual=${meta3?.isManual}`
+        `❌ Test 3 thất bại: Chưa cập nhật tên mới hoặc chưa tắt isManual khi gỡ -M. Thực tế: customName=${meta3?.customName}, isManual=${meta3?.isManual}`
       );
     }
-    console.log("✅ Test 3 thành công: Đã tự động tắt isManual khi người dùng gỡ tiền tố -M!");
+
+    if (!broadcastReceived || broadcastReceived.newName !== "Ngọc Bích HR") {
+      throw new Error("❌ Test 3 thất bại: Chưa phát SSE khi syncAliases phát hiện thay đổi!");
+    }
+    console.log("✅ Test 3 thành công: Đồng bộ On-Demand thành công và tự động gỡ cờ -M khi alias không có tiền tố!");
 
     // --------------------------------------------------------------------------
     // Test Case 4: Sự kiện Đổi tên Nhóm (GroupEventType.UPDATE)
@@ -232,9 +200,45 @@ async function runTest() {
     }
     console.log("✅ Test 4 thành công: Đã đồng bộ tên mới của Nhóm vào database!");
 
+    // --------------------------------------------------------------------------
+    // Test Case 5: Ứng viên tự gửi tin nhắn có senderName khác -> KHÔNG ĐỔI TÊN DATABASE
+    // (Tuân thủ nghiêm ngặt chỉ thị: KHÔNG bắt sự kiện ứng viên tự đổi tên)
+    // --------------------------------------------------------------------------
+    console.log("\n👉 Test 5: Ứng viên gửi tin nhắn có tên Zalo khác -> Xác minh KHÔNG tự đổi tên...");
+    renameEventReceived = null;
+
+    const msgCandidate: ParsedMessage = {
+      id: `msg_candidate_${Date.now()}`,
+      raw: {} as any,
+      threadId: testThreadId,
+      senderId: testSenderId,
+      senderName: "Tên Zalo Mới Của Ứng Viên",
+      isGroup: false,
+      isSelf: false,
+      text: "Alo bot ơi",
+      timestamp: Date.now(),
+      args: [],
+      hasQuote: false,
+    };
+
+    await messageHandler.handle(msgCandidate);
+
+    if (renameEventReceived) {
+      throw new Error("❌ Test 5 thất bại: Đã phát hiện sự kiện đổi tên khi ứng viên gửi tin nhắn!");
+    }
+
+    const meta5 = threadMetaRepo.getMetadata(testThreadId);
+    if (meta5?.customName !== "Ngọc Bích HR") {
+      throw new Error(
+        `❌ Test 5 thất bại: Tên người dùng bị thay đổi bởi tin nhắn của ứng viên! Tên hiện tại: ${meta5?.customName}`
+      );
+    }
+    console.log("✅ Test 5 thành công: Tuyệt đối không can thiệp đổi tên khi ứng viên gửi tin nhắn!");
+
     console.log("\n==================================================================");
-    console.log("🎉 TẤT CẢ 4/4 TEST CASES ĐỀU VƯỢT QUA XUẤT SẮC!");
+    console.log("🎉 TẤT CẢ 5/5 TEST CASES ĐỀU VƯỢT QUA XUẤT SẮC!");
     console.log("==================================================================");
+    process.exit(0);
   } finally {
     unsubBroadcast();
     // Dọn dẹp dữ liệu test trong SQLite
