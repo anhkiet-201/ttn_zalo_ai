@@ -247,16 +247,9 @@ export function consolidateJobRawContent(
   const mapMatch = cleanBase.match(/(?:📍\s*)?(?:Bản đồ\/Vị trí|Bản đồ|Map):\s*(https?:\/\/[^\s\n]+)/i);
   const existingMap = mapMatch ? mapMatch[1] : (updatedFields["map_url"] as string) || "";
 
-  const addressMatch = cleanBase.match(/(?:📍\s*)?(?:Địa chỉ|Địa điểm|Vị trí):\s*([^\n]+)/i);
-  const existingAddress = addressMatch ? addressMatch[1].trim() : (updatedFields["location"] as string) || "";
-
-  const isFullPost =
-    cleanUpdate.includes("LƯƠNG") ||
-    cleanUpdate.includes("luong") ||
-    cleanUpdate.includes("Lương") ||
-    cleanUpdate.includes("THU NHẬP") ||
-    (cleanUpdate.split("\n").filter((l) => l.trim().length > 0).length >= 4 &&
-      (cleanUpdate.includes("📢") || cleanUpdate.includes("🏢") || cleanUpdate.includes("🏭") || cleanUpdate.includes("CÔNG TY")));
+  // Bài viết mới đầy đủ chỉ khi có thông tin lương/thu nhập chi tiết và độ dài đủ lớn
+  const hasSalaryDetails = /(?:lương|thu nhập|tiền công|\/8h|\/ngày|\/tháng|\/ca|triệu\/tháng)/i.test(cleanUpdate);
+  const isFullPost = hasSalaryDetails && cleanUpdate.length > 200;
 
   let result = "";
 
@@ -274,11 +267,15 @@ export function consolidateJobRawContent(
       }
     }
   } else {
-    // cleanUpdate là thông báo ngắn hoặc cập nhật lịch hẹn/yêu cầu
-    result = cleanBase;
+    // Luôn lấy cleanBase (bài tuyển dụng chi tiết cũ) làm nền tảng cốt lõi
+    result = cleanBase || cleanUpdate;
 
-    // Bổ sung các lưu ý mới vào bài viết
-    if (cleanUpdate && !result.includes(cleanUpdate)) {
+    // Bổ sung các lưu ý mới vào bài viết nếu có yêu cầu nghiệp vụ thực sự (bỏ qua báo cáo số liệu điểm danh)
+    const isAttendanceReport =
+      /(?:tên công ty|tuyển hôm nay|đang làm việc|số đang làm)/i.test(cleanUpdate) &&
+      !/(?:mang theo|cccd|hồ sơ|thẻ công ty|dép|giày|phỏng vấn|lịch hẹn)/i.test(cleanUpdate);
+
+    if (cleanUpdate && !isAttendanceReport && !result.includes(cleanUpdate)) {
       result += `\n- Lưu ý / Yêu cầu: ${cleanUpdate}`;
     }
   }
@@ -533,31 +530,46 @@ export class RAGService {
         };
       }
 
-      // Merge fields thông minh: CẬP NHẬT đè nội dung mới, tuyệt đối không nối chuỗi
+      // Merge fields thông minh: Kết hợp dữ liệu cũ và mới thành nội dung hoàn chỉnh
       const existing = data[idx] as Record<string, unknown>;
+      const isJobRag = args.targetFile === "job_rag";
+      const oldRaw = typeof existing["raw_content"] === "string" ? existing["raw_content"] : "";
+      let incomingRaw = "";
+
       for (const [key, value] of Object.entries(args.updatedFields)) {
         if (value === undefined || value === null || value === "") continue;
 
         if (key === "raw_content") {
-          const valStr = String(value).trim();
-          if (valStr) {
-            existing["raw_content"] = valStr;
-          }
+          incomingRaw = String(value).trim();
         } else if (key === "aliases" && Array.isArray(value)) {
           const curAliases = Array.isArray(existing["aliases"]) ? existing["aliases"] : [];
           existing["aliases"] = Array.from(new Set([...curAliases, ...value]));
+        } else if (key === "title" || key === "location") {
+          // Không đè tiêu đề/địa chỉ chi tiết cũ bằng giá trị ngắn/chung chung
+          const curVal = String(existing[key] || "").trim();
+          const newVal = String(value).trim();
+          if (!curVal || newVal.length >= curVal.length || newVal.includes("–") || newVal.includes("-")) {
+            existing[key] = newVal;
+          }
+        } else if (key === "map_url") {
+          const newMap = String(value).trim();
+          if (newMap) {
+            existing["map_url"] = newMap;
+          }
         } else if (key !== "id") {
           existing[key] = value;
         }
       }
 
-      // Tự động đồng bộ trạng thái và lịch hẹn trong raw_content nếu raw_content chưa được cập nhật trực tiếp
-      if (args.targetFile === "job_rag" && typeof existing["raw_content"] === "string") {
+      // Với job_rag: Luôn kết hợp bài cũ với thông tin cập nhật mới để tạo bài viết hoàn chỉnh
+      if (isJobRag) {
         existing["raw_content"] = consolidateJobRawContent(
-          existing["raw_content"] as string,
-          "",
+          oldRaw,
+          incomingRaw,
           args.updatedFields
         );
+      } else if (incomingRaw) {
+        existing["raw_content"] = incomingRaw;
       }
 
       data[idx] = existing;

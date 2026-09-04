@@ -184,6 +184,7 @@ export class GroupAnalysisService {
               const currentRaw = (existingEntry["raw_content"] as string) || "";
               const updateSnippet =
                 (args.updatedFields?.raw_content as string) ||
+                (args.newEntry?.raw_content as string) ||
                 (args.reason as string) ||
                 "";
 
@@ -214,10 +215,14 @@ export class GroupAnalysisService {
                 "Không rõ";
 
               const targetId = (currentEntry["id"] as string) || args.targetId;
+              const actualAction =
+                args.action === "update_existing" || (result.message && result.message.includes("Merge"))
+                  ? "update_existing"
+                  : args.action;
 
               await hrNotifier.notifyRagUpdate({
                 groupName,
-                action: args.action,
+                action: actualAction,
                 targetFile: `${args.targetFile}.json`,
                 targetId,
                 title,
@@ -226,7 +231,7 @@ export class GroupAnalysisService {
                 updatedFields: args.updatedFields,
                 newEntry: args.newEntry,
                 entry: result.entry,
-                rawContent: (args.updatedFields?.raw_content || args.newEntry?.raw_content || result.entry?.raw_content) as string | undefined,
+                rawContent: (result.entry?.raw_content || args.updatedFields?.raw_content || args.newEntry?.raw_content) as string | undefined,
               });
             }
           }
@@ -381,6 +386,7 @@ export class GroupAnalysisService {
               const currentRaw = (existingEntry["raw_content"] as string) || "";
               const updateSnippet =
                 (args.updatedFields?.raw_content as string) ||
+                (args.newEntry?.raw_content as string) ||
                 rawText ||
                 (args.reason as string) ||
                 "";
@@ -408,9 +414,13 @@ export class GroupAnalysisService {
             "Không rõ";
 
           const targetId = (currentEntry["id"] as string) || args.targetId;
+          const actualAction =
+            args.action === "update_existing" || (result.message && result.message.includes("Merge"))
+              ? "update_existing"
+              : args.action;
 
           let summary = "";
-          if (args.action === "create_new" || (result.entry && !args.targetId)) {
+          if (actualAction === "create_new" || (result.entry && !args.targetId)) {
             summary = `Tạo mới "${title}" (ID: ${targetId || "Mới"})`;
           } else {
             summary = `Cập nhật "${title}" (ID: ${targetId})`;
@@ -418,7 +428,7 @@ export class GroupAnalysisService {
 
           items.push({
             targetFile: `${args.targetFile}.json`,
-            action: args.action,
+            action: actualAction,
             targetId,
             title,
             reason: args.reason,

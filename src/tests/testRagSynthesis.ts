@@ -70,6 +70,33 @@ function runTests() {
   }
   console.log(`✅ [TEST 3 PASSED] getEntryById tìm thấy "${entry.title}"`);
 
+  console.log("\n🧪 [TEST 4] Kiểm tra tin nhắn điểm danh Sowin không làm mất bài viết tuyển dụng cũ");
+  const sowinAttendanceText =
+    "Tên công ty: Sowin\nSố lượng tuyển hôm nay: 11 người.\nSố lượng cần tuyển: 8 người.\nSố đang làm việc: 32 người.";
+  const sowinAttendanceFields = { vacancies: 8 };
+  const sowinSynthesized = consolidateJobRawContent(currentSowinRaw, sowinAttendanceText, sowinAttendanceFields);
+
+  if (!sowinSynthesized.includes("255k/8h")) {
+    throw new Error("❌ Thất bại: Tin nhắn điểm danh làm mất thông tin lương!");
+  }
+  if (!sowinSynthesized.includes("https://maps.app.goo.gl/Ysex64GohN4ZS6iM6")) {
+    throw new Error("❌ Thất bại: Tin nhắn điểm danh làm mất link Google Maps!");
+  }
+  if (!sowinSynthesized.includes("Số lượng cần tuyển: 8 người (Đang tuyển)")) {
+    throw new Error("❌ Thất bại: Chưa cập nhật đúng số lượng 8 người đang tuyển!");
+  }
+  if (sowinSynthesized.length < 200) {
+    throw new Error("❌ Thất bại: Bài viết bị thu nhỏ quá mức (bị ghi đè bằng tin điểm danh)!");
+  }
+  console.log("✅ [TEST 4 PASSED] Tin nhắn điểm danh kết hợp hoàn hảo với bài cũ, không mất thông tin lương/bản đồ!");
+
+  console.log("\n🧪 [TEST 5] Kiểm tra Directory Index chứa đầy đủ Aliases của Sowin (job_14)");
+  const dirIndex = ragService.buildDirectoryIndex();
+  if (!dirIndex.includes("job_14") || !dirIndex.includes("sowin")) {
+    throw new Error(`❌ Thất bại: Directory Index không chứa ID job_14 hoặc alias 'sowin'!`);
+  }
+  console.log(`✅ [TEST 5 PASSED] Directory Index có đầy đủ ID job_14 và Aliases cho AI đối chiếu!`);
+
   console.log("\n🎉 TẤT CẢ TEST CASES ĐÃ VƯỢT QUA THÀNH CÔNG!");
   ragService.destroy();
   process.exit(0);
