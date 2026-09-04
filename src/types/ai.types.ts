@@ -214,12 +214,12 @@ export const groupRagTools: FunctionDeclaration[] = [
         targetId: {
           type: Type.STRING,
           description:
-            'BẮT BUỘC ĐỐI CHIẾU ID TỪ BẢNG TRA CỨU: ID của entry tương ứng với matchedCompanyName khi action="update_existing" (vd: "job_04" cho Leader, "job_06" cho Sanaky, "job_01" cho Wangshun). Tuyệt đối không chọn bừa job_01!',
+            'BẮT BUỘC ĐỐI CHIẾU THƯƠNG HIỆU: ID của entry tương ứng với matchedCompanyName khi action="update_existing" (vd: "job_04" cho Leader, "job_06" cho Sanaky, "job_01" cho Wangshun, "job_21" cho Chervon). BẮT BUỘC tên thương hiệu phải khớp; TUYỆT ĐỐI KHÔNG match chỉ dựa vào KCN / địa điểm (vd: CẤM gán công ty Kahong vào Chervon chỉ vì cùng ở VSIP 2A)!',
         },
         matchingReason: {
           type: Type.STRING,
           description:
-            'Giải trình logic vì sao chọn targetId này (vd: "Tên nhóm là CÔNG TY LEADER KCN SÔNG MÂY -> Khớp với Công ty Leader ID job_04").',
+            'Giải trình logic vì sao chọn targetId này (vd: "Tên nhóm là CÔNG TY LEADER -> Khớp thương hiệu Công ty Leader ID job_04").',
         },
         updatedFields: {
           type: Type.OBJECT,

@@ -133,6 +133,7 @@ export interface RagUpdateResult {
 export function normalizeText(str: string): string {
   return str
     .toLowerCase()
+    .replace(/[đĐ]/g, "d")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/[^\w\s]/gi, " ")

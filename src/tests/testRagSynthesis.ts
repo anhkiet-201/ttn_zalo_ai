@@ -71,6 +71,8 @@ function runTests() {
   console.log(`✅ [TEST 3 PASSED] getEntryById tìm thấy "${entry.title}"`);
 
   console.log("\n🎉 TẤT CẢ TEST CASES ĐÃ VƯỢT QUA THÀNH CÔNG!");
+  ragService.destroy();
+  process.exit(0);
 }
 
 runTests();
