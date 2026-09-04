@@ -51,6 +51,10 @@ export interface BotConfig {
   minDebounceSeconds: number;
   maxDebounceSeconds: number;
   groupDebounceSeconds: number;
+  enableTypingDebounce: boolean;
+  typingIntervalSeconds: number;
+  minTypingDelaySeconds: number;
+  maxTypingDelaySeconds: number;
   groupIgnoreKeywords: string[];
   groupIgnorePatterns: RegExp[];
   groupMinMessageLength: number;

@@ -14,7 +14,8 @@
     "test:quote": "tsx src/tests/testMediaDescriptionAndQuote.ts",
     "test:benchmark": "tsx src/tests/runBenchmark.ts",
     "test:comprehensive": "tsx src/tests/testComprehensiveFeatureAndUI.ts",
-    "test:resilience": "tsx src/tests/testReconnectResilience.ts"
+    "test:resilience": "tsx src/tests/testReconnectResilience.ts",
+    "test:typing": "tsx src/tests/testMessageBatcherTyping.ts"
   },
   "keywords": [
     "zalo",

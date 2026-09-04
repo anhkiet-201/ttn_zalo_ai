@@ -190,6 +190,10 @@ export const config: BotConfig = {
     Number(process.env.MESSAGE_DEBOUNCE_SECONDS) ||
     30,
   groupDebounceSeconds: Number(process.env.GROUP_DEBOUNCE_SECONDS) || 30,
+  enableTypingDebounce: process.env.ENABLE_TYPING_DEBOUNCE !== "false",
+  typingIntervalSeconds: Number(process.env.TYPING_INTERVAL_SECONDS) || 4,
+  minTypingDelaySeconds: Number(process.env.MIN_TYPING_DELAY_SECONDS) || 1,
+  maxTypingDelaySeconds: Number(process.env.MAX_TYPING_DELAY_SECONDS) || 3,
   groupIgnoreKeywords: parsedIgnore.keywords,
   groupIgnorePatterns: parsedIgnore.patterns,
   groupMinMessageLength: Number(process.env.GROUP_MIN_MESSAGE_LENGTH) || 30,

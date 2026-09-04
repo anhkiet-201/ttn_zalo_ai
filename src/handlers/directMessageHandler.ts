@@ -30,7 +30,19 @@ export class DirectMessageHandler {
     this.chatHistoryRepo = chatHistoryRepo || new ChatHistoryRepository();
     // Mỗi DirectMessageHandler có batcher riêng — batch được phân vùng theo threadId
     // nên phiên của từng ứng viên hoàn toàn độc lập
-    this.batcher = new MessageBatcher(async (batch) => this.processBatch(batch));
+    this.batcher = new MessageBatcher(
+      async (batch) => this.processBatch(batch),
+      config.minDebounceSeconds,
+      config.maxDebounceSeconds,
+      config.enableTypingDebounce
+        ? async (threadId, threadType) => {
+            await this.zaloService.sendTyping(threadId, threadType);
+          }
+        : undefined,
+      config.typingIntervalSeconds,
+      config.minTypingDelaySeconds,
+      config.maxTypingDelaySeconds
+    );
   }
 
   /**
@@ -418,12 +430,16 @@ export class DirectMessageHandler {
       );
 
       if (!aiReply?.trim()) {
+        this.batcher.stopTyping(batch);
         return;
       }
 
       console.log(`📤 [AI Reply ➔ ${batch.senderName}] "${aiReply.length > 120 ? aiReply.slice(0, 120) + "..." : aiReply}"`);
 
-      // 7. Tách và gửi lần lượt các phần tin nhắn
+      // 7. Dừng typing indicator ngay trước khi gửi tin nhắn đầu tiên
+      this.batcher.stopTyping(batch);
+
+      // Tách và gửi lần lượt các phần tin nhắn
       const messageParts = this.splitMessages(aiReply);
       for (let i = 0; i < messageParts.length; i++) {
         if (i > 0) await new Promise((r) => setTimeout(r, 800));

@@ -210,6 +210,21 @@ export class ZaloService {
   }
 
   /**
+   * Gửi sự kiện đang soạn tin nhắn (typing indicator) tới thread
+   * Non-blocking: Bắt lỗi an toàn và ghi warn để không gián đoạn luồng xử lý chính nếu có sự cố mạng.
+   */
+  public async sendTyping(
+    threadId: string,
+    type: ThreadType = ThreadType.User
+  ): Promise<void> {
+    try {
+      await this.api.sendTypingEvent(threadId, type);
+    } catch (error) {
+      console.warn(`⚠️ [ZaloService] Không thể gửi sự kiện typing tới [${threadId}]:`, error);
+    }
+  }
+
+  /**
    * Kiểm tra xem threadId có phải là Nhóm Zalo (Group) hay không
    */
   public async isGroupThread(threadId: string): Promise<boolean> {
