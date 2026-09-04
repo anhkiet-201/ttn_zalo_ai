@@ -7,15 +7,17 @@ const html = htm.bind(React.createElement);
  * LightboxModal: Xem ảnh toàn màn hình với hiệu ứng mờ kính
  */
 export function LightboxModal({ imageUrl, onClose }) {
-  if (!imageUrl) return null;
-
+  // Hook PHẢI được gọi trước mọi early return (Rules of Hooks)
   useEffect(() => {
+    if (!imageUrl) return;
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') onClose();
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onClose]);
+  }, [imageUrl, onClose]);
+
+  if (!imageUrl) return null;
 
   return html`
     <div className="lightbox-backdrop" onClick=${onClose}>

@@ -15,6 +15,46 @@ import { type ZaloService } from "../services/zaloService.js";
 import { config } from "../config/index.js";
 
 /**
+ * Đọc toàn bộ request body thành chuỗi string (Promise-based, an toàn).
+ * Giải quyết BUG-01: tránh race condition khi dùng callback req.on("end").
+ */
+function readBody(req: http.IncomingMessage, maxBytes = 50 * 1024 * 1024): Promise<string> {
+  return new Promise((resolve, reject) => {
+    let body = "";
+    req.on("data", (chunk) => {
+      body += chunk;
+      if (body.length > maxBytes) {
+        req.destroy(new Error("Request body quá lớn"));
+      }
+    });
+    req.on("end", () => resolve(body));
+    req.on("error", reject);
+  });
+}
+
+/**
+ * Allowed origins cho Media Proxy — chỉ cho phép Zalo CDN để tránh SSRF (BUG-07).
+ */
+const ALLOWED_PROXY_HOSTS = [
+  "zadn.vn",
+  "zaloapp.com",
+  "zalo.me",
+  "zaloid.com",
+  "zingcdn.com",
+];
+
+function isAllowedProxyUrl(rawUrl: string): boolean {
+  try {
+    const parsed = new URL(rawUrl);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return false;
+    const hostname = parsed.hostname.toLowerCase();
+    return ALLOWED_PROXY_HOSTS.some((allowed) => hostname === allowed || hostname.endsWith(`.${allowed}`));
+  } catch {
+    return false;
+  }
+}
+
+/**
  * ChatRouter: Chuyên trách điều phối và xử lý toàn bộ các routes của Web Chat:
  * - Phục vụ Static Files (/static/chat.css, /static/chat.js)
  * - Render giao diện Web Chat (/chat)
@@ -101,14 +141,13 @@ export async function handleChatRoute(
     };
 
     // Lắng nghe sự kiện đổi tên thread
+    // Format chuẩn: { type, data: { threadId, newName } } — nhất quán với new_message
     const onRename = (data: { threadId: string; newName: string }) => {
       try {
         res.write(
           `data: ${JSON.stringify({
             type: "thread_renamed",
-            threadId: data.threadId,
-            newName: data.newName,
-            data,
+            data: { threadId: data.threadId, newName: data.newName },
           })}\n\n`
         );
       } catch {}
@@ -134,9 +173,10 @@ export async function handleChatRoute(
   // 3.5. Media Proxy: Stream audio / media từ Zalo CDN an toàn cho trình duyệt
   if (pathname === "/api/chat/media-proxy") {
     const targetUrl = parsedUrl.searchParams.get("url");
-    if (!targetUrl || !targetUrl.startsWith("http")) {
+    // BUG-07: Validate URL chống SSRF — chỉ cho phép Zalo CDN domains
+    if (!targetUrl || !isAllowedProxyUrl(targetUrl)) {
       res.writeHead(400, { "Content-Type": "text/plain; charset=utf-8" });
-      res.end("Bad Request: Invalid URL");
+      res.end("Bad Request: URL không hợp lệ hoặc không được phép");
       return true;
     }
 
@@ -193,75 +233,86 @@ export async function handleChatRoute(
       const total = chatHistoryRepo.getTotalThreadsCount(search, filter);
       const threadItems = chatHistoryRepo.getThreadList(limit, offset, search, filter);
 
-      const enrichedThreads = await Promise.all(
-        threadItems.map(async (item) => {
-          let threadName = "";
-          let isGroup = item.isGroup;
+      // BUG-03: Giới hạn concurrency để tránh bắn quá nhiều Zalo API calls cùng lúc.
+      // Với limit=25 threads, không dùng Promise.all mà batch theo nhóm 4 concurrent.
+      const timeoutPromise = <T>(p: Promise<T>, ms: number, fallback: T): Promise<T> =>
+        Promise.race([p, new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms))]);
 
-          if (activeZaloService) {
-            try {
-              const timeoutPromise = <T>(p: Promise<T>, ms: number, fallback: T): Promise<T> =>
-                Promise.race([p, new Promise<T>((res) => setTimeout(() => res(fallback), ms))]);
+      const enrichItems = async (item: typeof threadItems[0]) => {
+        let threadName = "";
+        let isGroup = item.isGroup;
 
-              const detectedGroup = await timeoutPromise(activeZaloService.isGroupThread(item.threadId), 300, isGroup);
-              if (detectedGroup !== item.isGroup) {
-                isGroup = detectedGroup;
-                chatHistoryRepo.updateThreadIsGroup(item.threadId, detectedGroup);
-              }
-
-              if (isGroup) {
-                threadName = await timeoutPromise(activeZaloService.getGroupName(item.threadId), 300, "");
-              } else {
-                threadName = await timeoutPromise(activeZaloService.getUserName(item.threadId), 300, "");
-              }
-            } catch {}
-          }
-
-          if (!threadName) {
-            if (item.candidateName) {
-              threadName = item.candidateName;
-            } else if (item.senderName && item.senderName !== "Unknown" && item.senderName !== "Ứng viên") {
-              threadName = item.senderName;
-            } else {
-              threadName = isGroup ? `Nhóm ${item.threadId}` : `Người dùng ${item.threadId}`;
+        if (activeZaloService) {
+          try {
+            const detectedGroup = await timeoutPromise(activeZaloService.isGroupThread(item.threadId), 300, isGroup);
+            if (detectedGroup !== item.isGroup) {
+              isGroup = detectedGroup;
+              chatHistoryRepo.updateThreadIsGroup(item.threadId, detectedGroup);
             }
-          } else if (!threadName.startsWith("Nhóm ") && !threadName.startsWith("Người dùng ")) {
-            // Tự động lưu tên nhóm / tên người dùng vào DB để tìm kiếm nhanh
-            threadMetaRepo.upsertMetadata(item.threadId, threadName, undefined, isGroup);
+
+            if (isGroup) {
+              threadName = await timeoutPromise(activeZaloService.getGroupName(item.threadId), 300, "");
+            } else {
+              threadName = await timeoutPromise(activeZaloService.getUserName(item.threadId), 300, "");
+            }
+          } catch {}
+        }
+
+        if (!threadName) {
+          if (item.candidateName) {
+            threadName = item.candidateName;
+          } else if (item.senderName && item.senderName !== "Unknown" && item.senderName !== "Ứng viên") {
+            threadName = item.senderName;
+          } else {
+            threadName = isGroup ? `Nhóm ${item.threadId}` : `Người dùng ${item.threadId}`;
           }
+        } else if (!threadName.startsWith("Nhóm ") && !threadName.startsWith("Người dùng ")) {
+          // Tự động lưu tên nhóm / tên người dùng vào DB để tìm kiếm nhanh
+          threadMetaRepo.upsertMetadata(item.threadId, threadName, undefined, isGroup);
+        }
 
-          const isManual = !isGroup && Boolean(
-            item.isManual ||
-            threadMetaRepo.isManual(item.threadId) ||
-            /^-M(\s|_|-|$)/i.test(threadName)
-          );
-          if (isManual && !/^-M(\s|_|-|$)/i.test(threadName)) {
-            threadName = `-M ${threadName}`;
-          }
+        const isManual = !isGroup && Boolean(
+          item.isManual ||
+          threadMetaRepo.isManual(item.threadId) ||
+          /^-M(\s|_|-|$)/i.test(threadName)
+        );
+        if (isManual && !/^-M(\s|_|-|$)/i.test(threadName)) {
+          threadName = `-M ${threadName}`;
+        }
 
-          const avatarLetter = (threadName || "U").trim().charAt(0).toUpperCase();
+        const avatarLetter = (threadName || "U").trim().charAt(0).toUpperCase();
 
-          return {
-            threadId: item.threadId,
-            threadName,
-            avatarLetter,
-            isGroup,
-            isManual,
-            lastContent: item.lastContent,
-            lastMediaType: item.lastMediaType,
-            lastHasImage: item.lastMediaType === "photo",
-            lastHasVoice: item.lastMediaType === "voice",
-            lastHasSticker: item.lastMediaType === "sticker",
-            lastTimestamp: item.lastTimestamp,
-            lastRole: item.lastRole,
-            candidateName: item.candidateName,
-            targetCompany: item.targetCompany,
-            phoneNumber: item.phoneNumber,
-          };
-        })
-      );
+        return {
+          threadId: item.threadId,
+          threadName,
+          avatarLetter,
+          isGroup,
+          isManual,
+          lastContent: item.lastContent,
+          lastMediaType: item.lastMediaType,
+          lastHasImage: item.lastMediaType === "photo",
+          lastHasVoice: item.lastMediaType === "voice",
+          lastHasSticker: item.lastMediaType === "sticker",
+          lastTimestamp: item.lastTimestamp,
+          lastRole: item.lastRole,
+          candidateName: item.candidateName,
+          targetCompany: item.targetCompany,
+          phoneNumber: item.phoneNumber,
+        };
+      };
 
-      const hasMore = threadItems.length === limit && offset + threadItems.length < total;
+      // Chạy theo batch 4 concurrent thay vì Promise.all toàn bộ
+      const CONCURRENCY = 4;
+      const enrichedThreads: Awaited<ReturnType<typeof enrichItems>>[] = [];
+      for (let i = 0; i < threadItems.length; i += CONCURRENCY) {
+        const batch = threadItems.slice(i, i + CONCURRENCY);
+        const results = await Promise.all(batch.map(enrichItems));
+        enrichedThreads.push(...results);
+      }
+
+      // BUG-02: hasMore logic đơn giản hóa — nếu trả về đúng limit thì còn dữ liệu
+      // Tránh race condition giữa total count và threadItems query
+      const hasMore = threadItems.length === limit;
       const nextOffset = offset + threadItems.length;
 
       res.writeHead(200, {
@@ -400,283 +451,280 @@ export async function handleChatRoute(
   }
 
   // 6. API POST: Gửi tin nhắn
+  // BUG-01: Dùng readBody() thay vì callback req.on("end") để tránh race condition
   if (req.method === "POST" && pathname === "/api/chat/send") {
-    let body = "";
-    req.on("data", (chunk) => { body += chunk; });
-    req.on("end", async () => {
-      try {
-        const payload = JSON.parse(body || "{}");
-        const threadId = payload.threadId;
-        const messageText = (payload.message || payload.content || "").trim();
-        const type = payload.type;
-        const isGroup = Boolean(payload.isGroup);
+    try {
+      const body = await readBody(req);
+      const payload = JSON.parse(body || "{}");
+      const threadId = payload.threadId;
+      const messageText = (payload.message || payload.content || "").trim();
+      const type = payload.type;
+      const isGroup = Boolean(payload.isGroup);
 
-        if (!threadId || !messageText) {
-          res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" });
-          res.end(JSON.stringify({ success: false, error: "Thiếu tham số threadId hoặc message" }));
-          return;
-        }
+      if (!threadId || !messageText) {
+        res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" });
+        res.end(JSON.stringify({ success: false, error: "Thiếu tham số threadId hoặc message" }));
+        return true;
+      }
 
-        if (!activeZaloService) {
-          res.writeHead(503, { "Content-Type": "application/json; charset=utf-8" });
-          res.end(JSON.stringify({ success: false, error: "Zalo client chưa sẵn sàng" }));
-          return;
-        }
+      if (!activeZaloService) {
+        res.writeHead(503, { "Content-Type": "application/json; charset=utf-8" });
+        res.end(JSON.stringify({ success: false, error: "Zalo client chưa sẵn sàng" }));
+        return true;
+      }
 
-        await activeZaloService.sendMessageAuto(threadId, messageText, type);
+      await activeZaloService.sendMessageAuto(threadId, messageText, type);
 
-        const chatHistoryRepo = new ChatHistoryRepository();
-        chatHistoryRepo.addMessage({
-          threadId,
-          senderId: loggedInAccount?.id || (activeZaloService ? activeZaloService.getOwnId() : "admin"),
-          senderName: "Admin (Tôi)",
-          role: "model",
-          content: messageText,
-          isGroup,
-          timestamp: Date.now(),
-        });
+      const chatHistoryRepo = new ChatHistoryRepository();
+      chatHistoryRepo.addMessage({
+        threadId,
+        senderId: loggedInAccount?.id || (activeZaloService ? activeZaloService.getOwnId() : "admin"),
+        senderName: "Admin (Tôi)",
+        role: "model",
+        content: messageText,
+        isGroup,
+        timestamp: Date.now(),
+      });
 
-        console.log(`📤 [Web Chat] Đã gửi tin nhắn tới [${threadId}]: "${messageText}"`);
-        res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
-        res.end(JSON.stringify({ success: true, message: "Đã gửi tin nhắn thành công" }));
-      } catch (err) {
-        console.error("❌ [Web Chat] Lỗi gửi tin nhắn:", err);
+      console.log(`📤 [Web Chat] Đã gửi tin nhắn tới [${threadId}]: "${messageText}"`);
+      res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+      res.end(JSON.stringify({ success: true, message: "Đã gửi tin nhắn thành công" }));
+    } catch (err) {
+      console.error("❌ [Web Chat] Lỗi gửi tin nhắn:", err);
+      if (!res.headersSent) {
         res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
         res.end(JSON.stringify({ success: false, error: String(err) }));
       }
-    });
+    }
     return true;
   }
 
   // 7. API POST: Gửi ảnh đính kèm (hỗ trợ cả 1 ảnh và nhiều ảnh cùng lúc)
+  // BUG-01: Dùng readBody() thay vì callback req.on("end")
   if (req.method === "POST" && pathname === "/api/chat/send-image") {
-    let body = "";
-    req.on("data", (chunk) => {
-      body += chunk;
-      if (body.length > 50 * 1024 * 1024) req.destroy();
-    });
-    req.on("end", async () => {
+    try {
+      const body = await readBody(req);
+      const payload = JSON.parse(body || "{}");
+      const { threadId, imageBase64, imageData, images, content } = payload;
+
+      const rawImages: string[] = [];
+      if (Array.isArray(images) && images.length > 0) {
+        rawImages.push(...images);
+      } else if (imageBase64) {
+        rawImages.push(imageBase64);
+      } else if (imageData) {
+        rawImages.push(imageData);
+      }
+
+      if (!threadId || rawImages.length === 0) {
+        res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" });
+        res.end(JSON.stringify({ success: false, error: "Thiếu threadId hoặc hình ảnh" }));
+        return true;
+      }
+
+      if (!activeZaloService) {
+        res.writeHead(503, { "Content-Type": "application/json; charset=utf-8" });
+        res.end(JSON.stringify({ success: false, error: "Zalo client chưa sẵn sàng." }));
+        return true;
+      }
+
+      const uploadDir = path.resolve("./data/uploads");
+      if (!fsSync.existsSync(uploadDir)) {
+        fsSync.mkdirSync(uploadDir, { recursive: true });
+      }
+
+      const tempFilePaths: string[] = [];
+
+      for (let i = 0; i < rawImages.length; i++) {
+        const rawBase64 = rawImages[i];
+        const cleanBase64 = rawBase64.includes(",") ? rawBase64.split(",")[1] : rawBase64;
+        const tempFileName = `upload_${Date.now()}_${i}_${Math.random().toString(36).slice(2, 8)}.png`;
+        const tempFilePath = path.join(uploadDir, tempFileName);
+
+        await fs.writeFile(tempFilePath, Buffer.from(cleanBase64.trim(), "base64"));
+        tempFilePaths.push(tempFilePath);
+      }
+
       try {
-        const payload = JSON.parse(body || "{}");
-        const { threadId, imageBase64, imageData, images, content } = payload;
-        
-        const rawImages: string[] = [];
-        if (Array.isArray(images) && images.length > 0) {
-          rawImages.push(...images);
-        } else if (imageBase64) {
-          rawImages.push(imageBase64);
-        } else if (imageData) {
-          rawImages.push(imageData);
+        // Gửi toàn bộ ảnh cùng lúc qua Zalo SDK để gom thành 1 Album duy nhất
+        await activeZaloService.sendAttachmentAuto(threadId, tempFilePaths, content || "");
+        console.log(`🖼️ [Web Chat] Đã gửi album ${tempFilePaths.length} hình ảnh tới [${threadId}]`);
+      } catch (sendErr) {
+        console.error("❌ [Web Chat] Lỗi gửi ảnh tới Zalo SDK:", sendErr);
+        throw sendErr;
+      } finally {
+        // Dọn dẹp tệp tạm bất đồng bộ
+        for (const p of tempFilePaths) {
+          fs.unlink(p).catch(() => {});
         }
+      }
 
-        if (!threadId || rawImages.length === 0) {
-          res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" });
-          res.end(JSON.stringify({ success: false, error: "Thiếu threadId hoặc hình ảnh" }));
-          return;
-        }
-
-        if (!activeZaloService) {
-          res.writeHead(503, { "Content-Type": "application/json; charset=utf-8" });
-          res.end(JSON.stringify({ success: false, error: "Zalo client chưa sẵn sàng." }));
-          return;
-        }
-
-        const uploadDir = path.resolve("./data/uploads");
-        if (!fsSync.existsSync(uploadDir)) {
-          fsSync.mkdirSync(uploadDir, { recursive: true });
-        }
-
-        const tempFilePaths: string[] = [];
-
-        for (let i = 0; i < rawImages.length; i++) {
-          const rawBase64 = rawImages[i];
-          const cleanBase64 = rawBase64.includes(",") ? rawBase64.split(",")[1] : rawBase64;
-          const tempFileName = `upload_${Date.now()}_${i}_${Math.random().toString(36).slice(2, 8)}.png`;
-          const tempFilePath = path.join(uploadDir, tempFileName);
-
-          await fs.writeFile(tempFilePath, Buffer.from(cleanBase64.trim(), "base64"));
-          tempFilePaths.push(tempFilePath);
-        }
-
-        try {
-          // Gửi toàn bộ ảnh cùng lúc qua Zalo SDK để gom thành 1 Album duy nhất
-          await activeZaloService.sendAttachmentAuto(threadId, tempFilePaths, content || "");
-          console.log(`🖼️ [Web Chat] Đã gửi album ${tempFilePaths.length} hình ảnh tới [${threadId}]`);
-        } catch (sendErr) {
-          console.error("❌ [Web Chat] Lỗi gửi ảnh tới Zalo SDK:", sendErr);
-          throw sendErr;
-        } finally {
-          // Dọn dẹp tệp tạm bất đồng bộ
-          for (const p of tempFilePaths) {
-            fs.unlink(p).catch(() => {});
-          }
-        }
-
-        res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
-        res.end(JSON.stringify({
-          success: true,
-          message: `Đã gửi ${rawImages.length} ảnh thành công`,
-        }));
-      } catch (err) {
-        console.error("❌ [Web Chat] Lỗi gửi ảnh:", err);
+      res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+      res.end(JSON.stringify({
+        success: true,
+        message: `Đã gửi ${rawImages.length} ảnh thành công`,
+      }));
+    } catch (err) {
+      console.error("❌ [Web Chat] Lỗi gửi ảnh:", err);
+      if (!res.headersSent) {
         res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
         res.end(JSON.stringify({ success: false, error: String(err) }));
       }
-    });
+    }
     return true;
   }
 
   // 8. API POST: Đổi tên hiển thị
+  // BUG-01: Dùng readBody() thay vì callback req.on("end")
   if (req.method === "POST" && pathname === "/api/chat/rename") {
-    let body = "";
-    req.on("data", (chunk) => { body += chunk; });
-    req.on("end", async () => {
+    try {
+      const body = await readBody(req);
+      const payload = JSON.parse(body || "{}");
+      const { threadId, newName, isGroup } = payload;
+
+      if (!threadId || !newName || !newName.trim()) {
+        res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" });
+        res.end(JSON.stringify({ success: false, error: "Thiếu thông tin threadId hoặc newName" }));
+        return true;
+      }
+
+      const trimmedName = newName.trim();
+      let zaloResult: { success: boolean; error?: string } = { success: true };
+
+      if (activeZaloService) {
+        zaloResult = await activeZaloService.changeThreadName(threadId, trimmedName, isGroup);
+      }
+
+      // Cập nhật SQLite metadata và UserContext bộ nhớ
       try {
-        const payload = JSON.parse(body || "{}");
-        const { threadId, newName, isGroup } = payload;
+        const threadMetaRepo = new ThreadMetadataRepository();
+        threadMetaRepo.upsertMetadata(threadId, trimmedName, undefined, isGroup);
 
-        if (!threadId || !newName || !newName.trim()) {
-          res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" });
-          res.end(JSON.stringify({ success: false, error: "Thiếu thông tin threadId hoặc newName" }));
-          return;
+        const userContextMgr = UserContextManager.getInstance();
+        const ctx = userContextMgr.getContext(threadId, threadId, trimmedName);
+        if (ctx) {
+          ctx.senderName = trimmedName;
+          userContextMgr.saveAndSync(ctx);
         }
+      } catch {
+        // ignore
+      }
 
-        const trimmedName = newName.trim();
-        let zaloResult: { success: boolean; error?: string } = { success: true };
+      chatBroadcaster.broadcastThreadRenamed(threadId, trimmedName);
+      console.log(`✏️ [Web Chat] Đã đổi tên thread [${threadId}] -> "${trimmedName}"`);
 
-        if (activeZaloService) {
-          zaloResult = await activeZaloService.changeThreadName(threadId, trimmedName, isGroup);
-        }
-
-        // 2. Cập nhật SQLite metadata và UserContext bộ nhớ
-        try {
-          const threadMetaRepo = new ThreadMetadataRepository();
-          threadMetaRepo.upsertMetadata(threadId, trimmedName, undefined, isGroup);
-
-          const userContextMgr = UserContextManager.getInstance();
-          const ctx = userContextMgr.getContext(threadId, threadId, trimmedName);
-          if (ctx) {
-            ctx.senderName = trimmedName;
-            userContextMgr.saveAndSync(ctx);
-          }
-        } catch (ucErr) {
-          // ignore
-        }
-
-        chatBroadcaster.broadcastThreadRenamed(threadId, trimmedName);
-        console.log(`✏️ [Web Chat] Đã đổi tên thread [${threadId}] -> "${trimmedName}"`);
-
-        res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
-        res.end(JSON.stringify({
-          success: true,
-          threadId,
-          newName: trimmedName,
-          zaloSynced: zaloResult.success,
-          zaloError: zaloResult.error || undefined,
-        }));
-      } catch (err: any) {
-        console.error("❌ [API Chat Rename] Lỗi:", err);
+      res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+      res.end(JSON.stringify({
+        success: true,
+        threadId,
+        newName: trimmedName,
+        zaloSynced: zaloResult.success,
+        zaloError: zaloResult.error || undefined,
+      }));
+    } catch (err: any) {
+      console.error("❌ [API Chat Rename] Lỗi:", err);
+      if (!res.headersSent) {
         res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
         res.end(JSON.stringify({ success: false, error: err?.message || String(err) }));
       }
-    });
+    }
     return true;
   }
 
   // 9. API POST: Chuyển đổi chế độ AI / Manual
+  // BUG-01: Dùng readBody() thay vì callback req.on("end")
   if (req.method === "POST" && pathname === "/api/chat/toggle-mode") {
-    let body = "";
-    req.on("data", (chunk) => { body += chunk; });
-    req.on("end", async () => {
-      try {
-        const payload = JSON.parse(body || "{}");
-        const { threadId, targetMode, isGroup } = payload;
+    try {
+      const body = await readBody(req);
+      const payload = JSON.parse(body || "{}");
+      const { threadId, targetMode, isGroup } = payload;
 
-        if (!threadId) {
-          res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" });
-          res.end(JSON.stringify({ success: false, error: "Thiếu tham số threadId" }));
-          return;
+      if (!threadId) {
+        res.writeHead(400, { "Content-Type": "application/json; charset=utf-8" });
+        res.end(JSON.stringify({ success: false, error: "Thiếu tham số threadId" }));
+        return true;
+      }
+
+      let currentName = "";
+      let checkGroup = isGroup;
+      if (activeZaloService) {
+        if (checkGroup === undefined) {
+          checkGroup = await activeZaloService.isGroupThread(threadId);
         }
+        currentName = checkGroup
+          ? await activeZaloService.getGroupName(threadId)
+          : await activeZaloService.getUserName(threadId);
+      }
 
-        let currentName = "";
-        let checkGroup = isGroup;
-        if (activeZaloService) {
-          if (checkGroup === undefined) {
-            checkGroup = await activeZaloService.isGroupThread(threadId);
-          }
-          currentName = checkGroup
-            ? await activeZaloService.getGroupName(threadId)
-            : await activeZaloService.getUserName(threadId);
+      if (!currentName || currentName.startsWith("Người dùng ") || currentName.startsWith("Nhóm ")) {
+        const candidateRepo = new CandidateRepository();
+        const candidate = candidateRepo.getLatestCandidate(threadId);
+        if (candidate?.fullName || candidate?.senderName) {
+          currentName = candidate.fullName || candidate.senderName;
         }
+      }
 
-        if (!currentName || currentName.startsWith("Người dùng ") || currentName.startsWith("Nhóm ")) {
-          const candidateRepo = new CandidateRepository();
-          const candidate = candidateRepo.getLatestCandidate(threadId);
-          if (candidate?.fullName || candidate?.senderName) {
-            currentName = candidate.fullName || candidate.senderName;
-          }
-        }
+      if (!currentName) {
+        currentName = checkGroup ? `Nhóm_${threadId.slice(-4)}` : `Khách_${threadId.slice(-4)}`;
+      }
 
-        if (!currentName) {
-          currentName = checkGroup ? `Nhóm_${threadId.slice(-4)}` : `Khách_${threadId.slice(-4)}`;
-        }
+      let newName = currentName.trim();
+      let newMode: "ai" | "manual" = targetMode;
 
-        let newName = currentName.trim();
-        let newMode: "ai" | "manual" = targetMode;
-
-        if (targetMode === "manual") {
-          if (!/^-M(\s|_|-|$)/i.test(newName)) newName = `-M ${newName}`;
-          newMode = "manual";
-        } else if (targetMode === "ai") {
+      if (targetMode === "manual") {
+        if (!/^-M(\s|_|-|$)/i.test(newName)) newName = `-M ${newName}`;
+        newMode = "manual";
+      } else if (targetMode === "ai") {
+        newName = newName.replace(/^-M[\s\-_]*/i, "").trim();
+        if (!newName) newName = checkGroup ? `Nhóm ${threadId}` : `Khách ${threadId}`;
+        newMode = "ai";
+      } else {
+        if (/^-M(\s|_|-|$)/i.test(newName)) {
           newName = newName.replace(/^-M[\s\-_]*/i, "").trim();
-          if (!newName) newName = checkGroup ? `Nhóm ${threadId}` : `Khách ${threadId}`;
           newMode = "ai";
         } else {
-          if (/^-M(\s|_|-|$)/i.test(newName)) {
-            newName = newName.replace(/^-M[\s\-_]*/i, "").trim();
-            newMode = "ai";
-          } else {
-            newName = `-M ${newName}`;
-            newMode = "manual";
-          }
+          newName = `-M ${newName}`;
+          newMode = "manual";
         }
+      }
 
-        let zaloResult: { success: boolean; error?: string } = { success: true };
-        if (activeZaloService) {
-          zaloResult = await activeZaloService.changeThreadName(threadId, newName, checkGroup);
+      let zaloResult: { success: boolean; error?: string } = { success: true };
+      if (activeZaloService) {
+        zaloResult = await activeZaloService.changeThreadName(threadId, newName, checkGroup);
+      }
+
+      // Cập nhật SQLite metadata và UserContext
+      try {
+        const threadMetaRepo = new ThreadMetadataRepository();
+        threadMetaRepo.setManualMode(threadId, newMode === "manual", newName);
+
+        const userContextMgr = UserContextManager.getInstance();
+        const ctx = userContextMgr.getContext(threadId, threadId, newName);
+        if (ctx) {
+          ctx.senderName = newName;
+          userContextMgr.saveAndSync(ctx);
         }
+      } catch {}
 
-        // Cập nhật SQLite metadata và UserContext
-        try {
-          const threadMetaRepo = new ThreadMetadataRepository();
-          threadMetaRepo.setManualMode(threadId, newMode === "manual", newName);
+      chatBroadcaster.broadcastThreadRenamed(threadId, newName);
+      console.log(`🔄 [Chuyển chế độ] Thread [${threadId}] -> Mode: ${newMode.toUpperCase()} | Tên: "${newName}"`);
 
-          const userContextMgr = UserContextManager.getInstance();
-          const ctx = userContextMgr.getContext(threadId, threadId, newName);
-          if (ctx) {
-            ctx.senderName = newName;
-            userContextMgr.saveAndSync(ctx);
-          }
-        } catch {}
-
-        chatBroadcaster.broadcastThreadRenamed(threadId, newName);
-        console.log(`🔄 [Chuyển chế độ] Thread [${threadId}] -> Mode: ${newMode.toUpperCase()} | Tên: "${newName}"`);
-
-        res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
-        res.end(JSON.stringify({
-          success: true,
-          threadId,
-          mode: newMode,
-          newName,
-          zaloSynced: zaloResult.success,
-          zaloError: zaloResult.error || undefined,
-        }));
-      } catch (err: any) {
-        console.error("❌ [API Toggle Mode] Lỗi:", err);
+      res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+      res.end(JSON.stringify({
+        success: true,
+        threadId,
+        mode: newMode,
+        newName,
+        zaloSynced: zaloResult.success,
+        zaloError: zaloResult.error || undefined,
+      }));
+    } catch (err: any) {
+      console.error("❌ [API Toggle Mode] Lỗi:", err);
+      if (!res.headersSent) {
         res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
         res.end(JSON.stringify({ success: false, error: err?.message || String(err) }));
       }
-    });
+    }
     return true;
   }
 

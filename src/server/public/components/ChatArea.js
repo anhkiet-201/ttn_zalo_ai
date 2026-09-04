@@ -71,15 +71,17 @@ function groupConsecutiveImageMessages(messages) {
     const closeTime = prev && Math.abs(Number(msg.timestamp) - Number(prev.timestamp)) <= 60000;
 
     if (isPureImg && prevIsPureImg && sameSender && closeTime) {
-      // Gộp các ảnh vào tin nhắn trước đó (loại bỏ URL trùng)
+      // BUG-08: Dùng immutable update thay vì mutate trực tiếp — tránh React render bug
       const prevUrls = prev.mediaUrls?.map((m) => m.url) || prev.imageUrls || [];
       const currUrls = msg.mediaUrls?.map((m) => m.url) || msg.imageUrls || [];
       const combinedUrls = Array.from(new Set([...prevUrls, ...currUrls]));
-      prev.imageUrls = combinedUrls;
-      prev.mediaUrls = combinedUrls.map((u) => ({ url: u }));
-      prev.hasImage = true;
-      // Cập nhật timestamp về tin nhắn mới nhất
-      prev.timestamp = Math.max(Number(prev.timestamp), Number(msg.timestamp));
+      grouped[grouped.length - 1] = Object.assign({}, prev, {
+        imageUrls: combinedUrls,
+        mediaUrls: combinedUrls.map((u) => ({ url: u })),
+        hasImage: true,
+        // Cập nhật timestamp về tin nhắn mới nhất
+        timestamp: Math.max(Number(prev.timestamp), Number(msg.timestamp)),
+      });
     } else {
       grouped.push({
         ...msg,
@@ -120,12 +122,28 @@ export function ChatArea({
     return groupConsecutiveImageMessages(historyData?.messages || []);
   }, [historyData?.messages]);
 
-  // Cuộn xuống tin nhắn mới nhất
+  const prevThreadIdRef = useRef(null);
+  const prevMsgCountRef = useRef(0);
+
+  // Cuộn xuống tin nhắn mới nhất — chỉ khi:
+  // 1. Thread vừa được chọn (thay đổi activeThread)
+  // 2. Có tin nhắn MỚI append vào cuối (không phải load tin cũ prepend vào đầu)
   useEffect(() => {
-    if (messagesEndRef.current && !loadingHistory) {
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    const currentThreadId = activeThread?.threadId || null;
+    const currentCount = displayedMessages.length;
+    const isThreadChanged = currentThreadId !== prevThreadIdRef.current;
+    const isNewMessageAppended =
+      !isThreadChanged &&
+      currentCount > prevMsgCountRef.current &&
+      !loadingHistory;
+
+    if ((isThreadChanged || isNewMessageAppended) && messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: isThreadChanged ? 'auto' : 'smooth' });
     }
-  }, [displayedMessages.length]);
+
+    prevThreadIdRef.current = currentThreadId;
+    prevMsgCountRef.current = currentCount;
+  }, [displayedMessages.length, activeThread?.threadId, loadingHistory]);
 
   const handleTextChange = (e) => {
     setInputText(e.target.value);
