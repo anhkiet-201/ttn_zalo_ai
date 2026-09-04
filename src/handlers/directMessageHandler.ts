@@ -447,40 +447,58 @@ export class DirectMessageHandler {
    * Tách câu trả lời thành danh sách các tin nhắn ngắn riêng biệt theo ký hiệu |||
    */
   private splitMessages(text: string): string[] {
-    if (!text?.trim()) return [];
-
-    const stripHistoryPrefixes = (s: string): string =>
-      s.replace(/\[\d{1,2}:\d{2}(?::\d{2})?\s[^\]]*\]\s*\[Bot\]:/g, "|||");
-
-    const stripped = stripHistoryPrefixes(text);
-    const normalized = stripped
-      .replace(/\[\s*\|{2,}\s*\]/g, "|||")
-      .replace(/\(\s*\|{2,}\s*\)/g, "|||")
-      .replace(/\{\s*\|{2,}\s*\}/g, "|||")
-      .replace(/\|{2,}/g, "|||");
-
-    const cleanSnippet = (s: string): string => {
-      let cleaned = s.trim()
-        .replace(/^[\]\)\}>\s]+/, "")
-        .replace(/[\[\(\{<\s]+$/, "")
-        .trim();
-
-      // Loại bỏ tiền tố đánh số máy móc dạng "1. ", "2. ", "Dạ 1. ", "Dạ 2. ", "1) ", "1: "
-      cleaned = cleaned.replace(/^(?:Dạ\s*)?(?:\d+[\.\)\-:]\s*)/i, (match) => {
-        return /^Dạ/i.test(match) ? "Dạ " : "";
-      }).trim();
-
-      return cleaned;
-    };
-
-    if (normalized.includes("|||")) {
-      return normalized.split("|||").map(cleanSnippet).filter((s) => s.length > 0);
-    }
-
-    const parts = normalized.split(/\n\s*\n/).map(cleanSnippet).filter((s) => s.length > 0);
-    if (parts.length > 1) return parts;
-
-    const single = cleanSnippet(normalized);
-    return single ? [single] : [];
+    return splitReplyMessages(text);
   }
+}
+
+/**
+ * Tách câu trả lời thành danh sách các tin nhắn ngắn riêng biệt theo ký hiệu |||
+ * Đồng thời lọc sạch mọi nhãn thời gian và nhãn người nói bị rò rỉ
+ */
+export function splitReplyMessages(text: string): string[] {
+  if (!text?.trim()) return [];
+
+  // Nhận diện và biến các tiền tố thời gian / nhãn người nói bị rò rỉ thành phân cách ngắt tin |||
+  const stripHistoryPrefixes = (s: string): string =>
+    s.replace(
+      /(?:\[\d{1,2}:\d{2}(?::\d{2})?(?:[^\d\]]*\d{4})?[^\]]*\]\s*)?\[(?:Recruiter(?:\s*\/\s*Bot)?|Bot|Admin(?:\s*\(Tôi\))?)\]\s*:?|\[\d{1,2}:\d{2}(?::\d{2})?(?:\s+(?:SA|CH|AM|PM))?(?:\s+[A-Za-zÀ-ỹ\s]+)?,\s*\d{1,2}\/\d{1,2}\/\d{4}[^\]]*\]\s*:?/gi,
+      "|||"
+    );
+
+  const stripped = stripHistoryPrefixes(text);
+  const normalized = stripped
+    .replace(/\[\s*\|{2,}\s*\]/g, "|||")
+    .replace(/\(\s*\|{2,}\s*\)/g, "|||")
+    .replace(/\{\s*\|{2,}\s*\}/g, "|||")
+    .replace(/\|{2,}/g, "|||");
+
+  const cleanSnippet = (s: string): string => {
+    let cleaned = s
+      .trim()
+      // Bóc tách bất kỳ nhãn thời gian hoặc nhãn người nói nào còn sót lại ở đầu snippet
+      .replace(
+        /^(?:\[\d{1,2}:\d{2}(?::\d{2})?[^\]]*\]\s*)*(?:\[(?:Recruiter(?:\s*\/\s*Bot)?|Bot|Admin(?:\s*\(Tôi\))?|Candidate(?::\s*[^\]]*)?)\]\s*:?\s*)*/i,
+        ""
+      )
+      .replace(/^[\]\)\}>\s]+/, "")
+      .replace(/[\[\(\{<\s]+$/, "")
+      .trim();
+
+    // Loại bỏ tiền tố đánh số máy móc dạng "1. ", "2. ", "Dạ 1. ", "Dạ 2. ", "1) ", "1: "
+    cleaned = cleaned.replace(/^(?:Dạ\s*)?(?:\d+[\.\)\-:]\s*)/i, (match) => {
+      return /^Dạ/i.test(match) ? "Dạ " : "";
+    }).trim();
+
+    return cleaned;
+  };
+
+  if (normalized.includes("|||")) {
+    return normalized.split("|||").map(cleanSnippet).filter((s) => s.length > 0);
+  }
+
+  const parts = normalized.split(/\n\s*\n/).map(cleanSnippet).filter((s) => s.length > 0);
+  if (parts.length > 1) return parts;
+
+  const single = cleanSnippet(normalized);
+  return single ? [single] : [];
 }

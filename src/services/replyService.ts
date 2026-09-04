@@ -134,7 +134,7 @@ export class ReplyService {
             ? isGroup
               ? `[${timeStr}] [Group Member: ${resolvedName}]`
               : `[${timeStr}] [Candidate: ${resolvedName}]`
-            : `[${timeStr}] [Recruiter / Bot]`;
+            : "";
 
         let msgBody = rec.content || "";
 
@@ -177,9 +177,17 @@ export class ReplyService {
           msgBody = `(↪️ In reply to [${qSender}]: "${rec.quoteText}") ${msgBody}`;
         }
 
+        // Làm sạch triệt để mọi tiền tố rò rỉ nếu tin nhắn cũ trong DB từng bị dính nhãn
+        let cleanMsgBody = msgBody;
+        if (rec.role === "model") {
+          cleanMsgBody = cleanMsgBody
+            .replace(/(?:\[\d{1,2}:\d{2}(?::\d{2})?(?:[^\d\]]*\d{4})?[^\]]*\]\s*)?\[(?:Recruiter(?:\s*\/\s*Bot)?|Bot|Admin(?:\s*\(Tôi\))?)\]\s*:?|\[\d{1,2}:\d{2}(?::\d{2})?(?:\s+(?:SA|CH|AM|PM))?(?:\s+[A-Za-zÀ-ỹ\s]+)?,\s*\d{1,2}\/\d{1,2}\/\d{4}[^\]]*\]\s*:?/gi, " ")
+            .trim();
+        }
+
         return {
           role: rec.role,
-          parts: [{ text: `${prefix}: ${msgBody}` }],
+          parts: [{ text: prefix ? `${prefix}: ${cleanMsgBody}` : cleanMsgBody }],
         };
       });
 
