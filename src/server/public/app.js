@@ -387,11 +387,18 @@ function App() {
             });
           } else if (payload.type === 'thread_renamed' && payload.data) {
             const { threadId, newName } = payload.data;
+            const isManual = /^-M(\s|_|-|$)/i.test(newName);
+            const cleanName = (newName || 'U').replace(/^-M[\s\-_]*/i, '').trim();
+            const avatarLetter = (cleanName || 'U').charAt(0).toUpperCase();
             if (String(threadId) === String(activeThreadIdRef.current)) {
-              setHistoryData((prev) => (prev ? { ...prev, threadName: newName } : null));
+              setHistoryData((prev) => (prev ? { ...prev, threadName: newName, isManual } : null));
             }
             setThreads((prev) =>
-              prev.map((t) => (String(t.threadId) === String(threadId) ? { ...t, threadName: newName } : t))
+              prev.map((t) =>
+                String(t.threadId) === String(threadId)
+                  ? { ...t, threadName: newName, isManual, avatarLetter }
+                  : t
+              )
             );
           }
         } catch (err) {

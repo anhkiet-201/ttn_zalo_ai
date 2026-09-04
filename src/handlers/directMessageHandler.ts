@@ -456,6 +456,8 @@ export class DirectMessageHandler {
       } catch (hrErr) {
         console.error("❌ Không thể gửi cảnh báo lỗi tới HR:", hrErr);
       }
+    } finally {
+      this.batcher.stopTyping(batch);
     }
   }
 

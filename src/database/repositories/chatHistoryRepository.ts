@@ -127,7 +127,7 @@ export class ChatHistoryRepository {
     } catch {}
 
     const stmt = this.db.connection.prepare(`
-      INSERT INTO chat_messages (
+      INSERT OR REPLACE INTO chat_messages (
         id, thread_id, sender_id, sender_name, role, content,
         media_type, media_urls,
         has_quote, quote_text, quote_sender_name, quote_sender_id, is_group, timestamp

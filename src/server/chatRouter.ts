@@ -280,7 +280,8 @@ export async function handleChatRoute(
           threadName = `-M ${threadName}`;
         }
 
-        const avatarLetter = (threadName || "U").trim().charAt(0).toUpperCase();
+        const cleanThreadName = (threadName || "U").replace(/^-M[\s\-_]*/i, "").trim();
+        const avatarLetter = (cleanThreadName || "U").charAt(0).toUpperCase();
 
         return {
           threadId: item.threadId,

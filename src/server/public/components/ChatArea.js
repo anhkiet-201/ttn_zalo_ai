@@ -247,7 +247,8 @@ export function ChatArea({
   const isGroup = Boolean(historyData ? historyData.isGroup : activeThread.isGroup);
   const isManual = Boolean(historyData ? historyData.isManual : activeThread.isManual);
   const candidate = historyData?.candidate;
-  const avatarLetter = (threadName || 'U').trim().charAt(0).toUpperCase();
+  const cleanThreadName = (threadName || 'U').replace(/^-M[\s\-_]*/i, '').trim();
+  const avatarLetter = (cleanThreadName || 'U').charAt(0).toUpperCase();
 
   // Quy tắc hiển thị thanh nhập tin nhắn:
   // - Đối với Group: LUÔN HIỆN THANH NHẬP TIN NHẮN

@@ -283,7 +283,7 @@ export class ToolExecutor {
         result: {
           status: "rejected",
           error:
-            "LỖI TỪ CHỐI: Ứng viên chưa có hồ sơ CCCD trong hệ thống. Hãy yêu cầu ứng viên chụp gửi ảnh CCCD kèm SĐT trước!",
+            "REJECTED: Candidate has no citizen ID card (CCCD/VNeID) documents registered in the system. Please politely and naturally ask the candidate to provide photos of both sides of their CCCD/VNeID along with their phone number first!",
         },
         updatedCandidate: context.candidateData || {
           threadId: context.threadId,
@@ -395,7 +395,7 @@ export class ToolExecutor {
         result: {
           status: "rejected",
           error:
-            "LỖI TỪ CHỐI: Ứng viên chưa có hồ sơ CCCD trong hệ thống. Hãy yêu cầu ứng viên chụp gửi ảnh CCCD kèm SĐT trước!",
+            "REJECTED: Candidate has no citizen ID card (CCCD/VNeID) documents registered in the system. Please politely and naturally ask the candidate to provide photos of both sides of their CCCD/VNeID along with their phone number first!",
         },
         updatedCandidate: context.candidateData || {
           threadId: context.threadId,

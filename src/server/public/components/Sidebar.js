@@ -131,7 +131,8 @@ export function Sidebar({
           const isGroup = Boolean(thread.isGroup);
           const isManual = Boolean(thread.isManual);
           const displayName = thread.threadName || (isGroup ? `Nhóm ${thread.threadId}` : `Khách ${thread.threadId.slice(-4)}`);
-          const avatarChar = (displayName || 'U').trim().charAt(0).toUpperCase();
+          const cleanDisplayName = (displayName || 'U').replace(/^-M[\s\-_]*/i, '').trim();
+          const avatarChar = (cleanDisplayName || 'U').charAt(0).toUpperCase();
 
           const isVoice = thread.lastMediaType === 'voice' || thread.lastHasVoice;
           const isSticker = thread.lastMediaType === 'sticker' || thread.lastHasSticker;

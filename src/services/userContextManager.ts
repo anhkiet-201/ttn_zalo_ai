@@ -243,8 +243,8 @@ export class UserContextManager {
     if (!text) return;
 
     // Biểu thức chính quy tìm số điện thoại Việt Nam (10 số, đầu 03, 05, 07, 08, 09 hoặc +84)
-    // Lưu ý: dùng [689] thay vì [6|8|9] vì | trong character class là ký tự literal, không phải alternation
-    const phoneRegex = /(?:\+84|0)(?:3[2-9]|5[689]|7[06-9]|8[1-9]|9[0-9])[0-9]{7}\b/g;
+    // Lưu ý: dùng [25689] để hỗ trợ đầy đủ các mạng Viettel, Vina, Mobi, Vietnamobile (052, 056, 058), Wintel (055), Gmobile (059)
+    const phoneRegex = /(?:\+84|0)(?:3[2-9]|5[25689]|7[06-9]|8[1-9]|9[0-9])[0-9]{7}\b/g;
     const matches = text.match(phoneRegex);
 
     if (matches && matches.length > 0) {
