@@ -10,6 +10,7 @@ import { MessageHandler } from "./handlers/messageHandler.js";
 import { GroupHandler } from "./handlers/groupHandler.js";
 import { ReactionHandler } from "./handlers/reactionHandler.js";
 import { FriendHandler } from "./handlers/friendHandler.js";
+import { RenameHandler } from "./handlers/renameHandler.js";
 import { config } from "./config/index.js";
 
 let currentListener: MessageListener | null = null;
@@ -34,6 +35,15 @@ async function startBot() {
     const groupHandler = new GroupHandler(zaloService);
     const reactionHandler = new ReactionHandler(zaloService);
     const friendHandler = new FriendHandler(zaloService);
+    const renameHandler = new RenameHandler(zaloService);
+
+    // Kết nối bộ phát hiện đổi tên vào Dispatcher
+    messageHandler.setOnRename(async (event) => {
+      await dispatcher.dispatchUserRename(event);
+    });
+    groupHandler.setOnRename(async (event) => {
+      await dispatcher.dispatchUserRename(event);
+    });
 
     // 4. Đăng ký các sự kiện vào Dispatcher
     dispatcher.onMessage(async (msg) => {
@@ -50,6 +60,10 @@ async function startBot() {
 
     dispatcher.onFriendEvent(async (event) => {
       await friendHandler.handle(event);
+    });
+
+    dispatcher.onUserRename(async (event) => {
+      await renameHandler.handle(event);
     });
 
     dispatcher.onUndo((undo) => {

@@ -7,7 +7,7 @@ import {
   type Typing,
   ThreadType,
 } from "zca-js";
-import { type ParsedMessage, type MediaType, type MediaItem } from "../types/zalo.types.js";
+import { type ParsedMessage, type MediaType, type MediaItem, type UserRenameEvent } from "../types/zalo.types.js";
 import { config } from "../config/index.js";
 
 export type MessageHandlerCallback = (parsedMessage: ParsedMessage) => Promise<void> | void;
@@ -16,6 +16,7 @@ export type FriendEventHandlerCallback = (event: FriendEvent) => Promise<void> |
 export type ReactionHandlerCallback = (reaction: Reaction) => Promise<void> | void;
 export type UndoHandlerCallback = (undo: Undo) => Promise<void> | void;
 export type TypingHandlerCallback = (typing: Typing) => Promise<void> | void;
+export type UserRenameHandlerCallback = (event: UserRenameEvent) => Promise<void> | void;
 
 /**
  * EventDispatcher: Nhận và định tuyến các sự kiện từ Zalo Listener tới các Handler
@@ -28,6 +29,7 @@ export class EventDispatcher {
   private reactionHandlers: ReactionHandlerCallback[] = [];
   private undoHandlers: UndoHandlerCallback[] = [];
   private typingHandlers: TypingHandlerCallback[] = [];
+  private userRenameHandlers: UserRenameHandlerCallback[] = [];
 
   public setOwnId(id: string): void {
     this.ownId = id;
@@ -55,6 +57,10 @@ export class EventDispatcher {
 
   public onTyping(handler: TypingHandlerCallback): void {
     this.typingHandlers.push(handler);
+  }
+
+  public onUserRename(handler: UserRenameHandlerCallback): void {
+    this.userRenameHandlers.push(handler);
   }
 
   /**
@@ -508,6 +514,16 @@ export class EventDispatcher {
         await handler(typing);
       } catch (error) {
         console.error("❌ Lỗi trong TypingHandler:", error);
+      }
+    }
+  }
+
+  public async dispatchUserRename(event: UserRenameEvent): Promise<void> {
+    for (const handler of this.userRenameHandlers) {
+      try {
+        await handler(event);
+      } catch (error) {
+        console.error("❌ Lỗi trong UserRenameHandler:", error);
       }
     }
   }

@@ -1,11 +1,26 @@
 import { type GroupEvent, GroupEventType, ThreadType } from "zca-js";
 import { type ZaloService } from "../services/zaloService.js";
+import { type UserRenameEvent } from "../types/zalo.types.js";
 
 /**
  * GroupHandler: Xử lý các sự kiện diễn ra trong nhóm chat Zalo
  */
 export class GroupHandler {
-  constructor(private readonly zaloService: ZaloService) {}
+  private onRenameCallback?: (event: UserRenameEvent) => Promise<void> | void;
+
+  constructor(
+    private readonly zaloService: ZaloService,
+    onRename?: (event: UserRenameEvent) => Promise<void> | void
+  ) {
+    this.onRenameCallback = onRename;
+  }
+
+  /**
+   * Đăng ký callback khi phát hiện nhóm đổi tên
+   */
+  public setOnRename(callback: (event: UserRenameEvent) => Promise<void> | void): void {
+    this.onRenameCallback = callback;
+  }
 
   /**
    * Phương thức xử lý sự kiện nhóm
@@ -31,7 +46,21 @@ export class GroupHandler {
 
       case GroupEventType.UPDATE: {
         if ("groupName" in event.data && event.data.groupName) {
-          console.log(`✏️ [Nhóm: ${threadId}] Đổi tên thành: "${event.data.groupName}"`);
+          const newGroupName = event.data.groupName;
+          console.log(`✏️ [Nhóm: ${threadId}] Đổi tên thành: "${newGroupName}"`);
+          if (this.onRenameCallback) {
+            try {
+              await this.onRenameCallback({
+                threadId,
+                senderId: ("creatorId" in event.data ? String(event.data.creatorId) : "") || "0",
+                newName: newGroupName,
+                isGroup: true,
+                timestamp: Date.now(),
+              });
+            } catch (err) {
+              console.error("❌ Lỗi trong callback onRename của GroupHandler:", err);
+            }
+          }
         }
         break;
       }

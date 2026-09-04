@@ -570,4 +570,18 @@ export class ZaloService {
       return { success: false, error: err?.message || String(err) };
     }
   }
+
+  /**
+   * Cập nhật RAM cache tên hiển thị của người dùng (User 1-1)
+   */
+  public updateUserNameCache(userId: string, newName: string): void {
+    this.groupNameCache.set(`user_${userId}`, newName);
+  }
+
+  /**
+   * Cập nhật RAM cache tên nhóm chat
+   */
+  public updateGroupNameCache(groupId: string, newName: string): void {
+    this.groupNameCache.set(groupId, newName);
+  }
 }

@@ -127,3 +127,15 @@ export interface BotCommand {
   usage?: string;
   execute: (ctx: CommandContext) => Promise<void> | void;
 }
+
+/**
+ * Sự kiện người dùng đổi tên hiển thị (Personal User Rename hoặc Group Rename)
+ */
+export interface UserRenameEvent {
+  threadId: string;
+  senderId: string;
+  oldName?: string;
+  newName: string;
+  isGroup: boolean;
+  timestamp: number;
+}

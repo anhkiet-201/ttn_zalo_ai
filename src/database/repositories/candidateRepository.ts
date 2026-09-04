@@ -262,6 +262,22 @@ export class CandidateRepository {
   }
 
   /**
+   * Cập nhật tên hiển thị của người gửi (sender_name) cho tất cả hồ sơ thuộc threadId
+   */
+  public updateSenderName(threadId: string, newSenderName: string): void {
+    try {
+      const stmt = this.db.connection.prepare(`
+        UPDATE candidates
+        SET sender_name = ?
+        WHERE thread_id = ?
+      `);
+      stmt.run(newSenderName, threadId);
+    } catch (err) {
+      console.warn(`⚠️ [Candidate DB] Không thể cập nhật sender_name cho thread [${threadId}]:`, err);
+    }
+  }
+
+  /**
    * Tra cứu ứng viên theo Số CCCD
    */
   public findByIdNumber(idNumber: string): CandidateRecord | null {

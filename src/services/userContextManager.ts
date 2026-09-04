@@ -122,6 +122,23 @@ export class UserContextManager {
   }
 
   /**
+   * Cập nhật tên người gửi (senderName) đồng bộ trong cả RAM cache và SQLite Database
+   */
+  public updateSenderName(threadId: string, senderId: string, newSenderName: string): void {
+    const key = `${threadId}:${senderId}`;
+    const cached = this.cache.get(key);
+    if (cached) {
+      cached.senderName = newSenderName;
+      cached.updatedAt = Date.now();
+      this.saveAndSync(cached);
+      return;
+    }
+
+    // Nếu không có trong cache, cập nhật trực tiếp vào SQLite
+    this.userContextRepo.updateSenderName(threadId, senderId, newSenderName);
+  }
+
+  /**
    * Thêm hoặc cập nhật hình ảnh và thông tin CCCD (mặt trước / mặt sau / nhiều CCCD)
    */
   public addOrUpdateCCCD(

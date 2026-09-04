@@ -117,6 +117,23 @@ export class UserContextRepository {
   }
 
   /**
+   * Cập nhật tên người gửi (sender_name) trong bảng user_contexts
+   */
+  public updateSenderName(threadId: string, senderId: string, newSenderName: string): void {
+    try {
+      const id = `${threadId}:${senderId}`;
+      const stmt = this.db.connection.prepare(`
+        UPDATE user_contexts
+        SET sender_name = ?, updated_at = ?
+        WHERE id = ? OR (thread_id = ? AND sender_id = ?)
+      `);
+      stmt.run(newSenderName, Date.now(), id, threadId, senderId);
+    } catch (err) {
+      console.warn(`⚠️ [UserContextRepo] Không thể cập nhật sender_name cho [${threadId}:${senderId}]:`, err);
+    }
+  }
+
+  /**
    * Lấy toàn bộ UserContexts (khi cần warmup cache hoặc báo cáo)
    */
   public getAll(): UserContextData[] {
