@@ -182,13 +182,6 @@ export async function handleChatRoute(
   // 4. API GET: Danh sách cuộc trò chuyện phân trang
   if (pathname === "/api/chat/threads") {
     try {
-      // Đồng bộ danh sách tên gợi nhớ (Alias) mới nhất từ Zalo Server On-Demand khi tải trang
-      if (activeZaloService) {
-        try {
-          await activeZaloService.syncAliases();
-        } catch {}
-      }
-
       const limitParam = Number(parsedUrl.searchParams.get("limit")) || 20;
       const limit = Math.min(Math.max(limitParam, 1), 100);
       const offset = Math.max(Number(parsedUrl.searchParams.get("offset")) || 0, 0);

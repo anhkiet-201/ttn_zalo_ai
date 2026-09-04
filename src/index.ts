@@ -77,11 +77,6 @@ async function startBot() {
       updateConnectionInfo(connInfo);
     });
 
-    // Kích hoạt đồng bộ alias khi nhận được socket control từ app Zalo điện thoại
-    currentListener.onSyncAlias(async () => {
-      await zaloService.syncAliases(true);
-    });
-
     // Tự động phục hồi khi phiên/cookie hết hạn (bị logout từ app điện thoại)
     currentListener.onSessionExpired(async () => {
       console.warn(
