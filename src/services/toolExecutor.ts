@@ -102,7 +102,7 @@ export class ToolExecutor {
         result: {
           status: "rejected",
           error:
-            "LỖI TỪ CHỐI: Ứng viên chưa cung cấp ảnh CCCD/VNeID. Hệ thống bắt buộc phải có ảnh CCCD trước khi đặt lịch hẹn. Hãy yêu cầu ứng viên chụp gửi ảnh 2 mặt CCCD kèm SĐT để đăng ký pv!",
+            "REJECTED: Candidate has not provided citizen ID card (CCCD/VNeID) photos. The system strictly requires citizen ID card photos before scheduling any appointment. Please politely and naturally ask the candidate to send photos of both sides of their CCCD/VNeID along with their phone number to register for the interview!",
         },
         updatedCandidate: context.candidateData || {
           threadId: context.threadId,
