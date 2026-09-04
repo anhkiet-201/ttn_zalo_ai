@@ -45,7 +45,7 @@ export interface GenerateReplyOptions {
 
 export interface RagUpdateItemReport {
   targetFile: string;
-  action: "create_new" | "update_existing" | "delete";
+  action: "create_new" | "update_existing" | "delete" | "query";
   targetId?: string;
   title?: string;
   reason?: string;
@@ -214,7 +214,9 @@ export const groupRagTools: FunctionDeclaration[] = [
         targetId: {
           type: Type.STRING,
           description:
-            'MANDATORY BRAND MATCHING: The entry ID corresponding to matchedCompanyName when action="update_existing" (e.g., "job_04" for Leader, "job_06" for Sanaky, "job_01" for Wangshun, "job_21" for Chervon). MUST match by company brand name; STRICTLY FORBIDDEN to match solely based on industrial park / location (e.g., FORBIDDEN to assign company Kahong to Chervon just because both are in VSIP 2A)!',
+            'MANDATORY BRAND & BRANCH MATCHING: The entry ID corresponding to matchedCompanyName when action="update_existing" (e.g., "job_04" for Leader, "job_06" for Sanaky, "job_01" for Wangshun). ' +
+            'CRITICAL DISAMBIGUATION: When a company has MULTIPLE branches/locations (e.g., Chervon has branches at MP3 (job_03), MP2 (job_20), VSIP 2A (job_21), MP4 (job_24)), ' +
+            'you MUST match the exact targetId of that specific branch/industrial park! STRICTLY FORBIDDEN to assign all branches to one ID!',
         },
         matchingReason: {
           type: Type.STRING,
@@ -257,10 +259,37 @@ export const groupRagTools: FunctionDeclaration[] = [
         },
         reason: {
           type: Type.STRING,
-          description: "Reason for update (e.g., 'Update document requirements for Chervon' or 'Remove photo requirement from post').",
+          description: "Reason for update (e.g., 'Update document requirements for Chervon MP4' or 'Remove photo requirement from post').",
         },
       },
       required: ["action", "targetFile", "reason"],
+    },
+  },
+  {
+    name: "query_rag",
+    description:
+      "MANDATORY READ-ONLY TOOL: Call this tool whenever the user or HR wants to VIEW, QUERY, SEARCH, or CHECK details of a specific company, policy, or location " +
+      "(e.g., 'xem chervon mp3', 'xem rag sanaky', 'tra cứu công ty Leader', 'thông tin job_03', 'chervon mp4 có tuyển không?'). " +
+      "CRITICAL: NEVER call update_rag or delete_rag when the user is just inquiring, viewing, or searching for information!",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        targetFile: {
+          type: Type.STRING,
+          description: 'Target RAG file: "job_rag" (companies), "policy_rag" (policies), "location_rag" (locations), or "all".',
+        },
+        targetId: {
+          type: Type.STRING,
+          description:
+            'The EXACT entry ID matched from DIRECTORY INDEX based on company brand and branch ' +
+            '(e.g., "job_03" for Chervon Mỹ Phước 3, "job_24" for Chervon Mỹ Phước 4, "job_21" for Chervon VSIP 2A, "job_20" for Chervon MP2, "job_06" for Sanaky, "job_04" for Leader).',
+        },
+        reason: {
+          type: Type.STRING,
+          description: "Explanation of why this targetId was matched for the user's query.",
+        },
+      },
+      required: ["targetFile", "targetId", "reason"],
     },
   },
   {

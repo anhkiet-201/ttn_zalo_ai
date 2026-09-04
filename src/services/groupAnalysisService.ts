@@ -396,6 +396,64 @@ export class GroupAnalysisService {
             continue;
           }
 
+          if (call.name === "query_rag") {
+            const args = (call.args as unknown) as {
+              targetFile?: string;
+              targetId: string;
+              reason?: string;
+            };
+            const targetFile = (args.targetFile || "job_rag").replace(/\.json$/i, "") as any;
+            const entry = ragService.getEntryById(targetFile, args.targetId);
+
+            if (entry) {
+              const title = String(entry["title"] || entry["id"] || args.targetId);
+              items.push({
+                targetFile: `${targetFile}.json`,
+                action: "query",
+                targetId: args.targetId,
+                title,
+                reason: args.reason,
+                entry,
+                summary: `Tra cứu "${title}" (ID: ${args.targetId})`,
+                success: true,
+                message: `Đã tìm thấy thông tin của "${title}" (ID: ${args.targetId}).`,
+              });
+              functionResponseParts.push({
+                functionResponse: {
+                  name: "query_rag",
+                  response: {
+                    success: true,
+                    targetId: args.targetId,
+                    title,
+                    found: true,
+                  },
+                },
+              });
+            } else {
+              items.push({
+                targetFile: `${targetFile}.json`,
+                action: "query",
+                targetId: args.targetId,
+                title: args.targetId,
+                reason: args.reason,
+                summary: `Không tìm thấy ID: ${args.targetId}`,
+                success: false,
+                message: `Không tìm thấy dữ liệu cho ID "${args.targetId}" trong ${targetFile}.json.`,
+              });
+              functionResponseParts.push({
+                functionResponse: {
+                  name: "query_rag",
+                  response: {
+                    success: false,
+                    targetId: args.targetId,
+                    found: false,
+                  },
+                },
+              });
+            }
+            continue;
+          }
+
           if (call.name !== "update_rag") continue;
 
           const args = (call.args as unknown) as RagUpdateArgs;

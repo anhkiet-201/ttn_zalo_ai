@@ -262,15 +262,54 @@ export class HRMessageHandler {
       }
     }
 
-    // 2. Chuyển toàn bộ văn bản/lệnh RAG cho AI phân tích và tự quyết định (update_rag vs delete_rag)
+    // 2. Chuyển toàn bộ văn bản/lệnh RAG cho AI phân tích và tự quyết định (query_rag, update_rag, delete_rag)
     if (ragContent.length > 0 && ragContent.toLowerCase() !== "ds") {
       console.log(`📥 [HR Admin] Chuyển nội dung RAG cho AI phân tích (${ragContent.length} ký tự)...`);
       const report = await this.aiService.updateRagFromText(ragContent, this.ragService);
 
       if (report.success && report.items.length > 0) {
+        const queryItems = report.items.filter((i) => i.action === "query");
         const deletedItems = report.items.filter((i) => i.action === "delete");
-        const updatedItems = report.items.filter((i) => i.action !== "delete");
+        const updatedItems = report.items.filter(
+          (i) => i.action === "update_existing" || i.action === "create_new"
+        );
 
+        // Trường hợp 1: AI tra cứu/xem thông tin RAG (query_rag - Read-only 100%)
+        if (queryItems.length > 0 && deletedItems.length === 0 && updatedItems.length === 0) {
+          for (const it of queryItems) {
+            const entry = (it.entry || {}) as Record<string, any>;
+            const vac = entry["vacancies"];
+            const vacStr =
+              vac !== undefined && vac !== null
+                ? Number(vac) === 0
+                  ? "🔴 TẠM NGƯNG TUYỂN"
+                  : `🟢 Đang tuyển ${vac} người`
+                : "Đang tuyển";
+            const loc = entry["location"] ? `\n📍 Địa chỉ: ${entry["location"]}` : "";
+            const map = entry["map_url"] ? `\n🗺️ Map: ${entry["map_url"]}` : "";
+            const schedule = entry["interview_schedule"] ? `\n⏰ Lịch hẹn: ${entry["interview_schedule"]}` : "";
+            const jobType = entry["job_type"] ? `\n💼 Vị trí: ${entry["job_type"]}` : "";
+
+            const jobName = String(entry["title"] || entry["id"] || it.targetId || "").toUpperCase();
+            const headerMsg =
+              `🏢 [THÔNG TIN TUYỂN DỤNG: ${jobName}]\n` +
+              `━━━━━━━━━━━━━━━━━━━━\n` +
+              `• Trạng thái: ${vacStr}${schedule}${jobType}${loc}${map}`;
+
+            // Tin nhắn 1: Header tổng quan
+            await this.zaloService.replyMessage(parsedMessage.raw, headerMsg.trim());
+
+            // Tin nhắn 2: rawContent nguyên bản của công ty
+            const rawContent = extractRagContent(entry);
+            if (rawContent) {
+              await new Promise((r) => setTimeout(r, 400));
+              await this.zaloService.sendMessage(parsedMessage.threadId, rawContent, targetThreadType);
+            }
+          }
+          return true;
+        }
+
+        // Trường hợp 2: Lệnh xóa hoàn toàn dữ liệu RAG
         let replyText = "";
         if (deletedItems.length > 0 && updatedItems.length === 0) {
           replyText = `🗑️ [ĐÃ XÓA DỮ LIỆU RAG THÀNH CÔNG]\n━━━━━━━━━━━━━━━━━━━━\nĐã xóa ${deletedItems.length} mục khỏi cơ sở dữ liệu:\n\n`;
@@ -282,6 +321,7 @@ export class HRMessageHandler {
           });
           replyText += `👉 Bot sẽ không còn tư vấn mục này cho ứng viên nữa!`;
         } else {
+          // Trường hợp 3: Cập nhật / tạo mới dữ liệu RAG
           replyText = `✅ [XỬ LÝ KHO TRI THỨC RAG THÀNH CÔNG]\nĐã xử lý ${report.updatedCount} mục:\n\n`;
           report.items.forEach((it, idx) => {
             const actionLabel =
